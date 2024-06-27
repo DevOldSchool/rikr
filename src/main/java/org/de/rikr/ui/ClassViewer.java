@@ -1,13 +1,14 @@
 package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
+import org.de.rikr.ui.highlighter.LineHighlighter;
+import org.de.rikr.ui.highlighter.SyntaxHighlighter;
 import org.de.rikr.ui.model.ClassNodeMutableTreeNode;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.util.Textifier;
 import org.objectweb.asm.util.TraceClassVisitor;
 
 import javax.swing.*;
-import javax.swing.text.BadLocationException;
 import javax.swing.text.DefaultStyledDocument;
 import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyledDocument;
@@ -32,6 +33,7 @@ public class ClassViewer {
     private final JTree tree;
     private final JTextPane detailsPane;
     private final Rikr controller;
+    private final SyntaxHighlighter syntaxHighlighter;
 
     public ClassViewer(Rikr controller) {
         this.controller = controller;
@@ -120,6 +122,9 @@ public class ClassViewer {
 
         frame.add(panel);
 
+        syntaxHighlighter = new SyntaxHighlighter();
+        new LineHighlighter(detailsPane, new Color(43, 45, 48));
+
         // Set up drop listener
         setDropTarget();
     }
@@ -167,11 +172,8 @@ public class ClassViewer {
             classNode.accept(traceClassVisitor);
             printWriter.flush();
 
-            try {
-                styledDocument.insertString(0, stringWriter.toString(), new SimpleAttributeSet());
-            } catch (BadLocationException e) {
-                throw new RuntimeException(e);
-            }
+            // Highlight and set caret position
+            syntaxHighlighter.highlight(styledDocument, stringWriter.toString());
             detailsPane.setCaretPosition(0);
         });
     }
