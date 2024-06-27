@@ -12,16 +12,21 @@ import java.util.List;
 import java.util.Map;
 
 public class ClassProcessor {
+    private final Logger logger;
     private final Map<String, List<ClassNode>> jarClassesMap = new HashMap<>();
+
+    public ClassProcessor(Logger logger) {
+        this.logger = logger;
+    }
 
     public void processJarFiles(File[] jarFiles) {
         for (File file : jarFiles) {
             try {
                 Map<String, List<ClassNode>> singleJarClassesMap = readJarFile(file);
                 jarClassesMap.put(file.getName(), singleJarClassesMap.get(file.getName()));
+                logger.log("Loaded " + singleJarClassesMap.get(file.getName()).size() + " classes from " + file.getName());
             } catch (IOException e) {
-                System.err.println("Error processing jar file: " + file.getName());
-                e.printStackTrace();
+                logger.log("Error processing jar file: " + file.getName());
             }
         }
     }
@@ -32,8 +37,7 @@ public class ClassProcessor {
                 ClassNode classNode = readClassFile(file);
                 jarClassesMap.computeIfAbsent("Classes", k -> new ArrayList<>()).add(classNode);
             } catch (IOException e) {
-                System.err.println("Error processing class file: " + file.getName());
-                e.printStackTrace();
+                logger.log("Error processing class file: " + file.getName());
             }
         }
     }

@@ -1,5 +1,6 @@
 package org.de.rikr.ui;
 
+import org.de.rikr.Logger;
 import org.de.rikr.Rikr;
 import org.de.rikr.ui.highlighter.LineHighlighter;
 import org.de.rikr.ui.highlighter.SyntaxHighlighter;
@@ -9,9 +10,7 @@ import org.objectweb.asm.util.Textifier;
 import org.objectweb.asm.util.TraceClassVisitor;
 
 import javax.swing.*;
-import javax.swing.text.DefaultStyledDocument;
-import javax.swing.text.SimpleAttributeSet;
-import javax.swing.text.StyledDocument;
+import javax.swing.text.*;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import java.awt.*;
@@ -25,15 +24,29 @@ import java.awt.event.MouseEvent;
 import java.io.File;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
-public class ClassViewer {
+public class ClassViewer implements Logger {
     private final JFrame frame;
     private final JTree tree;
     private final JTextPane detailsPane;
+    private final JTextPane logPane;
+    private final JScrollPane logScrollPane;
+    private final JSplitPane verticalSplitPane;
     private final Rikr controller;
-    private final SyntaxHighlighter syntaxHighlighter;
+
+    private MenuBar menuBar = null;
+    
+    private StyledDocument logStyledDocument;
+    private Style logStyle;
+    private DateFormat dateFormat;
+    private SyntaxHighlighter syntaxHighlighter;
+
+    private Date date;
 
     public ClassViewer(Rikr controller) {
         this.controller = controller;
@@ -42,17 +55,15 @@ public class ClassViewer {
         frame.setSize(1200, 800);
 
         // Initialize menu bar
-        JMenuBar menuBar = new JMenuBar();
-        JMenu fileMenu = new JMenu("File");
-        JMenuItem openMenuItem = new JMenuItem("Open");
-        openMenuItem.addActionListener(e -> openFileDialog());
-        fileMenu.add(openMenuItem);
-        menuBar.add(fileMenu);
-        frame.setJMenuBar(menuBar);
+        menuBar = new MenuBar(
+                e -> openFileDialog(),
+                e -> toggleLogVisibility(menuBar.isLogVisible())
+        );
+        frame.setJMenuBar(menuBar.getMenuBar());
 
         // Initialize split pane with tree and details pane
-        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-        splitPane.setDividerLocation(300);
+        JSplitPane mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+        mainSplitPane.setDividerLocation(300);
 
         // Initialize tree
         DefaultMutableTreeNode root = new DefaultMutableTreeNode("JAR Files");
@@ -67,7 +78,7 @@ public class ClassViewer {
         });
 
         JScrollPane treeScrollPane = new JScrollPane(tree);
-        splitPane.setLeftComponent(treeScrollPane);
+        mainSplitPane.setLeftComponent(treeScrollPane);
 
         // Initialize details pane
         detailsPane = new JTextPane();
@@ -76,10 +87,21 @@ public class ClassViewer {
         detailsPane.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
         JScrollPane detailsScrollPane = new JScrollPane(detailsPane);
-        splitPane.setRightComponent(detailsScrollPane);
+        mainSplitPane.setRightComponent(detailsScrollPane);
+
+        // Initialize log viewer
+        logPane = new JTextPane();
+        logPane.setEditable(false);
+        logScrollPane = new JScrollPane(logPane);
+
+        // Combine mainSplitPane and logScrollPane into a vertical split pane
+        verticalSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
+        verticalSplitPane.setTopComponent(mainSplitPane);
+        verticalSplitPane.setBottomComponent(logScrollPane);
+        verticalSplitPane.setDividerLocation(600);
 
         JPanel panel = new JPanel(new BorderLayout());
-        panel.add(splitPane, BorderLayout.CENTER);
+        panel.add(verticalSplitPane, BorderLayout.CENTER);
 
         // Create context menu
         JPopupMenu popupMenu = new JPopupMenu();
@@ -122,14 +144,19 @@ public class ClassViewer {
 
         frame.add(panel);
 
-        syntaxHighlighter = new SyntaxHighlighter();
-        new LineHighlighter(detailsPane, new Color(43, 45, 48));
-
         // Set up drop listener
         setDropTarget();
     }
 
     public void init() {
+        logStyledDocument = logPane.getStyledDocument();
+        logStyledDocument.setCharacterAttributes(0, logStyledDocument.getLength(), new SimpleAttributeSet(), true);
+        logStyle = logStyledDocument.addStyle("log", null);
+        dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
+
+        syntaxHighlighter = new SyntaxHighlighter();
+        new LineHighlighter(detailsPane, new Color(43, 45, 48));
+
         SwingUtilities.invokeLater(() -> {
             frame.setVisible(true);
         });
@@ -238,5 +265,32 @@ public class ClassViewer {
         for (int i = 0; i < tree.getRowCount(); i++) {
             tree.expandRow(i);
         }
+    }
+
+    private void toggleLogVisibility(boolean isVisible) {
+        if (isVisible) {
+            verticalSplitPane.setBottomComponent(logScrollPane);
+            verticalSplitPane.setDividerLocation(600); // Adjust this value based on your layout preference
+        } else {
+            verticalSplitPane.setBottomComponent(null);
+        }
+    }
+
+    @Override
+    public void log(String message) {
+        System.out.println(message);
+
+        SwingUtilities.invokeLater(() -> {
+            try {
+                date = new Date();
+                StyleConstants.setForeground(logStyle, Color.GRAY);
+                logStyledDocument.insertString(logStyledDocument.getLength(), dateFormat.format(date) + ": ", logStyle);
+                StyleConstants.setForeground(logStyle, Color.LIGHT_GRAY);
+                logStyledDocument.insertString(logStyledDocument.getLength(), message + "\n", logStyle);
+            } catch (BadLocationException e) {
+                throw new RuntimeException(e);
+            }
+            logPane.setCaretPosition(logStyledDocument.getLength());
+        });
     }
 }

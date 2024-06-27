@@ -14,7 +14,7 @@ public class Rikr {
 
     public Rikr() {
         userInterface = new ClassViewer(this);
-        processor = new ClassProcessor();
+        processor = new ClassProcessor(userInterface);
     }
 
     public void start() {
