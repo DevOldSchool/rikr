@@ -1,6 +1,7 @@
 package org.de.rikr;
 
 import com.formdev.flatlaf.intellijthemes.FlatDarkFlatIJTheme;
+import com.formdev.flatlaf.util.SystemInfo;
 import org.de.rikr.ui.ClassViewer;
 import org.objectweb.asm.tree.ClassNode;
 
@@ -48,6 +49,12 @@ public class Rikr {
     }
 
     public static void main(String[] args) {
+        if (SystemInfo.isMacOS) {
+            System.setProperty("apple.laf.useScreenMenuBar", "true");
+            System.setProperty("apple.awt.application.appearance", "system");
+            System.setProperty("apple.awt.application.name", "Rikr");
+        }
+
         SwingUtilities.invokeLater(() -> {
             FlatDarkFlatIJTheme.setup();
             Rikr rikr = new Rikr();

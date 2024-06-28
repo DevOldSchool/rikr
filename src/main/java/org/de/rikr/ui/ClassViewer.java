@@ -1,5 +1,6 @@
 package org.de.rikr.ui;
 
+import com.formdev.flatlaf.util.SystemInfo;
 import org.de.rikr.Logger;
 import org.de.rikr.Rikr;
 import org.de.rikr.ui.highlighter.LineHighlighter;
@@ -53,6 +54,23 @@ public class ClassViewer implements Logger {
         frame = new JFrame("Rikr");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setSize(1200, 800);
+
+        if (SystemInfo.isMacOS) {
+            if (SystemInfo.isMacFullWindowContentSupported) {
+                frame.getRootPane().putClientProperty("apple.awt.transparentTitleBar", true);
+
+                // hide window title
+                if (SystemInfo.isJava_17_orLater) {
+                    frame.getRootPane().putClientProperty("apple.awt.windowTitleVisible", false);
+                } else {
+                    frame.setTitle(null);
+                }
+            }
+
+            // enable full screen mode for this window (for Java 8 - 10; not necessary for Java 11+)
+            if (!SystemInfo.isJava_11_orLater)
+                frame.getRootPane().putClientProperty("apple.awt.fullscreenable", true);
+        }
 
         // Initialize menu bar
         menuBar = new MenuBar(
