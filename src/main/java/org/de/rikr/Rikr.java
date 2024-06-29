@@ -7,6 +7,7 @@ import org.objectweb.asm.tree.ClassNode;
 
 import javax.swing.*;
 import java.io.File;
+import java.util.HashMap;
 import java.util.List;
 
 public class Rikr {
@@ -46,6 +47,10 @@ public class Rikr {
         if (classNodes != null) {
             classNodes.remove(classNode);
         }
+    }
+
+    public HashMap<ClassNode, List<ClassNode>> getHierarchyMap(String jarName) {
+        return processor.getHierarchyMap(jarName);
     }
 
     public void clearContent() {

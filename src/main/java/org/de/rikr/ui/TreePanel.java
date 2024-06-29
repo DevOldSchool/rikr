@@ -91,4 +91,8 @@ public class TreePanel extends JScrollPane {
             tree.expandRow(i);
         }
     }
+
+    public JTree getTree() {
+        return tree;
+    }
 }

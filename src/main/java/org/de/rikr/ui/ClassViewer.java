@@ -2,15 +2,20 @@ package org.de.rikr.ui;
 
 import com.formdev.flatlaf.util.SystemInfo;
 import org.de.rikr.Rikr;
+import org.de.rikr.ui.model.ClassNodeMutableTreeNode;
 import org.objectweb.asm.tree.ClassNode;
 
 import javax.swing.*;
+import javax.swing.tree.DefaultMutableTreeNode;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.io.File;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import static java.rmi.server.LogStream.log;
 
 public class ClassViewer {
     private final JFrame frame;
@@ -76,7 +81,8 @@ public class ClassViewer {
         MenuBar menuBar = new MenuBar(
                 e -> openFileDialog(),
                 e -> toggleSearchPanelVisibility(false),
-                e -> toggleLogVisibility(logPanel.isVisible())
+                e -> toggleLogVisibility(logPanel.isVisible()),
+                e -> openHierarchy()
         );
         frame.setJMenuBar(menuBar);
 
@@ -92,6 +98,19 @@ public class ClassViewer {
                 toggleSearchPanelVisibility(true);
             }
         });
+    }
+
+    private void openHierarchy() {
+        DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) treePanel.getTree().getLastSelectedPathComponent();
+        if (selectedNode == null || selectedNode.getParent() == null || selectedNode instanceof ClassNodeMutableTreeNode) {
+            JOptionPane.showMessageDialog(frame, "Please select a jar file to view its class hierarchy", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        HashMap<ClassNode, List<ClassNode>> hierarchyMap = controller.getHierarchyMap(selectedNode.toString());
+        log(String.format("Displaying hierarchy for %d super classes.", hierarchyMap.size()));
+        new HierarchyViewer(hierarchyMap);
+
     }
 
     public void init() {

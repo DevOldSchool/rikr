@@ -6,7 +6,7 @@ import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
 
 public class MenuBar extends JMenuBar {
-    public MenuBar(ActionListener openFileAction, ActionListener showSearchAction, ActionListener toggleLogAction) {
+    public MenuBar(ActionListener openFileAction, ActionListener showSearchAction, ActionListener toggleLogAction, ActionListener hierarchyAction) {
         // File menu
         JMenu fileMenu = new JMenu("File");
         JMenuItem openFileItem = new JMenuItem("Open");
@@ -28,8 +28,16 @@ public class MenuBar extends JMenuBar {
         toggleLogItem.addActionListener(toggleLogAction);
         windowMenu.add(toggleLogItem);
 
+        // View menu
+        JMenu viewMenu = new JMenu("View");
+        JMenuItem hierarchyItem = new JMenuItem("Hierarchy");
+        hierarchyItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_H, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()));
+        hierarchyItem.addActionListener(hierarchyAction);
+        viewMenu.add(hierarchyItem);
+
         add(fileMenu);
         add(editMenu);
         add(windowMenu);
+        add(viewMenu);
     }
 }
