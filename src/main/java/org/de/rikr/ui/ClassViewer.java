@@ -27,6 +27,7 @@ import java.io.StringWriter;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -57,7 +58,8 @@ public class ClassViewer implements Logger {
         // Initialize menu bar
         menuBar = new MenuBar(
                 e -> openFileDialog(),
-                e -> toggleLogVisibility(menuBar.isLogVisible())
+                e -> toggleLogVisibility(menuBar.isLogVisible()),
+                e -> openHierarchy()
         );
         frame.setJMenuBar(menuBar.getMenuBar());
 
@@ -203,6 +205,26 @@ public class ClassViewer implements Logger {
             syntaxHighlighter.highlight(styledDocument, stringWriter.toString());
             detailsPane.setCaretPosition(0);
         });
+    }
+
+    private void openHierarchy() {
+//        Map<ClassNode, List<ClassNode>> hierarchyMap = controller.getHierarchyMap();
+//        HierarchyViewer hierarchyViewer = new HierarchyViewer(hierarchyMap);
+//        hierarchyViewer.init();
+        DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
+        if (selectedNode == null || selectedNode.getParent() == null) {
+            JOptionPane.showMessageDialog(frame, "Please select a class node to view its hierarchy", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        if (selectedNode instanceof ClassNodeMutableTreeNode classNodeMutableTreeNode) {
+            JOptionPane.showMessageDialog(frame, "Please select a jar file to view its class hierarchy", "Error", JOptionPane.ERROR_MESSAGE);
+        } else {
+            HashMap<ClassNode, List<ClassNode>> hierarchyMap = controller.getHierarchyMap(selectedNode.toString());
+            log(String.format("Displaying hierarchy for %d super classes and %d sub classes", hierarchyMap.size(), hierarchyMap.size()));
+            new HierarchyViewer(hierarchyMap);
+        }
+
     }
 
     private void openFileDialog() {

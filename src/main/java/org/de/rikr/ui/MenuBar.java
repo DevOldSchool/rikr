@@ -7,7 +7,7 @@ public class MenuBar {
     private final JMenuBar menuBar;
     private final JCheckBoxMenuItem logToggleMenuItem;
 
-    public MenuBar(ActionListener openFileAction, ActionListener toggleLogAction) {
+    public MenuBar(ActionListener openFileAction, ActionListener toggleLogAction, ActionListener openHirarchyAction) {
         menuBar = new JMenuBar();
 
         // File Menu
@@ -24,6 +24,13 @@ public class MenuBar {
         logToggleMenuItem.addActionListener(toggleLogAction);
         windowMenu.add(logToggleMenuItem);
         menuBar.add(windowMenu);
+
+        // View Menu
+        JMenu viewMenu = new JMenu("View");
+        JMenuItem openHirarchyMenuItem = new JMenuItem("Open Hirarchy");
+        viewMenu.add(openHirarchyMenuItem);
+        openHirarchyMenuItem.addActionListener(openHirarchyAction);
+        menuBar.add(viewMenu);
     }
 
     public JMenuBar getMenuBar() {

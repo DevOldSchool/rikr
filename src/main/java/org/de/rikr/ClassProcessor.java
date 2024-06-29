@@ -55,4 +55,18 @@ public class ClassProcessor {
     public Map<String, List<ClassNode>> getJarClassesMap() {
         return jarClassesMap;
     }
+
+    public HashMap<ClassNode, List<ClassNode>> getHierarchyMap(String jarName) {
+        HashMap<ClassNode, List<ClassNode>> hierarchyMap = new HashMap<>();
+        List<ClassNode> classNodes = jarClassesMap.get(jarName);
+        for (ClassNode classNode : classNodes) {
+            if (classNode.superName != null) {
+                classNodes.stream()
+                        .filter(node -> node.name.equals(classNode.superName))
+                        .findFirst().ifPresent(superClassNode -> hierarchyMap.computeIfAbsent(superClassNode, k -> new ArrayList<>()).add(classNode));
+            }
+        }
+
+        return hierarchyMap;
+    }
 }
