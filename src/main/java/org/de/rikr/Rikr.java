@@ -15,7 +15,7 @@ public class Rikr {
 
     public Rikr() {
         userInterface = new ClassViewer(this);
-        processor = new ClassProcessor(userInterface);
+        processor = new ClassProcessor(userInterface.getLogPanel());
     }
 
     public void start() {
@@ -33,7 +33,7 @@ public class Rikr {
     }
 
     public void displayClassDetails(ClassNode classNode) {
-        userInterface.displayClassDetails(classNode);
+        userInterface.displayBytecode(classNode);
     }
 
     public void removeJar(String jarName) {
@@ -46,6 +46,14 @@ public class Rikr {
         if (classNodes != null) {
             classNodes.remove(classNode);
         }
+    }
+
+    public void clearContent() {
+        userInterface.clearContent();
+    }
+
+    public JTextPane getContentPane() {
+        return userInterface.getContentPane();
     }
 
     public static void main(String[] args) {

@@ -1,53 +1,26 @@
 package org.de.rikr.ui;
 
 import com.formdev.flatlaf.util.SystemInfo;
-import org.de.rikr.Logger;
 import org.de.rikr.Rikr;
-import org.de.rikr.ui.highlighter.LineHighlighter;
-import org.de.rikr.ui.highlighter.SyntaxHighlighter;
-import org.de.rikr.ui.model.ClassNodeMutableTreeNode;
 import org.objectweb.asm.tree.ClassNode;
-import org.objectweb.asm.util.Textifier;
-import org.objectweb.asm.util.TraceClassVisitor;
 
 import javax.swing.*;
-import javax.swing.text.*;
-import javax.swing.tree.DefaultMutableTreeNode;
-import javax.swing.tree.DefaultTreeModel;
 import java.awt.*;
-import java.awt.datatransfer.DataFlavor;
-import java.awt.datatransfer.Transferable;
-import java.awt.dnd.DnDConstants;
-import java.awt.dnd.DropTarget;
-import java.awt.dnd.DropTargetDropEvent;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
 import java.io.File;
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
-import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
-public class ClassViewer implements Logger {
+public class ClassViewer {
     private final JFrame frame;
-    private final JTree tree;
-    private final JTextPane detailsPane;
-    private final JTextPane logPane;
-    private final JScrollPane logScrollPane;
-    private final JSplitPane verticalSplitPane;
     private final Rikr controller;
 
-    private MenuBar menuBar = null;
-    
-    private StyledDocument logStyledDocument;
-    private Style logStyle;
-    private DateFormat dateFormat;
-    private SyntaxHighlighter syntaxHighlighter;
-
-    private Date date;
+    private final JSplitPane verticalSplitPane;
+    private final TreePanel treePanel;
+    private final SearchPanel searchPanel;
+    private final ContentPanel contentPanel;
+    private final LogPanel logPanel;
 
     public ClassViewer(Rikr controller) {
         this.controller = controller;
@@ -68,159 +41,76 @@ public class ClassViewer implements Logger {
             }
 
             // enable full screen mode for this window (for Java 8 - 10; not necessary for Java 11+)
-            if (!SystemInfo.isJava_11_orLater)
+            if (!SystemInfo.isJava_11_orLater) {
                 frame.getRootPane().putClientProperty("apple.awt.fullscreenable", true);
+            }
         }
 
-        // Initialize menu bar
-        menuBar = new MenuBar(
-                e -> openFileDialog(),
-                e -> toggleLogVisibility(menuBar.isLogVisible())
-        );
-        frame.setJMenuBar(menuBar.getMenuBar());
+        // Initialize panels
+        treePanel = new TreePanel(controller);
+        contentPanel = new ContentPanel(controller);
+        searchPanel = new SearchPanel(controller, e -> toggleSearchPanelVisibility(false));
+        logPanel = new LogPanel();
 
-        // Initialize split pane with tree and details pane
+        // Create a panel to hold both the search panel and content panel
+        JPanel rightPanel = new JPanel(new BorderLayout());
+        rightPanel.add(searchPanel, BorderLayout.NORTH);
+        rightPanel.add(contentPanel, BorderLayout.CENTER);
+
         JSplitPane mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
         mainSplitPane.setDividerLocation(300);
+        mainSplitPane.setLeftComponent(treePanel);
+        mainSplitPane.setRightComponent(rightPanel);
 
-        // Initialize tree
-        DefaultMutableTreeNode root = new DefaultMutableTreeNode("JAR Files");
-        tree = new JTree(root);
-        tree.setRootVisible(false);
-        tree.setShowsRootHandles(true);
-        tree.addTreeSelectionListener(e -> {
-            DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
-            if (selectedNode instanceof ClassNodeMutableTreeNode classNode) {
-                controller.displayClassDetails(classNode.getClassNode());
-            }
-        });
-
-        JScrollPane treeScrollPane = new JScrollPane(tree);
-        mainSplitPane.setLeftComponent(treeScrollPane);
-
-        // Initialize details pane
-        detailsPane = new JTextPane();
-        detailsPane.setEditable(false);
-        detailsPane.setBackground(new Color(31, 30, 34));
-        detailsPane.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-
-        JScrollPane detailsScrollPane = new JScrollPane(detailsPane);
-        mainSplitPane.setRightComponent(detailsScrollPane);
-
-        // Initialize log viewer
-        logPane = new JTextPane();
-        logPane.setEditable(false);
-        logScrollPane = new JScrollPane(logPane);
-
-        // Combine mainSplitPane and logScrollPane into a vertical split pane
         verticalSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
         verticalSplitPane.setTopComponent(mainSplitPane);
-        verticalSplitPane.setBottomComponent(logScrollPane);
+        verticalSplitPane.setBottomComponent(logPanel);
         verticalSplitPane.setDividerLocation(600);
 
         JPanel panel = new JPanel(new BorderLayout());
         panel.add(verticalSplitPane, BorderLayout.CENTER);
 
-        // Create context menu
-        JPopupMenu popupMenu = new JPopupMenu();
-        JMenuItem removeItem = new JMenuItem("Remove");
-        popupMenu.add(removeItem);
-
-        // Add action listener for Remove menu item
-        removeItem.addActionListener(e -> {
-            DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
-            if (selectedNode != null && selectedNode.getParent() != null) {
-                DefaultTreeModel model = (DefaultTreeModel) tree.getModel();
-                model.removeNodeFromParent(selectedNode);
-
-                if (selectedNode instanceof ClassNodeMutableTreeNode classNodeMutableTreeNode) {
-                    controller.removeClass(classNodeMutableTreeNode.getJarName(), classNodeMutableTreeNode.getClassNode());
-                } else {
-                    controller.removeJar(selectedNode.toString());
-                }
-
-                detailsPane.setStyledDocument(new DefaultStyledDocument());
-            }
-        });
-
-        // Add a custom mouse listener to the JTree
-        tree.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent e) {
-                if (SwingUtilities.isRightMouseButton(e)) {
-                    int row = tree.getClosestRowForLocation(e.getX(), e.getY());
-                    tree.setSelectionRow(row);
-
-                    // Show popup menu only if a valid node is selected
-                    DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
-                    if (selectedNode != null) {
-                        popupMenu.show(e.getComponent(), e.getX(), e.getY());
-                    }
-                }
-            }
-        });
-
         frame.add(panel);
 
-        // Set up drop listener
-        setDropTarget();
+        // Initialize menu bar
+        MenuBar menuBar = new MenuBar(
+                e -> openFileDialog(),
+                e -> toggleSearchPanelVisibility(false),
+                e -> toggleLogVisibility(logPanel.isVisible())
+        );
+        frame.setJMenuBar(menuBar);
+
+        // Search toggle
+        InputMap inputMap = frame.getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+        ActionMap actionMap = frame.getRootPane().getActionMap();
+
+        String toggleSearchPanelAction = "toggleSearchPanel";
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_F, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()), toggleSearchPanelAction);
+        actionMap.put(toggleSearchPanelAction, new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                toggleSearchPanelVisibility(true);
+            }
+        });
     }
 
     public void init() {
-        logStyledDocument = logPane.getStyledDocument();
-        logStyledDocument.setCharacterAttributes(0, logStyledDocument.getLength(), new SimpleAttributeSet(), true);
-        logStyle = logStyledDocument.addStyle("log", null);
-        dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
-
-        syntaxHighlighter = new SyntaxHighlighter();
-        new LineHighlighter(detailsPane, new Color(43, 45, 48));
-
         SwingUtilities.invokeLater(() -> {
             frame.setVisible(true);
+            searchPanel.setVisible(false);
         });
     }
 
     public void updateTree(Map<String, List<ClassNode>> jarClassesMap) {
-        SwingUtilities.invokeLater(() -> {
-            DefaultMutableTreeNode root = new DefaultMutableTreeNode("Root Node");
-
-            for (String jarName : jarClassesMap.keySet()) {
-                DefaultMutableTreeNode jarNode = new DefaultMutableTreeNode(jarName);
-                List<ClassNode> classes = jarClassesMap.get(jarName);
-
-                for (ClassNode classNode : classes) {
-                    String className = classNode.name + ".class";
-                    jarNode.add(new ClassNodeMutableTreeNode(jarName, classNode, className));
-                }
-
-                root.add(jarNode);
-            }
-
-            DefaultTreeModel model = new DefaultTreeModel(root);
-            tree.setModel(model);
-            expandAllNodes(tree);
-        });
+        SwingUtilities.invokeLater(() -> treePanel.updateTree(jarClassesMap));
     }
 
-    public void displayClassDetails(ClassNode classNode) {
-        SwingUtilities.invokeLater(() -> {
-            StyledDocument styledDocument = new DefaultStyledDocument();
-            detailsPane.setStyledDocument(styledDocument);
-            styledDocument.setCharacterAttributes(0, styledDocument.getLength(), new SimpleAttributeSet(), true);
-            detailsPane.selectAll();
+    public void displayBytecode(ClassNode classNode) {
+        contentPanel.displayBytecode(classNode);
+    }
 
-            // Get the classes bytecode in human-readable form
-            StringWriter stringWriter = new StringWriter();
-            PrintWriter printWriter = new PrintWriter(stringWriter);
-            Textifier textifier = new Textifier();
-            TraceClassVisitor traceClassVisitor = new TraceClassVisitor(null, textifier, printWriter);
-            classNode.accept(traceClassVisitor);
-            printWriter.flush();
-
-            // Highlight and set caret position
-            syntaxHighlighter.highlight(styledDocument, stringWriter.toString());
-            detailsPane.setCaretPosition(0);
-        });
+    public void clearContent() {
+        contentPanel.clear();
     }
 
     private void openFileDialog() {
@@ -241,74 +131,28 @@ public class ClassViewer implements Logger {
         }
     }
 
-    private void setDropTarget() {
-        detailsPane.setDropTarget(new DropTarget() {
-            @Override
-            public synchronized void drop(DropTargetDropEvent e) {
-                try {
-                    e.acceptDrop(DnDConstants.ACTION_COPY);
-                    Transferable transferable = e.getTransferable();
-
-                    if (transferable.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
-                        Object transferData = transferable.getTransferData(DataFlavor.javaFileListFlavor);
-
-                        if (transferData instanceof List<?> droppedFiles) {
-                            for (Object item : droppedFiles) {
-                                if (item instanceof File file) {
-                                    if (file.getName().endsWith(".jar") || file.getName().endsWith(".class")) {
-                                        processDroppedFile(file);
-                                    }
-                                }
-                            }
-
-                            e.dropComplete(true);
-                        }
-                    }
-                } catch (Exception ex) {
-                    ex.printStackTrace();
-                }
-            }
-        });
-    }
-
-    private void processDroppedFile(File file) {
-        if (file.getName().endsWith(".jar")) {
-            controller.loadJarFiles(new File[]{file});
-        } else if (file.getName().endsWith(".class")) {
-            controller.loadClassFiles(new File[]{file});
-        }
-    }
-
-    private void expandAllNodes(JTree tree) {
-        for (int i = 0; i < tree.getRowCount(); i++) {
-            tree.expandRow(i);
-        }
-    }
-
     private void toggleLogVisibility(boolean isVisible) {
         if (isVisible) {
-            verticalSplitPane.setBottomComponent(logScrollPane);
-            verticalSplitPane.setDividerLocation(600); // Adjust this value based on your layout preference
-        } else {
             verticalSplitPane.setBottomComponent(null);
+            logPanel.setVisible(false);
+        } else {
+            verticalSplitPane.setBottomComponent(logPanel);
+            verticalSplitPane.setDividerLocation(600);
+            logPanel.setVisible(true);
         }
     }
 
-    @Override
-    public void log(String message) {
-        System.out.println(message);
+    private void toggleSearchPanelVisibility(boolean isVisible) {
+        searchPanel.setVisible(isVisible);
+        frame.revalidate();
+        frame.repaint();
+    }
 
-        SwingUtilities.invokeLater(() -> {
-            try {
-                date = new Date();
-                StyleConstants.setForeground(logStyle, Color.GRAY);
-                logStyledDocument.insertString(logStyledDocument.getLength(), dateFormat.format(date) + ": ", logStyle);
-                StyleConstants.setForeground(logStyle, Color.LIGHT_GRAY);
-                logStyledDocument.insertString(logStyledDocument.getLength(), message + "\n", logStyle);
-            } catch (BadLocationException e) {
-                throw new RuntimeException(e);
-            }
-            logPane.setCaretPosition(logStyledDocument.getLength());
-        });
+    public LogPanel getLogPanel() {
+        return logPanel;
+    }
+
+    public JTextPane getContentPane() {
+        return contentPanel.getContentPane();
     }
 }

@@ -1,40 +1,35 @@
 package org.de.rikr.ui;
 
 import javax.swing.*;
+import java.awt.*;
 import java.awt.event.ActionListener;
+import java.awt.event.KeyEvent;
 
-public class MenuBar {
-    private final JMenuBar menuBar;
-    private final JCheckBoxMenuItem logToggleMenuItem;
-
-    public MenuBar(ActionListener openFileAction, ActionListener toggleLogAction) {
-        menuBar = new JMenuBar();
-
-        // File Menu
+public class MenuBar extends JMenuBar {
+    public MenuBar(ActionListener openFileAction, ActionListener showSearchAction, ActionListener toggleLogAction) {
+        // File menu
         JMenu fileMenu = new JMenu("File");
-        JMenuItem openMenuItem = new JMenuItem("Open");
-        openMenuItem.addActionListener(openFileAction);
-        fileMenu.add(openMenuItem);
-        menuBar.add(fileMenu);
+        JMenuItem openFileItem = new JMenuItem("Open");
+        openFileItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()));
+        openFileItem.addActionListener(openFileAction);
+        fileMenu.add(openFileItem);
 
-        // Window Menu
+        // Edit menu
+        JMenu editMenu = new JMenu("Edit");
+        JMenuItem searchItem = new JMenuItem("Search");
+        searchItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()));
+        searchItem.addActionListener(showSearchAction);
+        editMenu.add(searchItem);
+
+        // Window menu
         JMenu windowMenu = new JMenu("Window");
-        logToggleMenuItem = new JCheckBoxMenuItem("Show Log");
-        logToggleMenuItem.setSelected(true);
-        logToggleMenuItem.addActionListener(toggleLogAction);
-        windowMenu.add(logToggleMenuItem);
-        menuBar.add(windowMenu);
-    }
+        JMenuItem toggleLogItem = new JMenuItem("Toggle Log");
+        toggleLogItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_L, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()));
+        toggleLogItem.addActionListener(toggleLogAction);
+        windowMenu.add(toggleLogItem);
 
-    public JMenuBar getMenuBar() {
-        return menuBar;
-    }
-
-    public boolean isLogVisible() {
-        return logToggleMenuItem.isSelected();
-    }
-
-    public void setLogVisible(boolean visible) {
-        logToggleMenuItem.setSelected(visible);
+        add(fileMenu);
+        add(editMenu);
+        add(windowMenu);
     }
 }
