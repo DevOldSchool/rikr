@@ -27,6 +27,10 @@ public class LogPanel extends JScrollPane implements Logger {
         dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
     }
 
+    public void init() {
+        
+    }
+
     @Override
     public void log(String message) {
         SwingUtilities.invokeLater(() -> {

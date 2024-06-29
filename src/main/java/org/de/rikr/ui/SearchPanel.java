@@ -12,6 +12,9 @@ import java.util.List;
 public class SearchPanel extends JPanel {
     private final Rikr controller;
     private final JTextField searchField;
+    private final JButton searchButton;
+    private final JButton upButton;
+    private final JButton downButton;
     private final JLabel resultCounter;
     private final Color highlightColor;
 
@@ -25,20 +28,17 @@ public class SearchPanel extends JPanel {
 
         // Initialize components
         searchField = new JTextField(20);
-        JButton searchButton = new JButton("Search");
+        searchButton = new JButton("Search");
         resultCounter = new JLabel("0/0");
-        JButton upButton = new JButton("Up");
-        JButton downButton = new JButton("Down");
+        upButton = new JButton("Up");
+        downButton = new JButton("Down");
         JButton closeButton = new JButton("Close");
+
+        closeButton.addActionListener(closeListener);
 
         highlightColor = new Color(45, 84, 63);
         searchResults = new ArrayList<>();
         currentResultIndex = -1;
-
-        searchButton.addActionListener(e -> search());
-        upButton.addActionListener(e -> navigateResults(-1));
-        downButton.addActionListener(e -> navigateResults(1));
-        closeButton.addActionListener(closeListener);
 
         JPanel topPanel = new JPanel();
         topPanel.add(searchField);
@@ -49,6 +49,12 @@ public class SearchPanel extends JPanel {
         topPanel.add(closeButton);
 
         add(topPanel, BorderLayout.NORTH);
+    }
+
+    public void init() {
+        searchButton.addActionListener(e -> search());
+        upButton.addActionListener(e -> navigateResults(-1));
+        downButton.addActionListener(e -> navigateResults(1));
     }
 
     public void search() {
