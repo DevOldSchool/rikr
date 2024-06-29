@@ -3,6 +3,8 @@ package org.de.rikr;
 import com.formdev.flatlaf.intellijthemes.FlatDarkFlatIJTheme;
 import com.formdev.flatlaf.util.SystemInfo;
 import org.de.rikr.ui.ClassViewer;
+import org.de.rikr.ui.ContentPanel;
+import org.de.rikr.ui.TreePanel;
 import org.objectweb.asm.tree.ClassNode;
 
 import javax.swing.*;
@@ -12,15 +14,15 @@ import java.util.List;
 
 public class Rikr {
     private final ClassViewer userInterface;
-    private final ClassProcessor processor;
+    private ClassProcessor processor;
 
     public Rikr() {
         userInterface = new ClassViewer(this);
-        processor = new ClassProcessor(userInterface.getLogPanel());
     }
 
     public void start() {
         userInterface.init();
+        processor = new ClassProcessor(userInterface.getLogPanel());
     }
 
     public void loadJarFiles(File[] jarFiles) {
@@ -33,7 +35,7 @@ public class Rikr {
         userInterface.updateTree(processor.getJarClassesMap());
     }
 
-    public void displayClassDetails(ClassNode classNode) {
+    public void displayBytecode(ClassNode classNode) {
         userInterface.displayBytecode(classNode);
     }
 
@@ -52,13 +54,33 @@ public class Rikr {
     public HashMap<ClassNode, List<ClassNode>> getHierarchyMap(String jarName) {
         return processor.getHierarchyMap(jarName);
     }
+  
+    public List<ClassNode> getClasses(String jarName) {
+        return processor.getJarClassesMap().get(jarName);
+    }
 
     public void clearContent() {
         userInterface.clearContent();
     }
 
+    public ContentPanel getContentPanel() {
+        return userInterface.getContentPanel();
+    }
+
     public JTextPane getContentPane() {
         return userInterface.getContentPane();
+    }
+
+    public void log(String message) {
+        userInterface.getLogPanel().log(message);
+    }
+
+    public TreePanel getTreePanel() {
+        return userInterface.getTreePanel();
+    }
+
+    public ClassViewer getUserInterface() {
+        return userInterface;
     }
 
     public static void main(String[] args) {

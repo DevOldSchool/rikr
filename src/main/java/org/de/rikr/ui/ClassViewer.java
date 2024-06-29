@@ -20,7 +20,6 @@ import static java.rmi.server.LogStream.log;
 public class ClassViewer {
     private final JFrame frame;
     private final Rikr controller;
-
     private final JSplitPane verticalSplitPane;
     private final TreePanel treePanel;
     private final SearchPanel searchPanel;
@@ -114,6 +113,11 @@ public class ClassViewer {
     }
 
     public void init() {
+        contentPanel.init();
+        treePanel.init();
+        searchPanel.init();
+        logPanel.init();
+
         SwingUtilities.invokeLater(() -> {
             frame.setVisible(true);
             searchPanel.setVisible(false);
@@ -171,7 +175,19 @@ public class ClassViewer {
         return logPanel;
     }
 
+    public ContentPanel getContentPanel() {
+        return contentPanel;
+    }
+
     public JTextPane getContentPane() {
         return contentPanel.getContentPane();
+    }
+
+    public TreePanel getTreePanel() {
+        return treePanel;
+    }
+
+    public JFrame getFrame() {
+        return frame;
     }
 }

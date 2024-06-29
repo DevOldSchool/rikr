@@ -106,6 +106,7 @@ public class LineHighlighter implements Highlighter.HighlightPainter, CaretListe
 
     @Override
     public void focusLost(FocusEvent e) {
-        component.getHighlighter().removeAllHighlights();
+        // TODO remove highlight when focus is lost but not when right click context menu is used
+//        component.getHighlighter().removeAllHighlights();
     }
 }
