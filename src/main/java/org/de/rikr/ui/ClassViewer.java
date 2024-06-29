@@ -208,22 +208,15 @@ public class ClassViewer implements Logger {
     }
 
     private void openHierarchy() {
-//        Map<ClassNode, List<ClassNode>> hierarchyMap = controller.getHierarchyMap();
-//        HierarchyViewer hierarchyViewer = new HierarchyViewer(hierarchyMap);
-//        hierarchyViewer.init();
         DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
-        if (selectedNode == null || selectedNode.getParent() == null) {
-            JOptionPane.showMessageDialog(frame, "Please select a class node to view its hierarchy", "Error", JOptionPane.ERROR_MESSAGE);
+        if (selectedNode == null || selectedNode.getParent() == null || selectedNode instanceof ClassNodeMutableTreeNode) {
+            JOptionPane.showMessageDialog(frame, "Please select a jar file to view its class hierarchy", "Error", JOptionPane.ERROR_MESSAGE);
             return;
         }
 
-        if (selectedNode instanceof ClassNodeMutableTreeNode classNodeMutableTreeNode) {
-            JOptionPane.showMessageDialog(frame, "Please select a jar file to view its class hierarchy", "Error", JOptionPane.ERROR_MESSAGE);
-        } else {
-            HashMap<ClassNode, List<ClassNode>> hierarchyMap = controller.getHierarchyMap(selectedNode.toString());
-            log(String.format("Displaying hierarchy for %d super classes and %d sub classes", hierarchyMap.size(), hierarchyMap.size()));
-            new HierarchyViewer(hierarchyMap);
-        }
+        HashMap<ClassNode, List<ClassNode>> hierarchyMap = controller.getHierarchyMap(selectedNode.toString());
+        log(String.format("Displaying hierarchy for %d super classes.", hierarchyMap.size()));
+        new HierarchyViewer(hierarchyMap);
 
     }
 
