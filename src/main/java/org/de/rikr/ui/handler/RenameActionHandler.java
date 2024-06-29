@@ -2,11 +2,10 @@ package org.de.rikr.ui.handler;
 
 import org.de.rikr.Renamer;
 import org.de.rikr.Rikr;
-import org.de.rikr.ui.model.ClassMutableTreeNode;
-import org.de.rikr.ui.model.ClassNodeMutableTreeNode;
-import org.de.rikr.ui.model.FieldNodeMutableTreeNode;
-import org.de.rikr.ui.model.MethodNodeMutableTreeNode;
+import org.de.rikr.ui.model.*;
 import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.FieldNode;
+import org.objectweb.asm.tree.MethodNode;
 
 import javax.swing.*;
 import javax.swing.text.BadLocationException;
@@ -51,51 +50,101 @@ public class RenameActionHandler implements ActionListener {
             }
 
             DefaultMutableTreeNode selectedNode = controller.getTreePanel().getSelectedNode();
+            String jarName;
+            ClassNode classNode = null;
 
-            if (selectedNode instanceof ClassMutableTreeNode | selectedNode instanceof ClassNodeMutableTreeNode) {
-                String jarName;
-                ClassNode classNode;
+            if (selectedNode instanceof ClassMutableTreeNode classMutableTreeNode) {
+                DefaultMutableTreeNode childNode = (DefaultMutableTreeNode) classMutableTreeNode.getChildAt(0);
+                jarName = classMutableTreeNode.getJarName();
+                classNode = classMutableTreeNode.getClassNode();
 
-                if (selectedNode instanceof ClassMutableTreeNode classMutableTreeNode) {
-                    jarName = classMutableTreeNode.getJarName();
-                    classNode = classMutableTreeNode.getClassNode();
-                } else {
-                    ClassNodeMutableTreeNode classNodeMutableTreeNode = (ClassNodeMutableTreeNode) selectedNode;
-                    ClassMutableTreeNode parentNode = (ClassMutableTreeNode) classNodeMutableTreeNode.getParent();
-                    jarName = parentNode.getJarName();
-                    classNode = classNodeMutableTreeNode.getClassNode();
-                }
-
-                if (classNode == null || !classNode.name.equals(selectedText.replace(".class", ""))) {
+                if (classNode == null) {
                     return;
                 }
 
                 Renamer.updateClassReferences(controller.getClasses(jarName), classNode.name, newName);
                 controller.log(String.format("Renamed %d class references in %d files.", Renamer.getRenamedClassReferenceCounter(), Renamer.getRenamedClassReferenceFileCounter()));
-
                 selectedNode.setUserObject(newName + ".class");
-                System.out.println("Selected node: " + selectedNode);
-                controller.getTreePanel().updateNode(selectedNode);
-                controller.displayBytecode(classNode);
 
-                // Restore caret position and highlight the renamed text
-                SwingUtilities.invokeLater(() -> {
-                    contentPane.setCaretPosition(originalCaretPosition[0]);
-                    try {
-                        int start = document.getText(0, document.getLength()).indexOf(newName);
-                        if (start >= 0) {
-                            contentPane.select(start, start + newName.length());
-                        }
-                    } catch (BadLocationException ignored) {
-                    }
-                });
+                if (childNode != null) {
+                    childNode.setUserObject(newName);
+                    controller.getTreePanel().updateNode(childNode);
+                }
+            } else if (selectedNode instanceof ClassNodeMutableTreeNode classNodeMutableTreeNode) {
+                ClassMutableTreeNode parentNode = (ClassMutableTreeNode) classNodeMutableTreeNode.getParent();
+                jarName = parentNode.getJarName();
+                classNode = classNodeMutableTreeNode.getClassNode();
+
+                if (classNode == null) {
+                    return;
+                }
+
+                Renamer.updateClassReferences(controller.getClasses(jarName), classNode.name, newName);
+                controller.log(String.format("Renamed %d class references in %d files.", Renamer.getRenamedClassReferenceCounter(), Renamer.getRenamedClassReferenceFileCounter()));
+                selectedNode.setUserObject(newName);
+                parentNode.setUserObject(newName + ".class");
+                controller.getTreePanel().updateNode(parentNode);
+            } else if (selectedNode instanceof InterfaceNodeMutableTreeNode interfaceNodeMutableTreeNode) {
+                ClassMutableTreeNode parentNode = (ClassMutableTreeNode) interfaceNodeMutableTreeNode.getParent();
+                jarName = parentNode.getJarName();
+                classNode = interfaceNodeMutableTreeNode.getClassNode();
+
+                if (classNode == null) {
+                    return;
+                }
+
+                Renamer.updateClassReferences(controller.getClasses(jarName), classNode.name, newName);
+                controller.log(String.format("Renamed %d interface references in %d files.", Renamer.getRenamedClassReferenceCounter(), Renamer.getRenamedClassReferenceFileCounter()));
+                selectedNode.setUserObject(newName);
+                parentNode.setUserObject(newName + ".class");
+                controller.getTreePanel().updateNode(parentNode);
             } else if (selectedNode instanceof FieldNodeMutableTreeNode fieldNodeMutableTreeNode) {
-                // TODO support renaming fields
-                System.out.println("Selected field " + fieldNodeMutableTreeNode.getFieldNode().name);
+                ClassMutableTreeNode parentNode = (ClassMutableTreeNode) fieldNodeMutableTreeNode.getParent().getParent();
+                jarName = parentNode.getJarName();
+                classNode = parentNode.getClassNode();
+                FieldNode fieldNode = fieldNodeMutableTreeNode.getFieldNode();
+
+                if (classNode == null || fieldNode == null) {
+                    return;
+                }
+
+                Renamer.updateFieldReferences(controller.getClasses(jarName), classNode, fieldNode.name, newName);
+                controller.log(String.format("Renamed %d field references in %d files.", Renamer.getRenamedFieldReferenceCounter(), Renamer.getRenamedFieldReferenceFileCounter()));
+                selectedNode.setUserObject(newName + " " + fieldNode.desc);
             } else if (selectedNode instanceof MethodNodeMutableTreeNode methodNodeMutableTreeNode) {
-                // TODO support renaming methods
-                System.out.println("Selected method " + methodNodeMutableTreeNode.getMethodNode().name);
+                ClassMutableTreeNode parentNode = (ClassMutableTreeNode) methodNodeMutableTreeNode.getParent().getParent();
+                jarName = parentNode.getJarName();
+                classNode = parentNode.getClassNode();
+                MethodNode methodNode = methodNodeMutableTreeNode.getMethodNode();
+
+                if (classNode == null || methodNode == null) {
+                    return;
+                }
+
+                Renamer.updateMethodReferences(controller.getClasses(jarName), classNode, methodNode.name, newName);
+                controller.log(String.format("Renamed %d method references in %d files.", Renamer.getRenamedMethodReferenceCounter(), Renamer.getRenamedMethodReferenceFileCounter()));
+                selectedNode.setUserObject(newName + " " + methodNode.desc);
             }
+
+            if (classNode == null) {
+                return;
+            }
+
+            // Update and select node
+            controller.getTreePanel().updateNode(selectedNode);
+            controller.displayBytecode(classNode);
+
+            // Restore caret position and highlight the renamed text
+            SwingUtilities.invokeLater(() -> {
+                contentPane.setCaretPosition(originalCaretPosition[0]);
+                try {
+                    int start = document.getText(0, document.getLength()).indexOf(newName);
+                    if (start >= 0) {
+                        contentPane.select(start, start + newName.length());
+                    }
+                } catch (BadLocationException ignored) {
+                }
+            });
         });
     }
 }

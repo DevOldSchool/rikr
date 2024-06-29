@@ -26,7 +26,7 @@ public class ClassMutableTreeNode extends DefaultMutableTreeNode {
         } else {
             classTreeNode = new ClassNodeMutableTreeNode(classNode, classNode.name);
         }
-        
+
         addFields(classTreeNode);
         addMethods(classTreeNode);
 
@@ -41,7 +41,7 @@ public class ClassMutableTreeNode extends DefaultMutableTreeNode {
 
     private void addMethods(DefaultMutableTreeNode classTreeNode) {
         for (MethodNode methodNode : classNode.methods) {
-            classTreeNode.add(new MethodNodeMutableTreeNode(methodNode, methodNode.name + methodNode.desc));
+            classTreeNode.add(new MethodNodeMutableTreeNode(methodNode, methodNode.name + " " + methodNode.desc));
         }
     }
 
