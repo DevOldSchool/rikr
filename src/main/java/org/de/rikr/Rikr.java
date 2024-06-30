@@ -4,6 +4,7 @@ import com.formdev.flatlaf.intellijthemes.FlatDarkFlatIJTheme;
 import com.formdev.flatlaf.util.SystemInfo;
 import org.de.rikr.ui.ClassViewer;
 import org.de.rikr.ui.ContentPanel;
+import org.de.rikr.ui.Images;
 import org.de.rikr.ui.TreePanel;
 import org.objectweb.asm.tree.ClassNode;
 
@@ -84,6 +85,8 @@ public class Rikr {
             System.setProperty("apple.awt.application.appearance", "system");
             System.setProperty("apple.awt.application.name", "Rikr");
         }
+
+        Images.loadImages();
 
         SwingUtilities.invokeLater(() -> {
             FlatDarkFlatIJTheme.setup();

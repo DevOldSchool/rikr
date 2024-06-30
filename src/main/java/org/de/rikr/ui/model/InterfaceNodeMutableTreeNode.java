@@ -2,13 +2,11 @@ package org.de.rikr.ui.model;
 
 import org.objectweb.asm.tree.ClassNode;
 
-import javax.swing.tree.DefaultMutableTreeNode;
-
-public class InterfaceNodeMutableTreeNode extends DefaultMutableTreeNode {
+public class InterfaceNodeMutableTreeNode extends IconMutableTreeNode {
     private final ClassNode classNode;
 
     public InterfaceNodeMutableTreeNode(ClassNode classNode, Object userObject) {
-        super(userObject);
+        super("interface", userObject);
         this.classNode = classNode;
     }
 

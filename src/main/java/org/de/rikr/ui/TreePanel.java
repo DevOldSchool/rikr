@@ -32,6 +32,7 @@ public class TreePanel extends JScrollPane {
         tree = new JTree(treeModel);
         tree.setRootVisible(false);
         tree.setShowsRootHandles(true);
+        tree.setCellRenderer(new IconTreeCellRenderer());
         treeSelectionHandler = new TreeSelectionHandler(controller, tree);
         tree.addTreeSelectionListener(treeSelectionHandler);
 
@@ -95,6 +96,7 @@ public class TreePanel extends JScrollPane {
         for (String jarName : jarClassesMap.keySet()) {
             DefaultMutableTreeNode jarNode = new DefaultMutableTreeNode(jarName);
             List<ClassNode> classes = jarClassesMap.get(jarName);
+            
             for (ClassNode classNode : classes) {
                 String className = classNode.name + ".class";
                 jarNode.add(new ClassMutableTreeNode(jarName, classNode, className));
