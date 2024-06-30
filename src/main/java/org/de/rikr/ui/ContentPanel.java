@@ -9,9 +9,7 @@ import org.objectweb.asm.util.Textifier;
 import org.objectweb.asm.util.TraceClassVisitor;
 
 import javax.swing.*;
-import javax.swing.text.BadLocationException;
-import javax.swing.text.Style;
-import javax.swing.text.StyledDocument;
+import javax.swing.text.*;
 import java.awt.*;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
@@ -40,6 +38,7 @@ public class ContentPanel extends JScrollPane {
 
     private final RenameActionHandler renameActionHandler;
     private final int[] originalCaretPosition = new int[1];
+    private final Color selectedHighlightColor;
 
     public ContentPanel(Rikr controller) {
         this.controller = controller;
@@ -68,6 +67,8 @@ public class ContentPanel extends JScrollPane {
         contextMenu.add(renameItem);
 
         renameActionHandler = new RenameActionHandler(controller, contentPane, document, originalCaretPosition);
+
+        selectedHighlightColor = new Color(33, 66, 131);
 
         // Disable default right-click behavior
         contentPane.setComponentPopupMenu(null);
@@ -168,5 +169,60 @@ public class ContentPanel extends JScrollPane {
 
     public RenameActionHandler getRenameActionHandler() {
         return renameActionHandler;
+    }
+
+    public void selectTextAfterPattern(String pattern, String textToSelect) {
+        Highlighter hilite = contentPane.getHighlighter();
+        Document doc = contentPane.getDocument();
+        String text = null;
+        try {
+            text = doc.getText(0, doc.getLength());
+        } catch (BadLocationException e) {
+            throw new RuntimeException(e);
+        }
+
+        // Find the first occurrence of the pattern
+        int patternPos = text.indexOf(pattern);
+        if (patternPos >= 0) {
+            int patternEndPos = patternPos + pattern.length();
+            String patternText = text.substring(patternPos, patternEndPos);
+            int selectPos = 0;
+
+            // Search within the found pattern for textToSelect
+            while ((selectPos = patternText.indexOf(textToSelect, selectPos)) >= 0) {
+                // Ensure the textToSelect is not part of another word
+                boolean isStandalone = true;
+                if (selectPos > 0) {
+                    char charBefore = patternText.charAt(selectPos - 1);
+                    if (Character.isLetterOrDigit(charBefore)) {
+                        isStandalone = false;
+                    }
+                }
+                if (selectPos + textToSelect.length() < patternText.length()) {
+                    char charAfter = patternText.charAt(selectPos + textToSelect.length());
+                    if (Character.isLetterOrDigit(charAfter)) {
+                        isStandalone = false;
+                    }
+
+                }
+
+                if (isStandalone) {
+                    int selectStart = patternPos + selectPos;
+                    int selectEnd = selectStart + textToSelect.length();
+                    try {
+                        hilite.addHighlight(selectStart, selectEnd, new DefaultHighlighter.DefaultHighlightPainter(selectedHighlightColor));
+                    } catch (BadLocationException e) {
+                        throw new RuntimeException(e);
+                    }
+
+                    // Set the caret position to the start of the textToSelect
+                    contentPane.grabFocus();
+                    contentPane.setCaretPosition(selectStart);
+                    break;
+                } else {
+                    selectPos += textToSelect.length();
+                }
+            }
+        }
     }
 }

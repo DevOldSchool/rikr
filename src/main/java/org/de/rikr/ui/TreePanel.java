@@ -1,6 +1,7 @@
 package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
+import org.de.rikr.ui.handler.TreeSelectionHandler;
 import org.de.rikr.ui.model.*;
 import org.objectweb.asm.tree.ClassNode;
 
@@ -21,7 +22,7 @@ public class TreePanel extends JScrollPane {
     private final JPopupMenu popupMenu;
     private final JMenuItem removeItem;
     private final JMenuItem renameItem;
-    private DefaultMutableTreeNode selectedNode;
+    private final TreeSelectionHandler treeSelectionHandler;
 
     public TreePanel(Rikr controller) {
         this.controller = controller;
@@ -31,16 +32,8 @@ public class TreePanel extends JScrollPane {
         tree = new JTree(treeModel);
         tree.setRootVisible(false);
         tree.setShowsRootHandles(true);
-        tree.addTreeSelectionListener(e -> {
-            selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
-
-            if (selectedNode instanceof ClassMutableTreeNode classMutableTreeNode) {
-                controller.displayBytecode(classMutableTreeNode.getClassNode());
-            }
-            // TODO add support for ClassNode selection which should highlight the class in the content pane
-            // TODO add support for FieldNode selection which should highlight the field in the content pane
-            // TODO add support for MethodNode selection which should highlight the method in the content pane
-        });
+        treeSelectionHandler = new TreeSelectionHandler(controller, tree);
+        tree.addTreeSelectionListener(treeSelectionHandler);
 
         // Create context menu
         popupMenu = new JPopupMenu();
@@ -155,6 +148,45 @@ public class TreePanel extends JScrollPane {
     }
 
     public DefaultMutableTreeNode getSelectedNode() {
-        return selectedNode;
+        return treeSelectionHandler.getSelectedNode();
+    }
+
+    public DefaultMutableTreeNode findChild(DefaultMutableTreeNode node, String name) {
+        if (node == null || name == null) {
+            return null;
+        }
+
+        for (int i = 0; i < node.getChildCount(); i++) {
+            DefaultMutableTreeNode childNode = (DefaultMutableTreeNode) node.getChildAt(i);
+
+            if (name.equals(childNode.getUserObject().toString())) {
+                return childNode;
+            }
+        }
+
+        return null;
+    }
+
+    public DefaultMutableTreeNode findChildRecursively(DefaultMutableTreeNode node, String name) {
+        if (node == null || name == null) {
+            return null;
+        }
+
+        // Check if the current node matches the name
+        if (name.equals(node.getUserObject().toString())) {
+            return node;
+        }
+
+        // Iterate over the children and search recursively
+        for (int i = 0; i < node.getChildCount(); i++) {
+            DefaultMutableTreeNode childNode = (DefaultMutableTreeNode) node.getChildAt(i);
+            DefaultMutableTreeNode result = findChildRecursively(childNode, name);
+
+            if (result != null) {
+                return result;
+            }
+        }
+
+        return null;
     }
 }
