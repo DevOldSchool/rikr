@@ -10,7 +10,9 @@ import org.objectweb.asm.tree.MethodNode;
 import javax.swing.*;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.StyledDocument;
+import javax.swing.text.Utilities;
 import javax.swing.tree.DefaultMutableTreeNode;
+import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 
@@ -29,122 +31,266 @@ public class RenameActionHandler implements ActionListener {
 
     @Override
     public void actionPerformed(ActionEvent e) {
-        String selectedText;
-        if (e.getSource() instanceof JTextPane) {
-            selectedText = contentPane.getSelectedText();
-        } else if (e.getSource() instanceof JMenuItem) {
-            selectedText = controller.getTreePanel().getSelectedNode().toString();
-        } else {
-            selectedText = "";
-        }
-
+        String selectedText = getSelectedText(e);
         if (selectedText == null || selectedText.isEmpty()) {
             return;
         }
 
-        // Show input dialog to get the new name from the user
         SwingUtilities.invokeLater(() -> {
             String newName = JOptionPane.showInputDialog(controller.getUserInterface().getFrame(), "Enter new name:", "Rename", JOptionPane.PLAIN_MESSAGE);
             if (newName == null || newName.trim().isEmpty()) {
                 return;
             }
 
-            DefaultMutableTreeNode selectedNode = controller.getTreePanel().getSelectedNode();
-            String jarName;
-            ClassNode classNode = null;
+            DefaultMutableTreeNode selectedNode = getNodeToRename(e, selectedText);
+            rename(selectedNode, newName);
+        });
+    }
 
-            if (selectedNode instanceof ClassMutableTreeNode classMutableTreeNode) {
-                DefaultMutableTreeNode childNode = (DefaultMutableTreeNode) classMutableTreeNode.getChildAt(0);
-                jarName = classMutableTreeNode.getJarName();
-                classNode = classMutableTreeNode.getClassNode();
+    private String getSelectedText(ActionEvent e) {
+        Component invoker = ((JPopupMenu) ((JMenuItem) e.getSource()).getParent()).getInvoker();
+        if (invoker instanceof JTextPane) {
+            return contentPane.getSelectedText();
+        } else if (invoker instanceof JTree) {
+            return controller.getTreePanel().getSelectedNode().toString();
+        }
 
-                if (classNode == null) {
-                    return;
+        return "";
+    }
+
+    private DefaultMutableTreeNode getNodeToRename(ActionEvent e, String selectedText) {
+        Component invoker = ((JPopupMenu) ((JMenuItem) e.getSource()).getParent()).getInvoker();
+        if (invoker instanceof JTextPane) {
+            return getNodeFromTextPane(selectedText);
+        } else {
+            return controller.getTreePanel().getSelectedNode();
+        }
+    }
+
+    private DefaultMutableTreeNode getNodeFromTextPane(String selectedText) {
+        String lineText = getLineText(contentPane);
+        if (lineText == null) {
+            return controller.getTreePanel().getSelectedNode();
+        }
+
+        DefaultMutableTreeNode selectedNode = controller.getTreePanel().getSelectedNode();
+        ClassNode classNode = getClassNode(selectedNode);
+
+        if (classNode == null) {
+            return null;
+        }
+
+        String type = "";
+        String nodeName = "";
+
+        if (lineText.contains("class " + classNode.name)) {
+            type = "class";
+            nodeName = classNode.name;
+        } else if (lineText.contains("interface " + classNode.name)) {
+            type = "interface";
+            nodeName = classNode.name;
+        } else {
+            for (FieldNode fieldNode : classNode.fields) {
+                String fieldPattern = fieldNode.desc + " " + selectedText;
+                if (lineText.contains(fieldPattern)) {
+                    type = "field";
+                    nodeName = fieldNode.name + " " + fieldNode.desc;
+                    break;
                 }
-
-                Renamer.updateClassReferences(controller.getClasses(jarName), classNode.name, newName);
-                controller.log(String.format("Renamed %d class references in %d files.", Renamer.getRenamedClassReferenceCounter(), Renamer.getRenamedClassReferenceFileCounter()));
-                selectedNode.setUserObject(newName + ".class");
-
-                if (childNode != null) {
-                    childNode.setUserObject(newName);
-                    controller.getTreePanel().updateNode(childNode);
-                }
-            } else if (selectedNode instanceof ClassNodeMutableTreeNode classNodeMutableTreeNode) {
-                ClassMutableTreeNode parentNode = (ClassMutableTreeNode) classNodeMutableTreeNode.getParent();
-                jarName = parentNode.getJarName();
-                classNode = classNodeMutableTreeNode.getClassNode();
-
-                if (classNode == null) {
-                    return;
-                }
-
-                Renamer.updateClassReferences(controller.getClasses(jarName), classNode.name, newName);
-                controller.log(String.format("Renamed %d class references in %d files.", Renamer.getRenamedClassReferenceCounter(), Renamer.getRenamedClassReferenceFileCounter()));
-                selectedNode.setUserObject(newName);
-                parentNode.setUserObject(newName + ".class");
-                controller.getTreePanel().updateNode(parentNode);
-            } else if (selectedNode instanceof InterfaceNodeMutableTreeNode interfaceNodeMutableTreeNode) {
-                ClassMutableTreeNode parentNode = (ClassMutableTreeNode) interfaceNodeMutableTreeNode.getParent();
-                jarName = parentNode.getJarName();
-                classNode = interfaceNodeMutableTreeNode.getClassNode();
-
-                if (classNode == null) {
-                    return;
-                }
-
-                Renamer.updateClassReferences(controller.getClasses(jarName), classNode.name, newName);
-                controller.log(String.format("Renamed %d interface references in %d files.", Renamer.getRenamedClassReferenceCounter(), Renamer.getRenamedClassReferenceFileCounter()));
-                selectedNode.setUserObject(newName);
-                parentNode.setUserObject(newName + ".class");
-                controller.getTreePanel().updateNode(parentNode);
-            } else if (selectedNode instanceof FieldNodeMutableTreeNode fieldNodeMutableTreeNode) {
-                ClassMutableTreeNode parentNode = (ClassMutableTreeNode) fieldNodeMutableTreeNode.getParent().getParent();
-                jarName = parentNode.getJarName();
-                classNode = parentNode.getClassNode();
-                FieldNode fieldNode = fieldNodeMutableTreeNode.getFieldNode();
-
-                if (classNode == null || fieldNode == null) {
-                    return;
-                }
-
-                Renamer.updateFieldReferences(controller.getClasses(jarName), classNode, fieldNode.name, newName);
-                controller.log(String.format("Renamed %d field references in %d files.", Renamer.getRenamedFieldReferenceCounter(), Renamer.getRenamedFieldReferenceFileCounter()));
-                selectedNode.setUserObject(newName + " " + fieldNode.desc);
-            } else if (selectedNode instanceof MethodNodeMutableTreeNode methodNodeMutableTreeNode) {
-                ClassMutableTreeNode parentNode = (ClassMutableTreeNode) methodNodeMutableTreeNode.getParent().getParent();
-                jarName = parentNode.getJarName();
-                classNode = parentNode.getClassNode();
-                MethodNode methodNode = methodNodeMutableTreeNode.getMethodNode();
-
-                if (classNode == null || methodNode == null) {
-                    return;
-                }
-
-                Renamer.updateMethodReferences(controller.getClasses(jarName), classNode, methodNode.name, newName);
-                controller.log(String.format("Renamed %d method references in %d files.", Renamer.getRenamedMethodReferenceCounter(), Renamer.getRenamedMethodReferenceFileCounter()));
-                selectedNode.setUserObject(newName + " " + methodNode.desc);
             }
 
-            if (classNode == null) {
-                return;
-            }
-
-            // Update and select node
-            controller.getTreePanel().updateNode(selectedNode);
-            controller.displayBytecode(classNode);
-
-            // Restore caret position and highlight the renamed text
-            SwingUtilities.invokeLater(() -> {
-                contentPane.setCaretPosition(originalCaretPosition[0]);
-                try {
-                    int start = document.getText(0, document.getLength()).indexOf(newName);
-                    if (start >= 0) {
-                        contentPane.select(start, start + newName.length());
-                    }
-                } catch (BadLocationException ignored) {
+            for (MethodNode methodNode : classNode.methods) {
+                String methodPattern = selectedText + methodNode.desc;
+                if (lineText.contains(methodPattern)) {
+                    type = "method";
+                    nodeName = methodNode.name + " " + methodNode.desc;
+                    break;
                 }
-            });
+            }
+        }
+
+        return getSelectedNode(selectedNode, type, nodeName);
+    }
+
+    private String getLineText(JTextPane textPane) {
+        try {
+            int caretPosition = textPane.getCaretPosition();
+            int lineStart = Utilities.getRowStart(textPane, caretPosition);
+            int lineEnd = Utilities.getRowEnd(textPane, caretPosition);
+
+            return textPane.getDocument().getText(lineStart, lineEnd - lineStart);
+        } catch (BadLocationException ignored) {
+            return null;
+        }
+    }
+
+    private ClassNode getClassNode(DefaultMutableTreeNode selectedNode) {
+        if (selectedNode instanceof ClassMutableTreeNode) {
+            return ((ClassMutableTreeNode) selectedNode).getClassNode();
+        } else if (selectedNode instanceof ClassNodeMutableTreeNode) {
+            return ((ClassNodeMutableTreeNode) selectedNode).getClassNode();
+        } else if (selectedNode instanceof InterfaceNodeMutableTreeNode) {
+            return ((InterfaceNodeMutableTreeNode) selectedNode).getClassNode();
+        } else if (selectedNode instanceof FieldNodeMutableTreeNode || selectedNode instanceof MethodNodeMutableTreeNode) {
+            return ((ClassMutableTreeNode) selectedNode.getParent().getParent()).getClassNode();
+        }
+
+        return null;
+    }
+
+    private DefaultMutableTreeNode getSelectedNode(DefaultMutableTreeNode selectedNode, String type, String nodeName) {
+        return switch (type) {
+            case "class", "interface" -> getClassOrInterfaceNode(selectedNode, nodeName);
+            case "field", "method" -> getFieldOrMethodNode(selectedNode, nodeName);
+            default -> selectedNode;
+        };
+    }
+
+    private DefaultMutableTreeNode getClassOrInterfaceNode(DefaultMutableTreeNode selectedNode, String nodeName) {
+        if (selectedNode instanceof ClassMutableTreeNode) {
+            return controller.getTreePanel().findChild(selectedNode, nodeName);
+        } else if (selectedNode instanceof FieldNodeMutableTreeNode ||
+                selectedNode instanceof MethodNodeMutableTreeNode) {
+            return (DefaultMutableTreeNode) selectedNode.getParent();
+        }
+
+        return selectedNode;
+    }
+
+    private DefaultMutableTreeNode getFieldOrMethodNode(DefaultMutableTreeNode selectedNode, String nodeName) {
+        if (selectedNode instanceof ClassMutableTreeNode ||
+                selectedNode instanceof ClassNodeMutableTreeNode ||
+                selectedNode instanceof InterfaceNodeMutableTreeNode) {
+            return controller.getTreePanel().findChildRecursively(selectedNode, nodeName);
+        } else if (selectedNode instanceof FieldNodeMutableTreeNode ||
+                selectedNode instanceof MethodNodeMutableTreeNode) {
+            return controller.getTreePanel().findChild((DefaultMutableTreeNode) selectedNode.getParent(), nodeName);
+        }
+
+        return selectedNode;
+    }
+
+    private void rename(DefaultMutableTreeNode selectedNode, String newName) {
+        ClassNode classNode = null;
+
+        if (selectedNode instanceof ClassMutableTreeNode) {
+            classNode = handleClassMutableTreeNode((ClassMutableTreeNode) selectedNode, newName);
+        } else if (selectedNode instanceof ClassNodeMutableTreeNode) {
+            classNode = handleClassNodeMutableTreeNode((ClassNodeMutableTreeNode) selectedNode, newName);
+        } else if (selectedNode instanceof InterfaceNodeMutableTreeNode) {
+            classNode = handleInterfaceNodeMutableTreeNode((InterfaceNodeMutableTreeNode) selectedNode, newName);
+        } else if (selectedNode instanceof FieldNodeMutableTreeNode) {
+            classNode = handleFieldNodeMutableTreeNode((FieldNodeMutableTreeNode) selectedNode, newName);
+        } else if (selectedNode instanceof MethodNodeMutableTreeNode) {
+            classNode = handleMethodNodeMutableTreeNode((MethodNodeMutableTreeNode) selectedNode, newName);
+        }
+
+        if (classNode != null) {
+            updateNodeAndDisplay(classNode, selectedNode, newName);
+        }
+    }
+
+    private ClassNode handleClassMutableTreeNode(ClassMutableTreeNode node, String newName) {
+        String jarName = node.getJarName();
+        ClassNode classNode = node.getClassNode();
+
+        if (classNode != null) {
+            Renamer.updateClassReferences(controller.getClasses(jarName), classNode.name, newName);
+            logRenameResults("class", Renamer.getRenamedClassReferenceCounter(), Renamer.getRenamedClassReferenceFileCounter());
+            node.setUserObject(newName + ".class");
+            DefaultMutableTreeNode childNode = (DefaultMutableTreeNode) node.getChildAt(0);
+
+            if (childNode != null) {
+                childNode.setUserObject(newName);
+                controller.getTreePanel().updateNode(childNode);
+            }
+        }
+
+        return classNode;
+    }
+
+    private ClassNode handleClassNodeMutableTreeNode(ClassNodeMutableTreeNode node, String newName) {
+        ClassMutableTreeNode parentNode = (ClassMutableTreeNode) node.getParent();
+        String jarName = parentNode.getJarName();
+        ClassNode classNode = node.getClassNode();
+
+        if (classNode != null) {
+            Renamer.updateClassReferences(controller.getClasses(jarName), classNode.name, newName);
+            logRenameResults("class", Renamer.getRenamedClassReferenceCounter(), Renamer.getRenamedClassReferenceFileCounter());
+            node.setUserObject(newName);
+            parentNode.setUserObject(newName + ".class");
+            controller.getTreePanel().updateNode(parentNode);
+        }
+
+        return classNode;
+    }
+
+    private ClassNode handleInterfaceNodeMutableTreeNode(InterfaceNodeMutableTreeNode node, String newName) {
+        ClassMutableTreeNode parentNode = (ClassMutableTreeNode) node.getParent();
+        String jarName = parentNode.getJarName();
+        ClassNode classNode = node.getClassNode();
+
+        if (classNode != null) {
+            Renamer.updateClassReferences(controller.getClasses(jarName), classNode.name, newName);
+            logRenameResults("interface", Renamer.getRenamedClassReferenceCounter(), Renamer.getRenamedClassReferenceFileCounter());
+            node.setUserObject(newName);
+            parentNode.setUserObject(newName + ".class");
+            controller.getTreePanel().updateNode(parentNode);
+        }
+
+        return classNode;
+    }
+
+    private ClassNode handleFieldNodeMutableTreeNode(FieldNodeMutableTreeNode node, String newName) {
+        ClassMutableTreeNode parentNode = (ClassMutableTreeNode) node.getParent().getParent();
+        String jarName = parentNode.getJarName();
+        ClassNode classNode = parentNode.getClassNode();
+        FieldNode fieldNode = node.getFieldNode();
+
+        if (classNode != null && fieldNode != null) {
+            Renamer.updateFieldReferences(controller.getClasses(jarName), classNode, fieldNode.name, newName);
+            logRenameResults("field", Renamer.getRenamedFieldReferenceCounter(), Renamer.getRenamedFieldReferenceFileCounter());
+            node.setUserObject(newName + " " + fieldNode.desc);
+        }
+
+        return classNode;
+    }
+
+    private ClassNode handleMethodNodeMutableTreeNode(MethodNodeMutableTreeNode node, String newName) {
+        ClassMutableTreeNode parentNode = (ClassMutableTreeNode) node.getParent().getParent();
+        String jarName = parentNode.getJarName();
+        ClassNode classNode = parentNode.getClassNode();
+        MethodNode methodNode = node.getMethodNode();
+
+        if (classNode != null && methodNode != null) {
+            Renamer.updateMethodReferences(controller.getClasses(jarName), classNode, methodNode.name, newName);
+            logRenameResults("method", Renamer.getRenamedMethodReferenceCounter(), Renamer.getRenamedMethodReferenceFileCounter());
+            node.setUserObject(newName + " " + methodNode.desc);
+        }
+
+        return classNode;
+    }
+
+    private void logRenameResults(String type, int renamedCount, int fileCount) {
+        controller.log(String.format("Renamed %d %s references in %d files.", renamedCount, type, fileCount));
+    }
+
+    private void updateNodeAndDisplay(ClassNode classNode, DefaultMutableTreeNode selectedNode, String newName) {
+        controller.getTreePanel().updateNode(selectedNode);
+        controller.displayBytecode(classNode);
+        restoreCaretAndHighlight(newName);
+    }
+
+    private void restoreCaretAndHighlight(String newName) {
+        SwingUtilities.invokeLater(() -> {
+            contentPane.setCaretPosition(originalCaretPosition[0]);
+            try {
+                int start = document.getText(0, document.getLength()).indexOf(newName);
+                if (start >= 0) {
+                    contentPane.select(start, start + newName.length());
+                }
+            } catch (BadLocationException ignored) {
+            }
         });
     }
 }
