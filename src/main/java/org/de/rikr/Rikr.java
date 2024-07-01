@@ -2,10 +2,7 @@ package org.de.rikr;
 
 import com.formdev.flatlaf.intellijthemes.FlatDarkFlatIJTheme;
 import com.formdev.flatlaf.util.SystemInfo;
-import org.de.rikr.ui.ClassViewer;
-import org.de.rikr.ui.ContentPanel;
-import org.de.rikr.ui.Images;
-import org.de.rikr.ui.TreePanel;
+import org.de.rikr.ui.*;
 import org.objectweb.asm.tree.ClassNode;
 
 import javax.swing.*;
@@ -87,6 +84,7 @@ public class Rikr {
         }
 
         Images.loadImages();
+        Fonts.loadFonts();
 
         SwingUtilities.invokeLater(() -> {
             FlatDarkFlatIJTheme.setup();

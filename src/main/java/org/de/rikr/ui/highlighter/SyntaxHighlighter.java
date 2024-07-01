@@ -1,11 +1,8 @@
 package org.de.rikr.ui.highlighter;
 
-import org.de.rikr.loader.FontLoader;
+import org.de.rikr.ui.Fonts;
 
-import javax.swing.text.BadLocationException;
-import javax.swing.text.Style;
-import javax.swing.text.StyleConstants;
-import javax.swing.text.StyledDocument;
+import javax.swing.text.*;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.regex.Matcher;
@@ -31,18 +28,7 @@ public class SyntaxHighlighter {
     private ArrayList<int[]> commentRegions;
 
     public SyntaxHighlighter() {
-        // Load custom fonts
-        String[] fontPaths = {
-                "/fonts/JetBrainsMono-Regular.ttf"
-        };
-        Font[] loadedFonts = FontLoader.loadFonts(fontPaths);
-
-        if (loadedFonts.length > 0) {
-            defaultFont = loadedFonts[0].deriveFont(13f);
-        } else {
-            // Fallback to a standard font if custom fonts are not available
-            defaultFont = new Font("Monospaced", Font.PLAIN, 13);
-        }
+        defaultFont = Fonts.getDefaultFont();
     }
 
     public void highlight(StyledDocument doc, String content) {
