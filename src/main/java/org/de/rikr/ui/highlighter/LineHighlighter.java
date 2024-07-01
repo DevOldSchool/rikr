@@ -14,6 +14,7 @@ public class LineHighlighter implements Highlighter.HighlightPainter, CaretListe
     private final JTextComponent component;
     private Color color;
     private Rectangle2D lastView = new Rectangle(0, 0, 5, 5);
+    private final int lineHeightOffset;
 
     public LineHighlighter(JTextComponent component, Color color) {
         this.component = component;
@@ -23,6 +24,9 @@ public class LineHighlighter implements Highlighter.HighlightPainter, CaretListe
         component.addMouseListener(this);
         component.addMouseMotionListener(this);
         component.addFocusListener(this);
+
+        // TODO we shouldn't need this but the line height from syntax highlighter is throwing off the sizing
+        lineHeightOffset = 3;
     }
 
     public void setColor(Color color) {
@@ -39,7 +43,7 @@ public class LineHighlighter implements Highlighter.HighlightPainter, CaretListe
         }
 
         g.setColor(color);
-        g.fillRect(0, (int) rectangle.getY(), c.getWidth(), (int) rectangle.getHeight());
+        g.fillRect(0, (int) rectangle.getY(), c.getWidth(), (int) rectangle.getHeight() + lineHeightOffset);
 
         if (lastView == null) {
             lastView = rectangle;

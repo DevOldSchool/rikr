@@ -72,6 +72,10 @@ public class ContentPanel extends JScrollPane {
 
         // Disable default right-click behavior
         contentPane.setComponentPopupMenu(null);
+
+        // Add line number component
+        LineNumberComponent lineNumberComponent = new LineNumberComponent(contentPane);
+        setRowHeaderView(lineNumberComponent);
     }
 
     public void init() {
