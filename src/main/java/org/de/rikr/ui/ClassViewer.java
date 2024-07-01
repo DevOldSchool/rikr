@@ -102,6 +102,8 @@ public class ClassViewer {
         SwingUtilities.invokeLater(() -> {
             frame.setVisible(true);
             searchPanel.setVisible(false);
+
+            contentPanel.getContentPane().grabFocus();
         });
     }
 

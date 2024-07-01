@@ -43,10 +43,10 @@ public class ContentPanel extends JScrollPane {
     public ContentPanel(Rikr controller) {
         this.controller = controller;
 
-        contentPane = new JTextPane();
+        contentPane = new ScrollableTextPane();
         contentPane.setEditable(false);
-        contentPane.setBackground(new Color(31, 30, 34));
-        contentPane.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        contentPane.setBackground(new Color(30, 31, 34));
+        contentPane.setBorder(BorderFactory.createEmptyBorder(10, 0, 10, 10));
         document = contentPane.getStyledDocument();
         style = document.addStyle("content", null);
         setViewportView(contentPane);
