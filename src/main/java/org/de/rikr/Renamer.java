@@ -13,6 +13,13 @@ public class Renamer {
     private static int renamedFieldReferenceCounter;
     private static int renamedFieldReferenceFileCounter;
 
+    /**
+     * Update references to the specified class.
+     *
+     * @param classes List of class nodes to iterate over
+     * @param oldName Old name to find in class nodes
+     * @param newName New name to replace old name with in class nodes
+     */
     public static void updateClassReferences(List<ClassNode> classes, String oldName, String newName) {
         renamedClassReferenceCounter = 0;
         renamedClassReferenceFileCounter = 0;
@@ -159,6 +166,14 @@ public class Renamer {
         }
     }
 
+    /**
+     * Update references to the specified method.
+     *
+     * @param classes List of class nodes to iterate over
+     * @param owner   The class node instances that the method belongs to
+     * @param oldName Old name to find in class nodes
+     * @param newName New name to replace old name with in class nodes
+     */
     public static void updateMethodReferences(List<ClassNode> classes, ClassNode owner, String oldName, String newName) {
         renamedMethodReferenceCounter = 0;
         renamedMethodReferenceFileCounter = 0;
@@ -192,6 +207,14 @@ public class Renamer {
         }
     }
 
+    /**
+     * Update references to the specified field.
+     *
+     * @param classes List of class nodes to iterate over
+     * @param owner   The class node instances that the field belongs to
+     * @param oldName Old name to find in class nodes
+     * @param newName New name to replace old name with in class nodes
+     */
     public static void updateFieldReferences(List<ClassNode> classes, ClassNode owner, String oldName, String newName) {
         renamedFieldReferenceCounter = 0;
         renamedFieldReferenceFileCounter = 0;
