@@ -16,13 +16,12 @@ public class SyntaxHighlighter {
     private static final Color STRING_COLOR = new Color(106, 171, 115);
 
     // Styles for different types of text
-    private static final String DEFAULT_STYLE = "Default";
     private static final String KEYWORD_STYLE = "Keyword";
     private static final String COMMENT_STYLE = "Comment";
     private static final String NUMBER_STYLE = "Number";
     private static final String STRING_STYLE = "String";
 
-    private static final float LINE_HEIGHT = 1.2f;
+    private static final float LINE_HEIGHT = -0.2f;
 
     private static Font defaultFont;
     private ArrayList<int[]> commentRegions;
@@ -40,7 +39,7 @@ public class SyntaxHighlighter {
         }
 
         // Define styles
-        Style defaultStyle = doc.addStyle(DEFAULT_STYLE, null);
+        Style defaultStyle = doc.addStyle(StyleContext.DEFAULT_STYLE, null);
         StyleConstants.setForeground(defaultStyle, DEFAULT_COLOR);
         StyleConstants.setFontFamily(defaultStyle, defaultFont.getFamily());
         StyleConstants.setFontSize(defaultStyle, defaultFont.getSize());
@@ -68,6 +67,9 @@ public class SyntaxHighlighter {
         } catch (BadLocationException e) {
             e.printStackTrace();
         }
+
+        // Apply the default style to the entire document
+        doc.setParagraphAttributes(0, doc.getLength(), defaultStyle, false);
 
         // Apply syntax highlighting
         highlightComments(doc, content, commentStyle);
