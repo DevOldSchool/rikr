@@ -125,14 +125,16 @@ public class RenameActionHandler implements ActionListener {
     }
 
     private ClassNode getClassNode(DefaultMutableTreeNode selectedNode) {
-        if (selectedNode instanceof ClassMutableTreeNode) {
-            return ((ClassMutableTreeNode) selectedNode).getClassNode();
-        } else if (selectedNode instanceof ClassNodeMutableTreeNode) {
-            return ((ClassNodeMutableTreeNode) selectedNode).getClassNode();
-        } else if (selectedNode instanceof InterfaceNodeMutableTreeNode) {
-            return ((InterfaceNodeMutableTreeNode) selectedNode).getClassNode();
-        } else if (selectedNode instanceof FieldNodeMutableTreeNode || selectedNode instanceof MethodNodeMutableTreeNode) {
-            return ((ClassMutableTreeNode) selectedNode.getParent().getParent()).getClassNode();
+        if (selectedNode instanceof ClassMutableTreeNode classMutableTreeNode) {
+            return classMutableTreeNode.getClassNode();
+        } else if (selectedNode instanceof ClassNodeMutableTreeNode classNodeMutableTreeNode) {
+            return classNodeMutableTreeNode.getClassNode();
+        } else if (selectedNode instanceof InterfaceNodeMutableTreeNode interfaceNodeMutableTreeNode) {
+            return interfaceNodeMutableTreeNode.getClassNode();
+        } else if (selectedNode instanceof FieldNodeMutableTreeNode fieldNodeMutableTreeNode) {
+            return fieldNodeMutableTreeNode.getOwner();
+        } else if (selectedNode instanceof MethodNodeMutableTreeNode methodNodeMutableTreeNode) {
+            return methodNodeMutableTreeNode.getOwner();
         }
 
         return null;
@@ -173,16 +175,16 @@ public class RenameActionHandler implements ActionListener {
     private void rename(DefaultMutableTreeNode selectedNode, String newName) {
         ClassNode classNode = null;
 
-        if (selectedNode instanceof ClassMutableTreeNode) {
-            classNode = handleClassMutableTreeNode((ClassMutableTreeNode) selectedNode, newName);
-        } else if (selectedNode instanceof ClassNodeMutableTreeNode) {
-            classNode = handleClassNodeMutableTreeNode((ClassNodeMutableTreeNode) selectedNode, newName);
-        } else if (selectedNode instanceof InterfaceNodeMutableTreeNode) {
-            classNode = handleInterfaceNodeMutableTreeNode((InterfaceNodeMutableTreeNode) selectedNode, newName);
-        } else if (selectedNode instanceof FieldNodeMutableTreeNode) {
-            classNode = handleFieldNodeMutableTreeNode((FieldNodeMutableTreeNode) selectedNode, newName);
-        } else if (selectedNode instanceof MethodNodeMutableTreeNode) {
-            classNode = handleMethodNodeMutableTreeNode((MethodNodeMutableTreeNode) selectedNode, newName);
+        if (selectedNode instanceof ClassMutableTreeNode classMutableTreeNode) {
+            classNode = handleClassMutableTreeNode(classMutableTreeNode, newName);
+        } else if (selectedNode instanceof ClassNodeMutableTreeNode classNodeMutableTreeNode) {
+            classNode = handleClassNodeMutableTreeNode(classNodeMutableTreeNode, newName);
+        } else if (selectedNode instanceof InterfaceNodeMutableTreeNode interfaceNodeMutableTreeNode) {
+            classNode = handleInterfaceNodeMutableTreeNode(interfaceNodeMutableTreeNode, newName);
+        } else if (selectedNode instanceof FieldNodeMutableTreeNode fieldNodeMutableTreeNode) {
+            classNode = handleFieldNodeMutableTreeNode(fieldNodeMutableTreeNode, newName);
+        } else if (selectedNode instanceof MethodNodeMutableTreeNode methodNodeMutableTreeNode) {
+            classNode = handleMethodNodeMutableTreeNode(methodNodeMutableTreeNode, newName);
         }
 
         if (classNode != null) {
@@ -211,7 +213,7 @@ public class RenameActionHandler implements ActionListener {
 
     private ClassNode handleClassNodeMutableTreeNode(ClassNodeMutableTreeNode node, String newName) {
         ClassMutableTreeNode parentNode = (ClassMutableTreeNode) node.getParent();
-        String jarName = parentNode.getJarName();
+        String jarName = node.getJarName();
         ClassNode classNode = node.getClassNode();
 
         if (classNode != null) {
@@ -227,7 +229,7 @@ public class RenameActionHandler implements ActionListener {
 
     private ClassNode handleInterfaceNodeMutableTreeNode(InterfaceNodeMutableTreeNode node, String newName) {
         ClassMutableTreeNode parentNode = (ClassMutableTreeNode) node.getParent();
-        String jarName = parentNode.getJarName();
+        String jarName = node.getJarName();
         ClassNode classNode = node.getClassNode();
 
         if (classNode != null) {
@@ -244,7 +246,7 @@ public class RenameActionHandler implements ActionListener {
     private ClassNode handleFieldNodeMutableTreeNode(FieldNodeMutableTreeNode node, String newName) {
         ClassMutableTreeNode parentNode = (ClassMutableTreeNode) node.getParent().getParent();
         String jarName = parentNode.getJarName();
-        ClassNode classNode = parentNode.getClassNode();
+        ClassNode classNode = node.getOwner();
         FieldNode fieldNode = node.getFieldNode();
 
         if (classNode != null && fieldNode != null) {
@@ -259,7 +261,7 @@ public class RenameActionHandler implements ActionListener {
     private ClassNode handleMethodNodeMutableTreeNode(MethodNodeMutableTreeNode node, String newName) {
         ClassMutableTreeNode parentNode = (ClassMutableTreeNode) node.getParent().getParent();
         String jarName = parentNode.getJarName();
-        ClassNode classNode = parentNode.getClassNode();
+        ClassNode classNode = node.getOwner();
         MethodNode methodNode = node.getMethodNode();
 
         if (classNode != null && methodNode != null) {

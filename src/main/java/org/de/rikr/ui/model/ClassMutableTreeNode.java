@@ -22,9 +22,9 @@ public class ClassMutableTreeNode extends IconMutableTreeNode {
         DefaultMutableTreeNode classTreeNode;
 
         if (Modifier.isInterface(classNode.access)) {
-            classTreeNode = new InterfaceNodeMutableTreeNode(classNode, classNode.name);
+            classTreeNode = new InterfaceNodeMutableTreeNode(jarName, classNode, classNode.name);
         } else {
-            classTreeNode = new ClassNodeMutableTreeNode(classNode, classNode.name);
+            classTreeNode = new ClassNodeMutableTreeNode(jarName, classNode, classNode.name);
         }
 
         addFields(classTreeNode);
@@ -57,7 +57,7 @@ public class ClassMutableTreeNode extends IconMutableTreeNode {
                 iconName += "_final";
             }
 
-            classTreeNode.add(new FieldNodeMutableTreeNode(iconName, fieldNode, fieldNode.name + " " + fieldNode.desc));
+            classTreeNode.add(new FieldNodeMutableTreeNode(iconName, classNode, fieldNode, fieldNode.name + " " + fieldNode.desc));
         }
     }
 
@@ -85,7 +85,7 @@ public class ClassMutableTreeNode extends IconMutableTreeNode {
                 iconName += "_final";
             }
 
-            classTreeNode.add(new MethodNodeMutableTreeNode(iconName, methodNode, methodNode.name + " " + methodNode.desc));
+            classTreeNode.add(new MethodNodeMutableTreeNode(iconName, classNode, methodNode, methodNode.name + " " + methodNode.desc));
         }
     }
 

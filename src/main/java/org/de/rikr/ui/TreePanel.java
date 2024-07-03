@@ -94,13 +94,14 @@ public class TreePanel extends JScrollPane {
     public void updateTree(Map<String, List<ClassNode>> jarClassesMap) {
         DefaultMutableTreeNode root = new DefaultMutableTreeNode("Root Node");
         for (String jarName : jarClassesMap.keySet()) {
-            DefaultMutableTreeNode jarNode = new DefaultMutableTreeNode(jarName);
             List<ClassNode> classes = jarClassesMap.get(jarName);
-            
+            DefaultMutableTreeNode jarNode = new JarMutableTreeNode(jarName, classes, jarName);
+
             for (ClassNode classNode : classes) {
                 String className = classNode.name + ".class";
                 jarNode.add(new ClassMutableTreeNode(jarName, classNode, className));
             }
+
             root.add(jarNode);
         }
 
