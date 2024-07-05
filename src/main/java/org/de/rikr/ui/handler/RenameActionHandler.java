@@ -52,7 +52,7 @@ public class RenameActionHandler implements ActionListener {
         if (invoker instanceof JTextPane) {
             return contentPane.getSelectedText();
         } else if (invoker instanceof JTree) {
-            return controller.getTreePanel().getSelectedNode().toString();
+            return controller.getUserInterface().getTreePanel().getSelectedNode().toString();
         }
 
         return "";
@@ -63,17 +63,17 @@ public class RenameActionHandler implements ActionListener {
         if (invoker instanceof JTextPane) {
             return getNodeFromTextPane(selectedText);
         } else {
-            return controller.getTreePanel().getSelectedNode();
+            return controller.getUserInterface().getTreePanel().getSelectedNode();
         }
     }
 
     private DefaultMutableTreeNode getNodeFromTextPane(String selectedText) {
         String lineText = getLineText(contentPane);
         if (lineText == null) {
-            return controller.getTreePanel().getSelectedNode();
+            return controller.getUserInterface().getTreePanel().getSelectedNode();
         }
 
-        DefaultMutableTreeNode selectedNode = controller.getTreePanel().getSelectedNode();
+        DefaultMutableTreeNode selectedNode = controller.getUserInterface().getTreePanel().getSelectedNode();
         ClassNode classNode = getClassNode(selectedNode);
 
         if (classNode == null) {
@@ -150,7 +150,7 @@ public class RenameActionHandler implements ActionListener {
 
     private DefaultMutableTreeNode getClassOrInterfaceNode(DefaultMutableTreeNode selectedNode, String nodeName) {
         if (selectedNode instanceof ClassMutableTreeNode) {
-            return controller.getTreePanel().findChild(selectedNode, nodeName);
+            return controller.getUserInterface().getTreePanel().findChild(selectedNode, nodeName);
         } else if (selectedNode instanceof FieldNodeMutableTreeNode ||
                 selectedNode instanceof MethodNodeMutableTreeNode) {
             return (DefaultMutableTreeNode) selectedNode.getParent();
@@ -163,10 +163,10 @@ public class RenameActionHandler implements ActionListener {
         if (selectedNode instanceof ClassMutableTreeNode ||
                 selectedNode instanceof ClassNodeMutableTreeNode ||
                 selectedNode instanceof InterfaceNodeMutableTreeNode) {
-            return controller.getTreePanel().findChildRecursively(selectedNode, nodeName);
+            return controller.getUserInterface().getTreePanel().findChildRecursively(selectedNode, nodeName);
         } else if (selectedNode instanceof FieldNodeMutableTreeNode ||
                 selectedNode instanceof MethodNodeMutableTreeNode) {
-            return controller.getTreePanel().findChild((DefaultMutableTreeNode) selectedNode.getParent(), nodeName);
+            return controller.getUserInterface().getTreePanel().findChild((DefaultMutableTreeNode) selectedNode.getParent(), nodeName);
         }
 
         return selectedNode;
@@ -204,7 +204,7 @@ public class RenameActionHandler implements ActionListener {
 
             if (childNode != null) {
                 childNode.setUserObject(newName);
-                controller.getTreePanel().updateNode(childNode);
+                controller.getUserInterface().getTreePanel().updateNode(childNode);
             }
         }
 
@@ -221,7 +221,7 @@ public class RenameActionHandler implements ActionListener {
             logRenameResults("class", Renamer.getRenamedClassReferenceCounter(), Renamer.getRenamedClassReferenceFileCounter());
             node.setUserObject(newName);
             parentNode.setUserObject(newName + ".class");
-            controller.getTreePanel().updateNode(parentNode);
+            controller.getUserInterface().getTreePanel().updateNode(parentNode);
         }
 
         return classNode;
@@ -237,7 +237,7 @@ public class RenameActionHandler implements ActionListener {
             logRenameResults("interface", Renamer.getRenamedClassReferenceCounter(), Renamer.getRenamedClassReferenceFileCounter());
             node.setUserObject(newName);
             parentNode.setUserObject(newName + ".class");
-            controller.getTreePanel().updateNode(parentNode);
+            controller.getUserInterface().getTreePanel().updateNode(parentNode);
         }
 
         return classNode;
@@ -278,8 +278,8 @@ public class RenameActionHandler implements ActionListener {
     }
 
     private void updateNodeAndDisplay(ClassNode classNode, DefaultMutableTreeNode selectedNode, String newName) {
-        controller.getTreePanel().updateNode(selectedNode);
-        controller.displayBytecode(classNode);
+        controller.getUserInterface().getTreePanel().updateNode(selectedNode);
+        controller.getUserInterface().displayBytecode(classNode);
         restoreCaretAndHighlight(newName);
     }
 

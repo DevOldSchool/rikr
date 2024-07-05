@@ -61,17 +61,17 @@ public class MenuBar extends JMenuBar {
     public void init() {
         // Group nodes by superclass
         groupBySuperclassItem.addActionListener(e -> {
-            controller.getTreePanel().updateTree(controller.getJarClassesMap(), true, false);
+            controller.getUserInterface().getTreePanel().updateTree(controller.getJarClassesMap(), true, false);
         });
 
         // Group nodes by interface
         groupByInterfaceItem.addActionListener(e -> {
-            controller.getTreePanel().updateTree(controller.getJarClassesMap(), false, true);
+            controller.getUserInterface().getTreePanel().updateTree(controller.getJarClassesMap(), false, true);
         });
 
         // Remove grouping
         removeGroupingItem.addActionListener(e -> {
-            controller.getTreePanel().updateTree(controller.getJarClassesMap(), false, false);
+            controller.getUserInterface().getTreePanel().updateTree(controller.getJarClassesMap(), false, false);
         });
     }
 }

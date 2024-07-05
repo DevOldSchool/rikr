@@ -27,36 +27,36 @@ public class TreeSelectionHandler implements TreeSelectionListener {
 
         // Selects and highlights the nodes corresponding data in the document
         if (selectedNode instanceof ClassMutableTreeNode classMutableTreeNode) {
-            controller.displayBytecode(classMutableTreeNode.getClassNode());
+            controller.getUserInterface().displayBytecode(classMutableTreeNode.getClassNode());
         } else if (selectedNode instanceof ClassNodeMutableTreeNode classNodeMutableTreeNode) {
-            controller.displayBytecode(classNodeMutableTreeNode.getClassNode());
+            controller.getUserInterface().displayBytecode(classNodeMutableTreeNode.getClassNode());
 
             SwingUtilities.invokeLater(() -> {
                 ClassNode classNode = classNodeMutableTreeNode.getClassNode();
-                controller.getContentPanel().selectTextAfterPattern("class " + classNode.name, classNode.name);
+                controller.getUserInterface().getContentPanel().selectTextAfterPattern("class " + classNode.name, classNode.name);
             });
         } else if (selectedNode instanceof InterfaceNodeMutableTreeNode interfaceNodeMutableTreeNode) {
-            controller.displayBytecode(interfaceNodeMutableTreeNode.getClassNode());
+            controller.getUserInterface().displayBytecode(interfaceNodeMutableTreeNode.getClassNode());
 
             SwingUtilities.invokeLater(() -> {
                 ClassNode classNode = interfaceNodeMutableTreeNode.getClassNode();
-                controller.getContentPanel().selectTextAfterPattern("interface " + classNode.name, classNode.name);
+                controller.getUserInterface().getContentPanel().selectTextAfterPattern("interface " + classNode.name, classNode.name);
             });
         } else if (selectedNode instanceof FieldNodeMutableTreeNode fieldNodeMutableTreeNode) {
             ClassMutableTreeNode classMutableTreeNode = (ClassMutableTreeNode) selectedNode.getParent().getParent();
-            controller.displayBytecode(classMutableTreeNode.getClassNode());
+            controller.getUserInterface().displayBytecode(classMutableTreeNode.getClassNode());
 
             SwingUtilities.invokeLater(() -> {
                 FieldNode fieldNode = fieldNodeMutableTreeNode.getFieldNode();
-                controller.getContentPanel().selectTextAfterPattern(fieldNode.desc + " " + fieldNode.name, fieldNode.name);
+                controller.getUserInterface().getContentPanel().selectTextAfterPattern(fieldNode.desc + " " + fieldNode.name, fieldNode.name);
             });
         } else if (selectedNode instanceof MethodNodeMutableTreeNode methodNodeMutableTreeNode) {
             ClassMutableTreeNode classMutableTreeNode = (ClassMutableTreeNode) selectedNode.getParent().getParent();
-            controller.displayBytecode(classMutableTreeNode.getClassNode());
+            controller.getUserInterface().displayBytecode(classMutableTreeNode.getClassNode());
 
             SwingUtilities.invokeLater(() -> {
                 MethodNode methodNode = methodNodeMutableTreeNode.getMethodNode();
-                controller.getContentPanel().selectTextAfterPattern(methodNode.name + methodNode.desc, methodNode.name);
+                controller.getUserInterface().getContentPanel().selectTextAfterPattern(methodNode.name + methodNode.desc, methodNode.name);
             });
         }
     }

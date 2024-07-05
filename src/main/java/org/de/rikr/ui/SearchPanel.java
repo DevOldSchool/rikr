@@ -61,14 +61,14 @@ public class SearchPanel extends JPanel {
         String searchText = searchField.getText();
 
         // Remove previous highlights
-        removeHighlights(controller.getContentPane());
+        removeHighlights(controller.getUserInterface().getContentPane());
 
         searchResults.clear();
         currentResultIndex = -1;
 
         // Highlight new search results and store positions
         if (!searchText.isEmpty()) {
-            highlightText(controller.getContentPane(), searchText);
+            highlightText(controller.getUserInterface().getContentPane(), searchText);
         }
 
         updateResultCounter();
@@ -118,8 +118,8 @@ public class SearchPanel extends JPanel {
         }
 
         int[] pos = searchResults.get(currentResultIndex);
-        controller.getContentPane().setCaretPosition(pos[0]);
-        controller.getContentPane().moveCaretPosition(pos[1]);
+        controller.getUserInterface().getContentPane().setCaretPosition(pos[0]);
+        controller.getUserInterface().getContentPane().moveCaretPosition(pos[1]);
         updateResultCounter();
     }
 

@@ -109,9 +109,9 @@ public class TreePanel extends JScrollPane {
             Map<String, List<ClassNode>> classGroups = Map.of();
 
             if (groupBySuperclass) {
-                classGroups = controller.groupBySuperclass(classes);
+                classGroups = controller.getProcessor().groupBySuperclass(classes);
             } else if (groupByInterfaces) {
-                classGroups = controller.groupByInterface(classes);
+                classGroups = controller.getProcessor().groupByInterface(classes);
             } else {
                 // Remove grouping
                 jarNode.removeAllChildren();
@@ -218,7 +218,7 @@ public class TreePanel extends JScrollPane {
 
         for (String name : classGroups.keySet()) {
             List<ClassNode> classGroup = classGroups.get(name);
-            ClassNode parentClassNode = controller.getTreePanel().getNode(classes, name);
+            ClassNode parentClassNode = controller.getUserInterface().getTreePanel().getNode(classes, name);
 
             if (parentClassNode == null) {
                 continue;
@@ -234,6 +234,6 @@ public class TreePanel extends JScrollPane {
             selectedNode.add(parentNode);
         }
 
-        controller.getTreePanel().updateNode(selectedNode);
+        controller.getUserInterface().getTreePanel().updateNode(selectedNode);
     }
 }

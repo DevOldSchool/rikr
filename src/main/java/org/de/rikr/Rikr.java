@@ -2,7 +2,9 @@ package org.de.rikr;
 
 import com.formdev.flatlaf.intellijthemes.FlatDarkFlatIJTheme;
 import com.formdev.flatlaf.util.SystemInfo;
-import org.de.rikr.ui.*;
+import org.de.rikr.ui.ClassViewer;
+import org.de.rikr.ui.Fonts;
+import org.de.rikr.ui.Images;
 import org.objectweb.asm.tree.ClassNode;
 
 import javax.swing.*;
@@ -23,6 +25,18 @@ public class Rikr {
         processor = new ClassProcessor(userInterface.getLogPanel());
     }
 
+    public ClassViewer getUserInterface() {
+        return userInterface;
+    }
+
+    public ClassProcessor getProcessor() {
+        return processor;
+    }
+
+    public void log(String message) {
+        userInterface.getLogPanel().log(message);
+    }
+
     public void loadJarFiles(File[] jarFiles) {
         processor.processJarFiles(jarFiles);
         userInterface.updateTree(processor.getJarClassesMap());
@@ -35,10 +49,6 @@ public class Rikr {
 
     public Map<String, List<ClassNode>> getJarClassesMap() {
         return processor.getJarClassesMap();
-    }
-
-    public void displayBytecode(ClassNode classNode) {
-        userInterface.displayBytecode(classNode);
     }
 
     public void removeJar(String jarName) {
@@ -55,46 +65,6 @@ public class Rikr {
 
     public List<ClassNode> getClasses(String jarName) {
         return processor.getJarClassesMap().get(jarName);
-    }
-
-    public List<ClassNode> findClassesExtending(List<ClassNode> classes, ClassNode baseClassNode) {
-        return processor.findClassesExtending(classes, baseClassNode);
-    }
-
-    public List<ClassNode> findClassesImplementing(List<ClassNode> classes, ClassNode baseClassNode) {
-        return processor.findClassesImplementing(classes, baseClassNode);
-    }
-
-    public Map<String, List<ClassNode>> groupBySuperclass(List<ClassNode> classes) {
-        return processor.groupBySuperclass(classes);
-    }
-
-    public Map<String, List<ClassNode>> groupByInterface(List<ClassNode> classes) {
-        return processor.groupByInterface(classes);
-    }
-
-    public void clearContent() {
-        userInterface.clearContent();
-    }
-
-    public ContentPanel getContentPanel() {
-        return userInterface.getContentPanel();
-    }
-
-    public JTextPane getContentPane() {
-        return userInterface.getContentPane();
-    }
-
-    public void log(String message) {
-        userInterface.getLogPanel().log(message);
-    }
-
-    public TreePanel getTreePanel() {
-        return userInterface.getTreePanel();
-    }
-
-    public ClassViewer getUserInterface() {
-        return userInterface;
     }
 
     public static void main(String[] args) {
