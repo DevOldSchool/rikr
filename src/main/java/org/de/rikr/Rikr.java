@@ -8,6 +8,7 @@ import org.objectweb.asm.tree.ClassNode;
 import javax.swing.*;
 import java.io.File;
 import java.util.List;
+import java.util.Map;
 
 public class Rikr {
     private final ClassViewer userInterface;
@@ -32,6 +33,10 @@ public class Rikr {
         userInterface.updateTree(processor.getJarClassesMap());
     }
 
+    public Map<String, List<ClassNode>> getJarClassesMap() {
+        return processor.getJarClassesMap();
+    }
+
     public void displayBytecode(ClassNode classNode) {
         userInterface.displayBytecode(classNode);
     }
@@ -50,6 +55,22 @@ public class Rikr {
 
     public List<ClassNode> getClasses(String jarName) {
         return processor.getJarClassesMap().get(jarName);
+    }
+
+    public List<ClassNode> findClassesExtending(List<ClassNode> classes, ClassNode baseClassNode) {
+        return processor.findClassesExtending(classes, baseClassNode);
+    }
+
+    public List<ClassNode> findClassesImplementing(List<ClassNode> classes, ClassNode baseClassNode) {
+        return processor.findClassesImplementing(classes, baseClassNode);
+    }
+
+    public Map<String, List<ClassNode>> groupBySuperclass(List<ClassNode> classes) {
+        return processor.groupBySuperclass(classes);
+    }
+
+    public Map<String, List<ClassNode>> groupByInterface(List<ClassNode> classes) {
+        return processor.groupByInterface(classes);
     }
 
     public void clearContent() {

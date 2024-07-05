@@ -15,6 +15,7 @@ import java.util.Map;
 public class ClassViewer {
     private final JFrame frame;
     private final Rikr controller;
+    private final MenuBar menuBar;
     private final JSplitPane verticalSplitPane;
     private final TreePanel treePanel;
     private final SearchPanel searchPanel;
@@ -72,7 +73,8 @@ public class ClassViewer {
         frame.add(panel);
 
         // Initialize menu bar
-        MenuBar menuBar = new MenuBar(
+        menuBar = new MenuBar(
+                controller,
                 e -> openFileDialog(),
                 e -> toggleSearchPanelVisibility(false),
                 e -> toggleLogVisibility(logPanel.isVisible())
@@ -98,6 +100,7 @@ public class ClassViewer {
         treePanel.init();
         searchPanel.init();
         logPanel.init();
+        menuBar.init();
 
         SwingUtilities.invokeLater(() -> {
             frame.setVisible(true);

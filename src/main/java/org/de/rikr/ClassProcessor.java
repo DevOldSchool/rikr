@@ -42,6 +42,59 @@ public class ClassProcessor {
         }
     }
 
+    public List<ClassNode> findClassesExtending(List<ClassNode> classes, ClassNode baseClassNode) {
+        List<ClassNode> extendedClasses = new ArrayList<>();
+
+        for (ClassNode classNode : classes) {
+            if (classNode.superName.equals(baseClassNode.name)) {
+                extendedClasses.add(classNode);
+            }
+        }
+
+        return extendedClasses;
+    }
+
+    public List<ClassNode> findClassesImplementing(List<ClassNode> classes, ClassNode baseClassNode) {
+        List<ClassNode> implementingClasses = new ArrayList<>();
+
+        for (ClassNode classNode : classes) {
+            if (classNode.interfaces.contains(baseClassNode.name)) {
+                implementingClasses.add(classNode);
+            }
+        }
+        return implementingClasses;
+    }
+
+    public Map<String, List<ClassNode>> groupBySuperclass(List<ClassNode> classes) {
+        Map<String, List<ClassNode>> superclassGroups = new HashMap<>();
+
+        for (ClassNode classNode : classes) {
+            if (classNode.superName != null) {
+                superclassGroups
+                        .computeIfAbsent(classNode.superName, k -> new ArrayList<>())
+                        .add(classNode);
+            }
+        }
+
+        return superclassGroups;
+    }
+
+    public Map<String, List<ClassNode>> groupByInterface(List<ClassNode> classes) {
+        Map<String, List<ClassNode>> interfaceGroups = new HashMap<>();
+
+        for (ClassNode classNode : classes) {
+            if (classNode.interfaces != null) {
+                for (String interfaceName : classNode.interfaces) {
+                    interfaceGroups
+                            .computeIfAbsent(interfaceName, k -> new ArrayList<>())
+                            .add(classNode);
+                }
+            }
+        }
+
+        return interfaceGroups;
+    }
+
     private Map<String, List<ClassNode>> readJarFile(File file) throws IOException {
         JarLoader jarLoader = new JarLoader();
         return jarLoader.readClasses(file);

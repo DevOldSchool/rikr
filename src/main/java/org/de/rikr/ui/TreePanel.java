@@ -2,7 +2,8 @@ package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
 import org.de.rikr.ui.handler.TreeSelectionHandler;
-import org.de.rikr.ui.model.*;
+import org.de.rikr.ui.model.ClassMutableTreeNode;
+import org.de.rikr.ui.model.JarMutableTreeNode;
 import org.objectweb.asm.tree.ClassNode;
 
 import javax.swing.*;
@@ -18,10 +19,8 @@ import java.util.Map;
 public class TreePanel extends JScrollPane {
     private final Rikr controller;
     private final JTree tree;
+    private final TreePopupMenu popupMenu;
     private final DefaultTreeModel treeModel;
-    private final JPopupMenu popupMenu;
-    private final JMenuItem removeItem;
-    private final JMenuItem renameItem;
     private final TreeSelectionHandler treeSelectionHandler;
 
     public TreePanel(Rikr controller) {
@@ -36,12 +35,7 @@ public class TreePanel extends JScrollPane {
         treeSelectionHandler = new TreeSelectionHandler(controller, tree);
         tree.addTreeSelectionListener(treeSelectionHandler);
 
-        // Create context menu
-        popupMenu = new JPopupMenu();
-        removeItem = new JMenuItem("Remove");
-        renameItem = new JMenuItem("Rename");
-        popupMenu.add(removeItem);
-        popupMenu.add(renameItem);
+        popupMenu = new TreePopupMenu(controller, tree);
 
         setViewportView(tree);
     }
@@ -64,38 +58,24 @@ public class TreePanel extends JScrollPane {
             }
         });
 
-        // Add action listener for Remove menu item
-        removeItem.addActionListener(e -> {
-            DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
-            if (selectedNode != null && selectedNode.getParent() != null) {
-                DefaultTreeModel model = (DefaultTreeModel) tree.getModel();
+        popupMenu.init();
+    }
 
-                if (selectedNode instanceof ClassNodeMutableTreeNode |
-                        selectedNode instanceof InterfaceNodeMutableTreeNode |
-                        selectedNode instanceof FieldNodeMutableTreeNode |
-                        selectedNode instanceof MethodNodeMutableTreeNode) {
-                    controller.log("Unable to remove child node.");
-                } else if (selectedNode instanceof ClassMutableTreeNode classMutableTreeNode) {
-                    model.removeNodeFromParent(selectedNode);
-                    controller.removeClass(classMutableTreeNode.getJarName(), classMutableTreeNode.getClassNode());
-                    controller.clearContent();
-                } else {
-                    model.removeNodeFromParent(selectedNode);
-                    controller.removeJar(selectedNode.toString());
-                    controller.clearContent();
-                }
+    public ClassNode getNode(List<ClassNode> classes, String superName) {
+        for (ClassNode classNode : classes) {
+            if (classNode.name.equals(superName)) {
+                return classNode;
             }
-        });
+        }
 
-        // Add action listener for Rename menu item
-        renameItem.addActionListener(controller.getContentPanel().getRenameActionHandler());
+        return null;
     }
 
     public void updateTree(Map<String, List<ClassNode>> jarClassesMap) {
         DefaultMutableTreeNode root = new DefaultMutableTreeNode("Root Node");
         for (String jarName : jarClassesMap.keySet()) {
             List<ClassNode> classes = jarClassesMap.get(jarName);
-            DefaultMutableTreeNode jarNode = new JarMutableTreeNode(jarName, classes, jarName);
+            JarMutableTreeNode jarNode = new JarMutableTreeNode(jarName, classes, jarName);
 
             for (ClassNode classNode : classes) {
                 String className = classNode.name + ".class";
@@ -111,10 +91,50 @@ public class TreePanel extends JScrollPane {
         SwingUtilities.invokeLater(this::expandRootChildren);
     }
 
+    public void updateTree(Map<String, List<ClassNode>> jarClassesMap, boolean groupBySuperclass, boolean groupByInterfaces) {
+        DefaultMutableTreeNode rootNode = (DefaultMutableTreeNode) treeModel.getRoot();
+
+        if (rootNode == null) {
+            return;
+        }
+
+        for (String jarName : jarClassesMap.keySet()) {
+            JarMutableTreeNode jarNode = (JarMutableTreeNode) findChild(rootNode, jarName);
+
+            if (jarNode == null) {
+                continue;
+            }
+
+            List<ClassNode> classes = jarNode.getClasses();
+            Map<String, List<ClassNode>> classGroups = Map.of();
+
+            if (groupBySuperclass) {
+                classGroups = controller.groupBySuperclass(classes);
+            } else if (groupByInterfaces) {
+                classGroups = controller.groupByInterface(classes);
+            } else {
+                // Remove grouping
+                jarNode.removeAllChildren();
+
+                for (ClassNode classNode : classes) {
+                    String className = classNode.name + ".class";
+                    jarNode.add(new ClassMutableTreeNode(jarName, classNode, className));
+                }
+
+                updateNode(jarNode);
+            }
+
+            if (groupBySuperclass || groupByInterfaces) {
+                addTreeNodes(jarNode, jarName, classes, classGroups);
+            }
+        }
+    }
+
     public void updateNode(DefaultMutableTreeNode node) {
         // Notify the tree model that the node has changed
         DefaultTreeModel defaultTreeModel = (DefaultTreeModel) tree.getModel();
         defaultTreeModel.nodeChanged(node);
+        treeModel.nodeStructureChanged(node);
 
         // Ensure the full path is used to select the node
         TreePath path = new TreePath(node.getPath());
@@ -191,5 +211,29 @@ public class TreePanel extends JScrollPane {
         }
 
         return null;
+    }
+
+    public void addTreeNodes(DefaultMutableTreeNode selectedNode, String jarName, List<ClassNode> classes, Map<String, List<ClassNode>> classGroups) {
+        selectedNode.removeAllChildren();
+
+        for (String name : classGroups.keySet()) {
+            List<ClassNode> classGroup = classGroups.get(name);
+            ClassNode parentClassNode = controller.getTreePanel().getNode(classes, name);
+
+            if (parentClassNode == null) {
+                continue;
+            }
+
+            DefaultMutableTreeNode parentNode = new ClassMutableTreeNode(jarName, parentClassNode, name + ".class");
+
+            for (ClassNode classNode : classGroup) {
+                String className = classNode.name + ".class";
+                parentNode.add(new ClassMutableTreeNode(jarName, classNode, className));
+            }
+
+            selectedNode.add(parentNode);
+        }
+
+        controller.getTreePanel().updateNode(selectedNode);
     }
 }
