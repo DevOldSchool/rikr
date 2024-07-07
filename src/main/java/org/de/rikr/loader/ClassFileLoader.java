@@ -8,7 +8,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
-public class ClassLoader {
+public class ClassFileLoader {
 
     public ClassNode readClass(File classFile) throws IOException {
         ClassNode classNode = new ClassNode();

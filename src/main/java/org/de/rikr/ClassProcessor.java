@@ -1,24 +1,31 @@
 package org.de.rikr;
 
-import org.de.rikr.loader.ClassLoader;
+import org.de.rikr.behavioral.ClassComparator;
+import org.de.rikr.behavioral.MethodComparator;
+import org.de.rikr.loader.ClassFileLoader;
 import org.de.rikr.loader.JarLoader;
 import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.MethodNode;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 public class ClassProcessor {
     private final Logger logger;
-    private final Map<String, List<ClassNode>> jarClassesMap = new HashMap<>();
+    private final Map<String, List<ClassNode>> jarClassesMap;
+    private final ClassComparator classComparator;
+    private final MethodComparator methodComparator;
 
     public ClassProcessor(Logger logger) {
         this.logger = logger;
+
+        jarClassesMap = new HashMap<>();
+        classComparator = new ClassComparator();
+        methodComparator = new MethodComparator();
     }
 
     public void processJarFiles(File[] jarFiles) {
@@ -100,29 +107,13 @@ public class ClassProcessor {
     public Map<String, List<ClassNode>> findMatchingClassNodes(String jarToExclude, ClassNode classNodeToMatch) {
         Map<String, List<ClassNode>> matching = new HashMap<>();
 
-        boolean isInterfaceToMatch = Modifier.isInterface(classNodeToMatch.access);
-        boolean isAbstractToMatch = Modifier.isAbstract(classNodeToMatch.access);
-        boolean hasSuperClassToMatch = !classNodeToMatch.superName.equals("java/lang/Object");
-        int interfaceCountToMatch = classNodeToMatch.interfaces.size();
-        List<String> fieldsToMatch = getNonStaticFieldDescriptions(classNodeToMatch);
-        List<String> methodsToMatch = getNonStaticMethodDescriptions(classNodeToMatch);
-
         for (String jarName : jarClassesMap.keySet()) {
             if (jarName.equals(jarToExclude)) {
                 continue;
             }
 
-            List<ClassNode> classes = jarClassesMap.get(jarName);
-
-            for (ClassNode classNode : classes) {
-                if (matches(classNode, isInterfaceToMatch, isAbstractToMatch, hasSuperClassToMatch, interfaceCountToMatch, fieldsToMatch, methodsToMatch)) {
-                    matching.putIfAbsent(jarName, new ArrayList<>());
-                    
-                    if (!matching.get(jarName).contains(classNode)) {
-                        matching.get(jarName).add(classNode);
-                    }
-                }
-            }
+            List<ClassNode> classes = classComparator.getMatchingClassNodes(jarClassesMap.get(jarName), classNodeToMatch);
+            matching.putIfAbsent(jarName, classes);
         }
 
         return matching;
@@ -134,7 +125,7 @@ public class ClassProcessor {
     }
 
     private ClassNode readClassFile(File file) throws IOException {
-        ClassLoader classLoader = new ClassLoader();
+        ClassFileLoader classLoader = new ClassFileLoader();
         return classLoader.readClass(file);
     }
 
@@ -143,32 +134,14 @@ public class ClassProcessor {
     }
 
     public List<String> getNonStaticFieldDescriptions(ClassNode classNode) {
-        return classNode.fields.stream()
-                .filter(field -> !Modifier.isStatic(field.access))
-                .map(field -> field.desc.replaceAll("L.*?;", "L?;"))
-                .collect(Collectors.toList());
+        return classComparator.getNonStaticFieldDescriptions(classNode);
     }
 
     public List<String> getNonStaticMethodDescriptions(ClassNode classNode) {
-        return classNode.methods.stream()
-                .filter(method -> !Modifier.isStatic(method.access))
-                .map(method -> method.desc.replaceAll("L.*?;", "L?;"))
-                .collect(Collectors.toList());
+        return classComparator.getNonStaticMethodDescriptions(classNode);
     }
 
-    private boolean matches(ClassNode classNode, boolean isInterfaceToMatch, boolean isAbstractToMatch, boolean hasSuperClassToMatch, int interfaceCountToMatch, List<String> fieldsToMatch, List<String> methodsToMatch) {
-        boolean isInterface = Modifier.isInterface(classNode.access);
-        boolean isAbstract = Modifier.isAbstract(classNode.access);
-        boolean hasSuperClass = !classNode.superName.equals("java/lang/Object");
-        int interfaceCount = classNode.interfaces.size();
-        List<String> fields = getNonStaticFieldDescriptions(classNode);
-        List<String> methods = getNonStaticMethodDescriptions(classNode);
-
-        return isInterface == isInterfaceToMatch &&
-                isAbstract == isAbstractToMatch &&
-                hasSuperClass == hasSuperClassToMatch &&
-                interfaceCount == interfaceCountToMatch &&
-                fields.equals(fieldsToMatch) &&
-                methods.equals(methodsToMatch);
+    public boolean areMethodsBehaviorallyEquivalent(List<ClassNode> classNodes1, MethodNode methodNode1, List<ClassNode> classNodes2, MethodNode methodNode2) {
+        return methodComparator.areBehaviorallyEquivalent(classNodes1, methodNode1, classNodes2, methodNode2);
     }
 }

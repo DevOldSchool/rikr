@@ -3,6 +3,7 @@ package org.de.rikr.ui;
 import org.de.rikr.Rikr;
 import org.de.rikr.ui.model.*;
 import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.MethodNode;
 
 import javax.swing.*;
 import javax.swing.event.PopupMenuEvent;
@@ -247,13 +248,31 @@ public class TreePopupMenu extends JPopupMenu {
             if (selectedNode instanceof ClassMutableTreeNode classMutableTreeNode) {
                 String jarToExclude = classMutableTreeNode.getJarName();
                 ClassNode selectedClassNode = classMutableTreeNode.getClassNode();
+                List<ClassNode> selectedClassNodes = controller.getClasses(classMutableTreeNode.getJarName());
                 Map<String, List<ClassNode>> jarMatchingMap = controller.getProcessor().findMatchingClassNodes(jarToExclude, selectedClassNode);
 
                 boolean foundMatch = false;
                 for (String jarName : jarMatchingMap.keySet()) {
+                    List<ClassNode> compareClassNodes = controller.getClasses(jarName);
+
                     for (ClassNode classNode : jarMatchingMap.get(jarName)) {
-                        controller.log(String.format("Found matching class node %s in jar %s", classNode.name, jarName));
+                        StringBuilder stringBuilder = new StringBuilder();
+                        stringBuilder.append(String.format("Found matching class node %s in jar %s", classNode.name, jarName));
                         foundMatch = true;
+
+                        for (MethodNode methodNode1 : selectedClassNode.methods) {
+                            for (MethodNode methodNode2 : classNode.methods) {
+                                if (!methodNode1.desc.replaceAll("L.*?;", "L?;").equals(methodNode2.desc.replaceAll("L.*?;", "L?;"))) {
+                                    continue;
+                                }
+
+                                if (controller.getProcessor().areMethodsBehaviorallyEquivalent(selectedClassNodes, methodNode1, compareClassNodes, methodNode2)) {
+                                    stringBuilder.append(String.format("\n  - Methods are behaviorally equivalent %s -> %s", methodNode1.name + methodNode1.desc, methodNode2.name + methodNode2.desc));
+                                }
+                            }
+                        }
+
+                        controller.log(stringBuilder.toString());
                     }
                 }
 
