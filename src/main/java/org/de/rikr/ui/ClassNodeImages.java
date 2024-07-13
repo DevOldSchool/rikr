@@ -1,13 +1,17 @@
 package org.de.rikr.ui;
 
+import org.objectweb.asm.tree.FieldNode;
+import org.objectweb.asm.tree.MethodNode;
+
 import javax.swing.*;
 import java.awt.*;
 import java.awt.image.BufferedImage;
+import java.lang.reflect.Modifier;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 
-public class Images {
+public class ClassNodeImages {
     public static HashMap<String, ImageIcon> images = new HashMap<>();
 
     public static void loadImages() {
@@ -29,12 +33,12 @@ public class Images {
         };
 
         for (String imageName : imageNames) {
-            URL iconUrl = Images.class.getResource("/images/" + imageName + ".png");
-            if (iconUrl == null) {
-                throw new RuntimeException("Icon file not found: " + imageName);
+            URL imageUrl = ClassNodeImages.class.getResource("/images/" + imageName + ".png");
+            if (imageUrl == null) {
+                throw new RuntimeException("Image file not found: " + imageName);
             }
 
-            images.put(imageName, new ImageIcon(iconUrl));
+            images.put(imageName, new ImageIcon(imageUrl));
         }
 
         String[] types = {"field", "method"};
@@ -94,7 +98,7 @@ public class Images {
                     combination.append(overlays[j]);
                 }
             }
-            
+
             combinations.add(combination.toString());
         }
 
@@ -103,5 +107,65 @@ public class Images {
 
     public static ImageIcon getImage(String imageName) {
         return images.get(imageName);
+    }
+
+    public static ImageIcon getFieldNodeImage(FieldNode fieldNode) {
+        return getImage(getFieldNodeImageName(fieldNode));
+    }
+
+    public static String getFieldNodeImageName(FieldNode fieldNode) {
+        String iconName;
+
+        if (Modifier.isPublic(fieldNode.access)) {
+            iconName = "field_public";
+        } else if (Modifier.isPrivate(fieldNode.access)) {
+            iconName = "field_private";
+        } else if (Modifier.isProtected(fieldNode.access)) {
+            iconName = "field_protected";
+        } else {
+            iconName = "field_default";
+        }
+
+        if (Modifier.isAbstract(fieldNode.access)) {
+            iconName += "_abstract";
+        }
+        if (Modifier.isStatic(fieldNode.access)) {
+            iconName += "_static";
+        }
+        if (Modifier.isFinal(fieldNode.access)) {
+            iconName += "_final";
+        }
+
+        return iconName;
+    }
+
+    public static ImageIcon getMethodNodeImage(MethodNode methodNode) {
+        return getImage(getMethodNodeImageName(methodNode));
+    }
+
+    public static String getMethodNodeImageName(MethodNode methodNode) {
+        String iconName;
+
+        if (Modifier.isPublic(methodNode.access)) {
+            iconName = "method_public";
+        } else if (Modifier.isPrivate(methodNode.access)) {
+            iconName = "method_private";
+        } else if (Modifier.isProtected(methodNode.access)) {
+            iconName = "method_protected";
+        } else {
+            iconName = "method_default";
+        }
+
+        if (Modifier.isAbstract(methodNode.access)) {
+            iconName += "_abstract";
+        }
+        if (Modifier.isStatic(methodNode.access)) {
+            iconName += "_static";
+        }
+        if (Modifier.isFinal(methodNode.access)) {
+            iconName += "_final";
+        }
+
+        return iconName;
     }
 }
