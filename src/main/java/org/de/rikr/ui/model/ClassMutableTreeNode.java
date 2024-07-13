@@ -1,5 +1,6 @@
 package org.de.rikr.ui.model;
 
+import org.de.rikr.ui.ClassNodeImages;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.MethodNode;
@@ -35,57 +36,13 @@ public class ClassMutableTreeNode extends IconMutableTreeNode {
 
     private void addFields(DefaultMutableTreeNode classTreeNode) {
         for (FieldNode fieldNode : classNode.fields) {
-            String iconName;
-
-            if (Modifier.isPublic(fieldNode.access)) {
-                iconName = "field_public";
-            } else if (Modifier.isPrivate(fieldNode.access)) {
-                iconName = "field_private";
-            } else if (Modifier.isProtected(fieldNode.access)) {
-                iconName = "field_protected";
-            } else {
-                iconName = "field_default";
-            }
-
-            if (Modifier.isAbstract(fieldNode.access)) {
-                iconName += "_abstract";
-            }
-            if (Modifier.isStatic(fieldNode.access)) {
-                iconName += "_static";
-            }
-            if (Modifier.isFinal(fieldNode.access)) {
-                iconName += "_final";
-            }
-
-            classTreeNode.add(new FieldNodeMutableTreeNode(iconName, classNode, fieldNode, fieldNode.name + " " + fieldNode.desc));
+            classTreeNode.add(new FieldNodeMutableTreeNode(ClassNodeImages.getFieldNodeImageName(fieldNode), classNode, fieldNode, fieldNode.name + " " + fieldNode.desc));
         }
     }
 
     private void addMethods(DefaultMutableTreeNode classTreeNode) {
         for (MethodNode methodNode : classNode.methods) {
-            String iconName;
-
-            if (Modifier.isPublic(methodNode.access)) {
-                iconName = "method_public";
-            } else if (Modifier.isPrivate(methodNode.access)) {
-                iconName = "method_private";
-            } else if (Modifier.isProtected(methodNode.access)) {
-                iconName = "method_protected";
-            } else {
-                iconName = "method_default";
-            }
-
-            if (Modifier.isAbstract(methodNode.access)) {
-                iconName += "_abstract";
-            }
-            if (Modifier.isStatic(methodNode.access)) {
-                iconName += "_static";
-            }
-            if (Modifier.isFinal(methodNode.access)) {
-                iconName += "_final";
-            }
-
-            classTreeNode.add(new MethodNodeMutableTreeNode(iconName, classNode, methodNode, methodNode.name + " " + methodNode.desc));
+            classTreeNode.add(new MethodNodeMutableTreeNode(ClassNodeImages.getMethodNodeImageName(methodNode), classNode, methodNode, methodNode.name + " " + methodNode.desc));
         }
     }
 

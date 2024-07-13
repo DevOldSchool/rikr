@@ -1,6 +1,6 @@
 package org.de.rikr.ui.model;
 
-import org.de.rikr.ui.Images;
+import org.de.rikr.ui.ClassNodeImages;
 
 import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -14,6 +14,6 @@ public class IconMutableTreeNode extends DefaultMutableTreeNode {
     }
 
     public ImageIcon getIcon() {
-        return Images.getImage(iconName);
+        return ClassNodeImages.getImage(iconName);
     }
 }
