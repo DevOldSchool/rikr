@@ -2,6 +2,7 @@ package org.de.rikr;
 
 import com.formdev.flatlaf.intellijthemes.FlatDarkFlatIJTheme;
 import com.formdev.flatlaf.util.SystemInfo;
+import org.de.rikr.ui.ClassNodeImages;
 import org.de.rikr.ui.ClassViewer;
 import org.de.rikr.ui.Fonts;
 import org.de.rikr.ui.Images;
@@ -13,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 public class Rikr {
-    private final ClassViewer userInterface;
+    private ClassViewer userInterface;
     private ClassProcessor processor;
 
     public Rikr() {
@@ -75,6 +76,7 @@ public class Rikr {
         }
 
         Images.loadImages();
+        ClassNodeImages.loadImages();
         Fonts.loadFonts();
 
         SwingUtilities.invokeLater(() -> {
