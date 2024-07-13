@@ -1,131 +1,204 @@
 package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
+import org.de.rikr.ui.model.SearchResultItem;
+import org.de.rikr.utilities.ClassNodeUtil;
+import org.objectweb.asm.tree.*;
 
 import javax.swing.*;
-import javax.swing.text.*;
 import java.awt.*;
-import java.awt.event.ActionListener;
-import java.util.ArrayList;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
+import java.lang.reflect.Modifier;
 import java.util.List;
 
 public class SearchPanel extends JPanel {
     private final Rikr controller;
     private final JTextField searchField;
-    private final JButton searchButton;
-    private final JButton upButton;
-    private final JButton downButton;
-    private final JLabel resultCounter;
-    private final Color highlightColor;
+    private final JList<SearchResultItem> resultsList;
+    private final DefaultListModel<SearchResultItem> listModel;
+    private final JButton matchCaseButton;
+    private final JButton matchWordButton;
+    private boolean matchCase;
+    private boolean matchWord;
+    private final Color defaultBackgroundColor;
 
-    private final List<int[]> searchResults;
-    private int currentResultIndex;
-
-    public SearchPanel(Rikr controller, ActionListener closeListener) {
+    public SearchPanel(Rikr controller) {
         this.controller = controller;
-
         setLayout(new BorderLayout());
+        setBorder(null);
 
-        // Initialize components
-        searchField = new JTextField(20);
-        searchButton = new JButton("Search");
-        resultCounter = new JLabel("0/0");
-        upButton = new JButton("Up");
-        downButton = new JButton("Down");
-        JButton closeButton = new JButton("Close");
+        // Create the search bar
+        JPanel searchBarPanel = new JPanel(new BorderLayout());
+        searchField = new JTextField();
+        searchField.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        matchCaseButton = new JButton(Images.getImage("match-case"));
+        matchCaseButton.setToolTipText("Match Case");
+        matchCaseButton.setBorderPainted(false);
+        matchWordButton = new JButton(Images.getImage("match-word"));
+        matchWordButton.setToolTipText("Match Words");
+        matchWordButton.setBorderPainted(false);
 
-        closeButton.addActionListener(closeListener);
+        // Create a panel for the buttons
+        JPanel buttonsPanel = new JPanel();
+        buttonsPanel.setBackground(Theme.BACKGROUND_COLOR);
+        buttonsPanel.setLayout(new BoxLayout(buttonsPanel, BoxLayout.X_AXIS));
+        buttonsPanel.add(matchCaseButton);
+        buttonsPanel.add(matchWordButton);
 
-        highlightColor = new Color(45, 84, 63);
-        searchResults = new ArrayList<>();
-        currentResultIndex = -1;
+        // Add components to the main panel
+        searchBarPanel.add(searchField, BorderLayout.CENTER);
+        searchBarPanel.add(buttonsPanel, BorderLayout.EAST);
 
-        JPanel topPanel = new JPanel();
-        topPanel.add(searchField);
-        topPanel.add(searchButton);
-        topPanel.add(resultCounter);
-        topPanel.add(upButton);
-        topPanel.add(downButton);
-        topPanel.add(closeButton);
+        // Create the list model and the results list
+        listModel = new DefaultListModel<>();
+        resultsList = new JList<>(listModel);
+        resultsList.setCellRenderer(new SearchResultItemRenderer());
+        resultsList.setBackground(Theme.BACKGROUND_COLOR);
+        JScrollPane scrollPane = new JScrollPane(resultsList);
+        scrollPane.setBorder(null);
 
-        add(topPanel, BorderLayout.NORTH);
+        // Add components to the panel
+        add(searchBarPanel, BorderLayout.NORTH);
+        add(scrollPane, BorderLayout.CENTER);
+
+        defaultBackgroundColor = matchCaseButton.getBackground();
+
+        matchCase = false;
+        matchWord = false;
     }
 
     public void init() {
-        searchButton.addActionListener(e -> search());
-        upButton.addActionListener(e -> navigateResults(-1));
-        downButton.addActionListener(e -> navigateResults(1));
+        searchField.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyReleased(KeyEvent e) {
+                performSearch();
+            }
+        });
+
+        searchField.addActionListener(e -> performSearch());
+
+        matchCaseButton.addActionListener(e -> {
+            matchCase = !matchCase;
+            toggleButton(matchCaseButton, matchCase);
+        });
+
+        matchWordButton.addActionListener(e -> {
+            matchWord = !matchWord;
+            toggleButton(matchWordButton, matchWord);
+        });
+
+        resultsList.addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                SearchResultItem selectedItem = resultsList.getSelectedValue();
+
+                System.out.println(selectedItem.getClassNode() + " " + selectedItem.getPattern() + " " + selectedItem.getName());
+
+                controller.getUserInterface().displayBytecode(selectedItem.getClassNode());
+
+                SwingUtilities.invokeLater(() -> {
+                    controller.getUserInterface().getContentPanel().selectTextAfterPattern(selectedItem.getPattern(), selectedItem.getName());
+                });
+            }
+        });
     }
 
-    public void search() {
-        String searchText = searchField.getText();
+    public void performSearch() {
+        listModel.clear();
 
-        // Remove previous highlights
-        removeHighlights(controller.getUserInterface().getContentPane());
-
-        searchResults.clear();
-        currentResultIndex = -1;
-
-        // Highlight new search results and store positions
-        if (!searchText.isEmpty()) {
-            highlightText(controller.getUserInterface().getContentPane(), searchText);
+        String query = searchField.getText();
+        if (!matchCase) {
+            query = query.toLowerCase();
         }
 
-        updateResultCounter();
-    }
+        if (!query.isEmpty()) {
+            for (String jarName : controller.getJarClassesMap().keySet()) {
+                List<ClassNode> classes = controller.getJarClassesMap().get(jarName);
 
-    private void removeHighlights(JTextComponent textComp) {
-        Highlighter hilite = textComp.getHighlighter();
-        Highlighter.Highlight[] hilites = hilite.getHighlights();
+                for (ClassNode classNode : classes) {
+                    if (areEqualStrings(classNode.name, query)) {
+                        Icon resultItemIcon;
 
-        for (Highlighter.Highlight hilite1 : hilites) {
-            if (hilite1.getPainter() instanceof DefaultHighlighter.DefaultHighlightPainter) {
-                hilite.removeHighlight(hilite1);
+                        if (Modifier.isInterface(classNode.access)) {
+                            resultItemIcon = ClassNodeImages.getImage("interface");
+                        } else {
+                            resultItemIcon = ClassNodeImages.getImage("class");
+                        }
+
+                        listModel.addElement(new SearchResultItem(
+                                classNode.name,
+                                resultItemIcon,
+                                classNode,
+                                classNode.name,
+                                ClassNodeUtil.getPattern(classNode, null, null)));
+                    }
+
+                    for (FieldNode fieldNode : classNode.fields) {
+                        if (!areEqualStrings(fieldNode.name, query)) {
+                            continue;
+                        }
+
+                        listModel.addElement(new SearchResultItem(
+                                fieldNode.name,
+                                ClassNodeImages.getFieldNodeImage(fieldNode),
+                                classNode,
+                                fieldNode.name,
+                                ClassNodeUtil.getFieldNodePattern(fieldNode)));
+                    }
+
+                    for (MethodNode methodNode : classNode.methods) {
+                        if (areEqualStrings(methodNode.name, query)) {
+                            listModel.addElement(new SearchResultItem(
+                                    methodNode.name,
+                                    ClassNodeImages.getMethodNodeImage(methodNode),
+                                    classNode,
+                                    methodNode.name,
+                                    ClassNodeUtil.getMethodNodePattern(methodNode)
+                            ));
+                        }
+
+                        for (AbstractInsnNode abstractInsnNode : methodNode.instructions) {
+                            if (abstractInsnNode instanceof LdcInsnNode ldcInsnNode) {
+                                if (ldcInsnNode.cst instanceof String stringCst) {
+                                    if (!areEqualStrings(stringCst, query)) {
+                                        continue;
+                                    }
+
+                                    listModel.addElement(new SearchResultItem(
+                                            stringCst,
+                                            Images.getImage("instruction"),
+                                            classNode,
+                                            "\"" + stringCst + "\"",
+                                            "LDC \"" + stringCst + "\""));
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 
-    private void highlightText(JTextPane contentPane, String pattern) {
-        try {
-            Highlighter hilite = contentPane.getHighlighter();
-            Document doc = contentPane.getDocument();
-            String text = doc.getText(0, doc.getLength());
-            int pos = 0;
-
-            // Search for pattern and highlight
-            while ((pos = text.indexOf(pattern, pos)) >= 0) {
-                int endPos = pos + pattern.length();
-                hilite.addHighlight(pos, endPos, new DefaultHighlighter.DefaultHighlightPainter(highlightColor));
-                searchResults.add(new int[]{pos, endPos});
-                pos = endPos;
-            }
-        } catch (BadLocationException e) {
-            e.printStackTrace();
+    private void toggleButton(JButton button, boolean toggle) {
+        if (toggle) {
+            button.setBackground(Theme.SEARCH_BUTTON_SELECTED_COLOR);
+        } else {
+            button.setBackground(defaultBackgroundColor);
         }
+
+        performSearch();
     }
 
-    private void navigateResults(int direction) {
-        if (searchResults.isEmpty()) {
-            return;
+    private boolean areEqualStrings(String first, String second) {
+        if (!matchCase) {
+            first = first.toLowerCase();
+            second = second.toLowerCase();
         }
 
-        currentResultIndex += direction;
-
-        if (currentResultIndex < 0) {
-            currentResultIndex = searchResults.size() - 1;
-        } else if (currentResultIndex >= searchResults.size()) {
-            currentResultIndex = 0;
+        if (matchWord) {
+            return first.equals(second);
         }
 
-        int[] pos = searchResults.get(currentResultIndex);
-        controller.getUserInterface().getContentPane().setCaretPosition(pos[0]);
-        controller.getUserInterface().getContentPane().moveCaretPosition(pos[1]);
-        updateResultCounter();
-    }
-
-    private void updateResultCounter() {
-        int totalResults = searchResults.size();
-        int currentIndex = totalResults > 0 ? currentResultIndex + 1 : 0;
-        resultCounter.setText(currentIndex + "/" + totalResults);
+        return first.contains(second);
     }
 }
