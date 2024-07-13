@@ -1,5 +1,6 @@
 package org.de.rikr;
 
+import org.de.rikr.utilities.ClassNodeUtil;
 import org.objectweb.asm.tree.*;
 
 import java.util.ArrayList;
@@ -181,23 +182,43 @@ public class Renamer {
         for (ClassNode classNode : classes) {
             int referenceCounter = renamedMethodReferenceCounter;
 
+            // Instructions must be updated first to ensure the real owner can be found
+            for (MethodNode methodNode : classNode.methods) {
+                // Update instructions
+                for (AbstractInsnNode insnNode : methodNode.instructions) {
+                    // Method references
+                    if (insnNode instanceof MethodInsnNode methodInsnNode) {
+                        ClassNode realOwnerClassNode = ClassNodeUtil.matchClassNode(classes, methodInsnNode.owner, methodInsnNode.name, methodInsnNode.desc);
+                        boolean updateInstruction = false;
+
+                        if (realOwnerClassNode != null && realOwnerClassNode.name.equals(owner.name) && methodInsnNode.name.equals(oldName)) {
+                            updateInstruction = true;
+                        } else if (methodInsnNode.owner.equals(owner.name) && methodInsnNode.name.equals(oldName)) {
+                            updateInstruction = true;
+                        }
+
+                        if (updateInstruction) {
+                            methodInsnNode.name = newName;
+                            renamedMethodReferenceCounter++;
+                        }
+                    }
+                }
+            }
+
+            if (referenceCounter != renamedMethodReferenceCounter) {
+                renamedMethodReferenceFileCounter++;
+            }
+        }
+
+        for (ClassNode classNode : classes) {
+            int referenceCounter = renamedMethodReferenceCounter;
+
             // Update method references
             for (MethodNode methodNode : classNode.methods) {
                 // Update method names
                 if (classNode.equals(owner) && methodNode.name.equals(oldName)) {
                     methodNode.name = newName;
                     renamedMethodReferenceCounter++;
-                }
-
-                // Update instructions
-                for (AbstractInsnNode insnNode : methodNode.instructions) {
-                    // Method references
-                    if (insnNode instanceof MethodInsnNode methodInsnNode) {
-                        if (methodInsnNode.owner.equals(owner.name) && methodInsnNode.name.equals(oldName)) {
-                            methodInsnNode.name = newName;
-                            renamedMethodReferenceCounter++;
-                        }
-                    }
                 }
             }
 
