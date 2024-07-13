@@ -1,6 +1,7 @@
 package org.de.rikr.ui.highlighter;
 
 import org.de.rikr.ui.Fonts;
+import org.de.rikr.ui.Theme;
 
 import javax.swing.text.*;
 import java.awt.*;
@@ -9,13 +10,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class SyntaxHighlighter {
-    private static final Color DEFAULT_COLOR = new Color(188, 190, 196);
-    private static final Color KEYWORD_COLOR = new Color(207, 142, 109);
-    private static final Color COMMENT_COLOR = new Color(122, 126, 133);
-    private static final Color NUMBER_COLOR = new Color(42, 172, 184);
-    private static final Color STRING_COLOR = new Color(106, 171, 115);
-
-    // Styles for different types of text
     private static final String KEYWORD_STYLE = "Keyword";
     private static final String COMMENT_STYLE = "Comment";
     private static final String NUMBER_STYLE = "Number";
@@ -40,7 +34,7 @@ public class SyntaxHighlighter {
 
         // Define styles
         Style defaultStyle = doc.addStyle(StyleContext.DEFAULT_STYLE, null);
-        StyleConstants.setForeground(defaultStyle, DEFAULT_COLOR);
+        StyleConstants.setForeground(defaultStyle, Theme.SYNTAX_HIGHLIGHT_DEFAULT_COLOR);
         StyleConstants.setFontFamily(defaultStyle, defaultFont.getFamily());
         StyleConstants.setFontSize(defaultStyle, defaultFont.getSize());
         StyleConstants.setLineSpacing(defaultStyle, LINE_HEIGHT);
@@ -48,18 +42,18 @@ public class SyntaxHighlighter {
         StyleConstants.setSpaceBelow(defaultStyle, 4);
 
         Style keywordStyle = doc.addStyle(KEYWORD_STYLE, defaultStyle);
-        StyleConstants.setForeground(keywordStyle, KEYWORD_COLOR);
+        StyleConstants.setForeground(keywordStyle, Theme.SYNTAX_HIGHLIGHT_KEYWORD_COLOR);
         StyleConstants.setBold(keywordStyle, true);
 
         Style commentStyle = doc.addStyle(COMMENT_STYLE, defaultStyle);
-        StyleConstants.setForeground(commentStyle, COMMENT_COLOR);
+        StyleConstants.setForeground(commentStyle, Theme.SYNTAX_HIGHLIGHT_COMMENT_COLOR);
         StyleConstants.setItalic(commentStyle, true);
 
         Style numberStyle = doc.addStyle(NUMBER_STYLE, defaultStyle);
-        StyleConstants.setForeground(numberStyle, NUMBER_COLOR);
+        StyleConstants.setForeground(numberStyle, Theme.SYNTAX_HIGHLIGHT_NUMBER_COLOR);
 
         Style stringStyle = doc.addStyle(STRING_STYLE, defaultStyle);
-        StyleConstants.setForeground(stringStyle, STRING_COLOR);
+        StyleConstants.setForeground(stringStyle, Theme.SYNTAX_HIGHLIGHT_STRING_COLOR);
 
         // Insert content with default style
         try {

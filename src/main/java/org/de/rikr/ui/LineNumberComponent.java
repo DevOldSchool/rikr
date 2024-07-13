@@ -15,11 +15,6 @@ public class LineNumberComponent extends JComponent {
     private FontMetrics fontMetrics;
     private int fontLeading;
     private int fontDescent;
-    private final Color backgroundColor;
-    private final Color textColor;
-    private final Color borderColor;
-    private final Color highlightColor;
-    private final Color highlightTextColor;
     private final int lineHeightOffset;
 
     public LineNumberComponent(JTextPane textPane) {
@@ -28,12 +23,6 @@ public class LineNumberComponent extends JComponent {
         defaultFont = Fonts.getDefaultFont();
         setFont(defaultFont);
         updateFontMetrics(defaultFont);
-
-        backgroundColor = new Color(30, 31, 34);
-        textColor = new Color(80, 80, 80);
-        borderColor = new Color(50, 50, 50);
-        highlightColor = new Color(43, 45, 48);
-        highlightTextColor = new Color(170, 170, 170);
 
         textPane.getDocument().addDocumentListener(new DocumentListener() {
             @Override
@@ -73,7 +62,7 @@ public class LineNumberComponent extends JComponent {
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
         Rectangle clip = g.getClipBounds();
-        g.setColor(backgroundColor);
+        g.setColor(Theme.CONTENT_BACKGROUND_COLOR);
         g.fillRect(clip.x, clip.y, clip.width, clip.height);
 
         // Draw line highlight
@@ -84,7 +73,7 @@ public class LineNumberComponent extends JComponent {
             throw new RuntimeException(e);
         }
 
-        g.setColor(highlightColor);
+        g.setColor(Theme.BACKGROUND_COLOR);
         g.fillRect(0, (int) caretRectangle.getY(), this.getWidth(), (int) caretRectangle.getHeight() + lineHeightOffset);
 
         // Draw line numbers
@@ -98,14 +87,14 @@ public class LineNumberComponent extends JComponent {
         int endLine = root.getElementIndex(endOffset);
 
         for (int i = startLine; i <= endLine; i++) {
-            g.setColor(textColor);
+            g.setColor(Theme.CONTENT_TEXT_COLOR);
 
             try {
                 Rectangle2D elementRectangle = textPane.modelToView2D(root.getElement(i).getStartOffset());
 
                 if (elementRectangle != null) {
                     if (caretRectangle.getY() == elementRectangle.getY()) {
-                        g.setColor(highlightTextColor);
+                        g.setColor(Theme.CONTENT_HIGHLIGHT_TEXT_COLOR);
                     }
                     String lineNumber = String.valueOf(i + 1);
                     int y = (int) elementRectangle.getY() + (int) elementRectangle.getHeight() - fontDescent - fontLeading;
@@ -117,7 +106,7 @@ public class LineNumberComponent extends JComponent {
         }
 
         // Draw the right border
-        g.setColor(borderColor);
+        g.setColor(Theme.CONTENT_BORDER_COLOR);
         int borderX = getWidth() - 1;
         g.drawLine(borderX, clip.y, borderX, clip.y + clip.height);
 

@@ -25,6 +25,7 @@ public class TreePanel extends JScrollPane {
 
     public TreePanel(Rikr controller) {
         this.controller = controller;
+        setBorder(null);
 
         DefaultMutableTreeNode root = new DefaultMutableTreeNode("JAR Files");
         treeModel = new DefaultTreeModel(root);
@@ -32,6 +33,7 @@ public class TreePanel extends JScrollPane {
         tree.setRootVisible(false);
         tree.setShowsRootHandles(true);
         tree.setCellRenderer(new IconTreeCellRenderer());
+        tree.setBackground(Theme.BACKGROUND_COLOR);
         treeSelectionHandler = new TreeSelectionHandler(controller, tree);
         tree.addTreeSelectionListener(treeSelectionHandler);
 

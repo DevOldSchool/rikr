@@ -17,8 +17,11 @@ public class LogPanel extends JScrollPane implements Logger {
     private Date date;
 
     public LogPanel() {
+        setBorder(null);
+
         logPane = new JTextPane();
         logPane.setEditable(false);
+        logPane.setBackground(Theme.CONTENT_BACKGROUND_COLOR);
         setViewportView(logPane);
 
         document = logPane.getStyledDocument();
@@ -28,7 +31,7 @@ public class LogPanel extends JScrollPane implements Logger {
     }
 
     public void init() {
-        
+
     }
 
     @Override

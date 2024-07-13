@@ -10,7 +10,6 @@ import org.objectweb.asm.util.TraceClassVisitor;
 
 import javax.swing.*;
 import javax.swing.text.*;
-import java.awt.*;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.dnd.DnDConstants;
@@ -38,21 +37,21 @@ public class ContentPanel extends JScrollPane {
 
     private final RenameActionHandler renameActionHandler;
     private final int[] originalCaretPosition = new int[1];
-    private final Color selectedHighlightColor;
 
     public ContentPanel(Rikr controller) {
         this.controller = controller;
+        setBorder(null);
 
         contentPane = new ScrollableTextPane();
         contentPane.setEditable(false);
-        contentPane.setBackground(new Color(30, 31, 34));
+        contentPane.setBackground(Theme.CONTENT_BACKGROUND_COLOR);
         contentPane.setBorder(BorderFactory.createEmptyBorder(10, 0, 10, 10));
         document = contentPane.getStyledDocument();
         style = document.addStyle("content", null);
         setViewportView(contentPane);
 
         syntaxHighlighter = new SyntaxHighlighter();
-        new LineHighlighter(contentPane, new Color(43, 45, 48));
+        new LineHighlighter(contentPane, Theme.BACKGROUND_COLOR);
         stringWriter = new StringWriter();
         printWriter = new PrintWriter(stringWriter);
         textifier = new Textifier();
@@ -67,8 +66,6 @@ public class ContentPanel extends JScrollPane {
         contextMenu.add(renameItem);
 
         renameActionHandler = new RenameActionHandler(controller, contentPane, document, originalCaretPosition);
-
-        selectedHighlightColor = new Color(33, 66, 131);
 
         // Disable default right-click behavior
         contentPane.setComponentPopupMenu(null);
@@ -214,7 +211,7 @@ public class ContentPanel extends JScrollPane {
                     int selectStart = patternPos + selectPos;
                     int selectEnd = selectStart + textToSelect.length();
                     try {
-                        hilite.addHighlight(selectStart, selectEnd, new DefaultHighlighter.DefaultHighlightPainter(selectedHighlightColor));
+                        hilite.addHighlight(selectStart, selectEnd, new DefaultHighlighter.DefaultHighlightPainter(Theme.CONTENT_SELECTED_HIGHLIGHT_COLOR));
                     } catch (BadLocationException e) {
                         throw new RuntimeException(e);
                     }

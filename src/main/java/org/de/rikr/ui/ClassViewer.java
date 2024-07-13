@@ -5,6 +5,8 @@ import org.de.rikr.Rikr;
 import org.objectweb.asm.tree.ClassNode;
 
 import javax.swing.*;
+import javax.swing.plaf.basic.BasicSplitPaneDivider;
+import javax.swing.plaf.basic.BasicSplitPaneUI;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
@@ -16,11 +18,15 @@ public class ClassViewer {
     private final JFrame frame;
     private final Rikr controller;
     private final MenuBar menuBar;
+    private final JSplitPane mainSplitPane;
     private final JSplitPane verticalSplitPane;
+    private final NavigationPanel navigationPanel;
     private final TreePanel treePanel;
-    private final SearchPanel searchPanel;
+    private final SearchBar searchBar;
     private final ContentPanel contentPanel;
     private final LogPanel logPanel;
+    private final JPanel projectPanel;
+    private final SearchPanel searchPanel;
 
     public ClassViewer(Rikr controller) {
         this.controller = controller;
@@ -49,23 +55,56 @@ public class ClassViewer {
         // Initialize panels
         treePanel = new TreePanel(controller);
         contentPanel = new ContentPanel(controller);
-        searchPanel = new SearchPanel(controller, e -> toggleSearchPanelVisibility(false));
+        searchBar = new SearchBar(controller, e -> toggleSearchBarVisibility(false));
         logPanel = new LogPanel();
+        projectPanel = new JPanel(new BorderLayout());
+        projectPanel.add(treePanel, BorderLayout.CENTER);
+        searchPanel = new SearchPanel(controller);
 
         // Create a panel to hold both the search panel and content panel
         JPanel rightPanel = new JPanel(new BorderLayout());
-        rightPanel.add(searchPanel, BorderLayout.NORTH);
+        rightPanel.add(searchBar, BorderLayout.NORTH);
         rightPanel.add(contentPanel, BorderLayout.CENTER);
 
-        JSplitPane mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-        mainSplitPane.setDividerLocation(300);
-        mainSplitPane.setLeftComponent(treePanel);
-        mainSplitPane.setRightComponent(rightPanel);
+        // Create the navigation panel
+        navigationPanel = new NavigationPanel(
+                controller,
+                e -> showProjectPanel(),
+                e -> showSearchPanel()
+        );
 
-        verticalSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
+        // Create a split pane for the navigation panel and tree panel
+        JSplitPane leftSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+        leftSplitPane.setLeftComponent(navigationPanel);
+        leftSplitPane.setRightComponent(projectPanel);
+        leftSplitPane.setDividerSize(1);
+        leftSplitPane.setEnabled(false);
+
+        // Make the divider invisible
+        leftSplitPane.setUI(new BasicSplitPaneUI() {
+            @Override
+            public BasicSplitPaneDivider createDefaultDivider() {
+                return new BasicSplitPaneDivider(this) {
+                    @Override
+                    public void paint(Graphics g) {
+                    }
+                };
+            }
+        });
+
+        // Create the main split pane
+        mainSplitPane = new SplitPane(JSplitPane.HORIZONTAL_SPLIT, 10);
+        mainSplitPane.setLeftComponent(leftSplitPane);
+        mainSplitPane.setRightComponent(rightPanel);
+        mainSplitPane.setDividerLocation(300);
+        mainSplitPane.setDividerSize(1);
+
+        // Create the vertical split pane
+        verticalSplitPane = new SplitPane(JSplitPane.VERTICAL_SPLIT, 10);
         verticalSplitPane.setTopComponent(mainSplitPane);
         verticalSplitPane.setBottomComponent(logPanel);
         verticalSplitPane.setDividerLocation(600);
+        verticalSplitPane.setDividerSize(1);
 
         JPanel panel = new JPanel(new BorderLayout());
         panel.add(verticalSplitPane, BorderLayout.CENTER);
@@ -76,7 +115,7 @@ public class ClassViewer {
         menuBar = new MenuBar(
                 controller,
                 e -> openFileDialog(),
-                e -> toggleSearchPanelVisibility(false),
+                e -> toggleSearchBarVisibility(false),
                 e -> toggleLogVisibility(logPanel.isVisible())
         );
         frame.setJMenuBar(menuBar);
@@ -90,21 +129,25 @@ public class ClassViewer {
         actionMap.put(toggleSearchPanelAction, new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                toggleSearchPanelVisibility(true);
+                toggleSearchBarVisibility(true);
             }
         });
     }
 
     public void init() {
         contentPanel.init();
+        navigationPanel.init();
         treePanel.init();
-        searchPanel.init();
+        searchBar.init();
         logPanel.init();
         menuBar.init();
+        searchPanel.init();
 
         SwingUtilities.invokeLater(() -> {
+            toggleLogVisibility(logPanel.isVisible());
+
             frame.setVisible(true);
-            searchPanel.setVisible(false);
+            searchBar.setVisible(false);
 
             contentPanel.getContentPane().grabFocus();
         });
@@ -120,6 +163,18 @@ public class ClassViewer {
 
     public void clearContent() {
         contentPanel.clear();
+    }
+
+    private void showProjectPanel() {
+        ((JSplitPane) ((JSplitPane) verticalSplitPane.getTopComponent()).getLeftComponent()).setRightComponent(projectPanel);
+        frame.revalidate();
+        frame.repaint();
+    }
+
+    private void showSearchPanel() {
+        ((JSplitPane) ((JSplitPane) verticalSplitPane.getTopComponent()).getLeftComponent()).setRightComponent(searchPanel);
+        frame.revalidate();
+        frame.repaint();
     }
 
     private void openFileDialog() {
@@ -151,8 +206,9 @@ public class ClassViewer {
         }
     }
 
-    private void toggleSearchPanelVisibility(boolean isVisible) {
-        searchPanel.setVisible(isVisible);
+    private void toggleSearchBarVisibility(boolean isVisible) {
+        searchBar.setVisible(isVisible);
+        searchBar.focus();
         frame.revalidate();
         frame.repaint();
     }
