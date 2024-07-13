@@ -34,6 +34,6 @@ public class ClassNodeUtil {
     }
 
     public static String getMethodNodePattern(MethodNode methodNode) {
-        return methodNode.desc + methodNode.name;
+        return methodNode.name + methodNode.desc;
     }
 }
