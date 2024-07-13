@@ -92,7 +92,11 @@ public class SearchPanel extends JPanel {
             if (!e.getValueIsAdjusting()) {
                 SearchResultItem selectedItem = resultsList.getSelectedValue();
 
-                System.out.println(selectedItem.getClassNode() + " " + selectedItem.getPattern() + " " + selectedItem.getName());
+                if (selectedItem == null) {
+                    return;
+                }
+
+                System.out.println(selectedItem.getClassNode().name + " " + selectedItem.getPattern() + " " + selectedItem.getName());
 
                 controller.getUserInterface().displayBytecode(selectedItem.getClassNode());
 
@@ -134,22 +138,39 @@ public class SearchPanel extends JPanel {
                     }
 
                     for (FieldNode fieldNode : classNode.fields) {
-                        if (!areEqualStrings(fieldNode.name, query)) {
-                            continue;
+                        if (areEqualStrings(fieldNode.name, query)) {
+                            listModel.addElement(new SearchResultItem(
+                                    fieldNode.name,
+                                    ClassNodeImages.getFieldNodeImage(fieldNode),
+                                    classNode,
+                                    fieldNode.name,
+                                    ClassNodeUtil.getFieldNodePattern(fieldNode)));
                         }
 
-                        listModel.addElement(new SearchResultItem(
-                                fieldNode.name,
-                                ClassNodeImages.getFieldNodeImage(fieldNode),
-                                classNode,
-                                fieldNode.name,
-                                ClassNodeUtil.getFieldNodePattern(fieldNode)));
+                        if (areEqualStrings(fieldNode.desc, query)) {
+                            listModel.addElement(new SearchResultItem(
+                                    fieldNode.desc,
+                                    ClassNodeImages.getFieldNodeImage(fieldNode),
+                                    classNode,
+                                    fieldNode.desc,
+                                    ClassNodeUtil.getFieldNodePattern(fieldNode)));
+                        }
                     }
 
                     for (MethodNode methodNode : classNode.methods) {
                         if (areEqualStrings(methodNode.name, query)) {
                             listModel.addElement(new SearchResultItem(
                                     methodNode.name,
+                                    ClassNodeImages.getMethodNodeImage(methodNode),
+                                    classNode,
+                                    methodNode.name,
+                                    ClassNodeUtil.getMethodNodePattern(methodNode)
+                            ));
+                        }
+
+                        if (areEqualStrings(methodNode.desc, query)) {
+                            listModel.addElement(new SearchResultItem(
+                                    methodNode.desc,
                                     ClassNodeImages.getMethodNodeImage(methodNode),
                                     classNode,
                                     methodNode.name,
