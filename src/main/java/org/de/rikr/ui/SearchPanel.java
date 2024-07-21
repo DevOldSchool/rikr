@@ -96,8 +96,6 @@ public class SearchPanel extends JPanel {
                     return;
                 }
 
-                System.out.println(selectedItem.getClassNode().name + " " + selectedItem.getPattern() + " " + selectedItem.getName());
-
                 controller.getUserInterface().displayBytecode(selectedItem.getClassNode());
 
                 SwingUtilities.invokeLater(() -> {
@@ -221,5 +219,9 @@ public class SearchPanel extends JPanel {
         }
 
         return first.contains(second);
+    }
+
+    public void select() {
+        searchField.grabFocus();
     }
 }

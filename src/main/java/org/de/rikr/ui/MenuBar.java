@@ -13,7 +13,7 @@ public class MenuBar extends JMenuBar {
     private final JMenuItem groupByInterfaceItem;
     private final JMenuItem removeGroupingItem;
 
-    public MenuBar(Rikr controller, ActionListener openFileAction, ActionListener showSearchAction, ActionListener toggleLogAction) {
+    public MenuBar(Rikr controller, ActionListener openFileAction, ActionListener showSearchAction, ActionListener showProjectAction, ActionListener showGlobalSearchAction, ActionListener toggleLogAction) {
         this.controller = controller;
 
         // File menu
@@ -32,6 +32,18 @@ public class MenuBar extends JMenuBar {
 
         // View menu
         JMenu viewMenu = new JMenu("View");
+        JMenuItem projectSearchItem = new JMenuItem("Project");
+        projectSearchItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_E, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx() | KeyEvent.SHIFT_DOWN_MASK));
+        projectSearchItem.addActionListener(showProjectAction);
+        viewMenu.add(projectSearchItem);
+
+        JMenuItem globalSearchItem = new JMenuItem("Global Search");
+        globalSearchItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx() | KeyEvent.SHIFT_DOWN_MASK));
+        globalSearchItem.addActionListener(showGlobalSearchAction);
+        viewMenu.add(globalSearchItem);
+
+        viewMenu.addSeparator();
+
         groupBySuperclassItem = new JMenuItem("Group by Superclass");
         groupBySuperclassItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_G, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()));
 

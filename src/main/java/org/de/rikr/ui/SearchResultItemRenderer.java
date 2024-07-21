@@ -8,7 +8,9 @@ import java.awt.*;
 public class SearchResultItemRenderer extends JLabel implements ListCellRenderer<SearchResultItem> {
     @Override
     public Component getListCellRendererComponent(JList<? extends SearchResultItem> list, SearchResultItem value, int index, boolean isSelected, boolean cellHasFocus) {
-        setText(value.getText());
+        String text = "<html>" + value.getText() + " <font color='gray'>" + value.getClassNode().name + "</font></html>";
+
+        setText(text);
         setIcon(value.getIcon());
 
         if (isSelected) {

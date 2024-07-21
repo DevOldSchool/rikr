@@ -51,4 +51,12 @@ public class NavigationPanel extends JPanel {
             projectButton.setBackground(Theme.BACKGROUND_COLOR);
         });
     }
+
+    public void selectProjectTab() {
+        projectButton.doClick();
+    }
+
+    public void selectSearchTab() {
+        searchButton.doClick();
+    }
 }

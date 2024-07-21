@@ -26,8 +26,8 @@ The following items are listed in no particular order and are here as a todo lis
 
 #### Global search
 
-- Search through all class nodes across all loaded jars including instructions.
-- Search filters, include static, include instructions.
+- ~~Search through all class nodes across all loaded jars including instructions.~~
+- ~~Search filters, include static, include instructions.~~
 - Search result hierarchy, class, field, method, instruction.
 
 #### Control flow graph

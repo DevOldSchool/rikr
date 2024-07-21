@@ -116,6 +116,8 @@ public class ClassViewer {
                 controller,
                 e -> openFileDialog(),
                 e -> toggleSearchBarVisibility(false),
+                e -> showProjectTab(),
+                e -> showGlobalSearchTab(),
                 e -> toggleLogVisibility(logPanel.isVisible())
         );
         frame.setJMenuBar(menuBar);
@@ -211,6 +213,15 @@ public class ClassViewer {
         searchBar.focus();
         frame.revalidate();
         frame.repaint();
+    }
+
+    private void showProjectTab() {
+        navigationPanel.selectProjectTab();
+    }
+
+    private void showGlobalSearchTab() {
+        navigationPanel.selectSearchTab();
+        searchPanel.select();
     }
 
     public LogPanel getLogPanel() {
