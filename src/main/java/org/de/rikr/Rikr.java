@@ -75,6 +75,9 @@ public class Rikr {
             System.setProperty("apple.awt.application.name", "Rikr");
         }
 
+        // Modify look and feel defaults
+        UIManager.put("SplitPaneDivider.gripDotCount", 0);
+
         Images.loadImages();
         ClassNodeImages.loadImages();
         Fonts.loadFonts();

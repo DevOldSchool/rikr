@@ -27,6 +27,7 @@ public class TreePopupMenu extends JPopupMenu {
     private final JMenuItem findImplementors;
     private final JMenuItem findMatchingClassNodes;
     private final JMenuItem getClassNodeSignature;
+    private final JMenuItem simulateMethod;
 
     public TreePopupMenu(Rikr controller, JTree tree) {
         this.controller = controller;
@@ -41,6 +42,7 @@ public class TreePopupMenu extends JPopupMenu {
         findImplementors = new JMenuItem("Find Implementors");
         findMatchingClassNodes = new JMenuItem("Find Matching Class Nodes");
         getClassNodeSignature = new JMenuItem("Get Class Node Signature");
+        simulateMethod = new JMenuItem("Simulate Method");
 
         add(renameItem);
         add(removeItem);
@@ -76,6 +78,8 @@ public class TreePopupMenu extends JPopupMenu {
                         add(findExtenders);
                     } else if (selectedNode instanceof InterfaceNodeMutableTreeNode) {
                         add(findImplementors);
+                    } else if (selectedNode instanceof MethodNodeMutableTreeNode) {
+                        add(simulateMethod);
                     }
                 }
             }
@@ -279,6 +283,20 @@ public class TreePopupMenu extends JPopupMenu {
                 if (!foundMatch) {
                     controller.log(String.format("Unable to find matching class node for %s", selectedClassNode.name));
                 }
+            }
+        });
+
+        simulateMethod.addActionListener(e -> {
+            DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
+            if (selectedNode == null) {
+                return;
+            }
+
+            if (selectedNode instanceof MethodNodeMutableTreeNode methodNodeMutableTreeNode) {
+                ClassNodeMutableTreeNode parentNode = (ClassNodeMutableTreeNode) methodNodeMutableTreeNode.getParent();
+                MethodNode methodNode = methodNodeMutableTreeNode.getMethodNode();
+
+                controller.getUserInterface().getMethodSimulatorPanel().initSimulate(parentNode, methodNode);
             }
         });
     }

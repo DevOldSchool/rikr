@@ -28,16 +28,20 @@ public class ScrollableTextPane extends JTextPane implements Scrollable {
     @Override
     public boolean getScrollableTracksViewportWidth() {
         if (getParent() instanceof JViewport viewport) {
-            return viewport.getWidth() > getUI().getPreferredSize(this).width;
+            int viewportWidth = viewport.getWidth();
+            int preferredWidth = getUI().getPreferredSize(this).width;
+            return viewportWidth == 0 || viewportWidth > preferredWidth;
         }
-        
+
         return false;
     }
 
     @Override
     public boolean getScrollableTracksViewportHeight() {
         if (getParent() instanceof JViewport viewport) {
-            return viewport.getHeight() > getUI().getPreferredSize(this).height;
+            int viewportHeight = viewport.getHeight();
+            int preferredHeight = getUI().getPreferredSize(this).height;
+            return viewportHeight == 0 || viewportHeight > preferredHeight;
         }
 
         return false;

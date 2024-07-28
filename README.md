@@ -13,9 +13,9 @@ The following items are listed in no particular order and are here as a todo lis
 
 #### User interface to step through instructions.
 
-- Step through the instructions in a method.
-- View the stack as you go.
-- View local variables as you go.
+- ~~Step through the instructions in a method.~~
+- ~~View the stack as you go.~~
+- ~~View local variables as you go.~~
 - Visually show the control flow.
 
 #### User interface for class mapping between Jars.

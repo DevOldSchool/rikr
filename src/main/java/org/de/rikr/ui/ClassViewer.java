@@ -13,12 +13,14 @@ import java.awt.event.KeyEvent;
 import java.io.File;
 import java.util.List;
 import java.util.Map;
+import java.util.Stack;
 
 public class ClassViewer {
     private final JFrame frame;
     private final Rikr controller;
     private final MenuBar menuBar;
     private final JSplitPane mainSplitPane;
+    private final JSplitPane contentSplitPane;
     private final JSplitPane verticalSplitPane;
     private final NavigationPanel navigationPanel;
     private final TreePanel treePanel;
@@ -27,6 +29,9 @@ public class ClassViewer {
     private final LogPanel logPanel;
     private final JPanel projectPanel;
     private final SearchPanel searchPanel;
+    private final MethodSimulatorPanel methodSimulatorPanel;
+    private final JPanel rightPanel;
+    private final SimulatorBar simulatorBar;
 
     public ClassViewer(Rikr controller) {
         this.controller = controller;
@@ -60,11 +65,18 @@ public class ClassViewer {
         projectPanel = new JPanel(new BorderLayout());
         projectPanel.add(treePanel, BorderLayout.CENTER);
         searchPanel = new SearchPanel(controller);
+        methodSimulatorPanel = new MethodSimulatorPanel(controller);
+        simulatorBar = new SimulatorBar(controller, e -> toggleMethodSimulatorVisibility(methodSimulatorPanel.isVisible()));
 
         // Create a panel to hold both the search panel and content panel
-        JPanel rightPanel = new JPanel(new BorderLayout());
+        rightPanel = new JPanel(new BorderLayout());
+
         rightPanel.add(searchBar, BorderLayout.NORTH);
-        rightPanel.add(contentPanel, BorderLayout.CENTER);
+        contentSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, contentPanel, methodSimulatorPanel);
+        contentSplitPane.setDividerLocation(700);
+        contentSplitPane.setResizeWeight(0.80);
+        rightPanel.add(contentSplitPane, BorderLayout.CENTER);
+        rightPanel.add(simulatorBar, BorderLayout.SOUTH);
 
         // Create the navigation panel
         navigationPanel = new NavigationPanel(
@@ -104,7 +116,7 @@ public class ClassViewer {
         verticalSplitPane.setTopComponent(mainSplitPane);
         verticalSplitPane.setBottomComponent(logPanel);
         verticalSplitPane.setDividerLocation(600);
-        verticalSplitPane.setDividerSize(1);
+        verticalSplitPane.setDividerSize(0);
 
         JPanel panel = new JPanel(new BorderLayout());
         panel.add(verticalSplitPane, BorderLayout.CENTER);
@@ -144,9 +156,11 @@ public class ClassViewer {
         logPanel.init();
         menuBar.init();
         searchPanel.init();
+        simulatorBar.init();
 
         SwingUtilities.invokeLater(() -> {
             toggleLogVisibility(logPanel.isVisible());
+            toggleMethodSimulatorVisibility(methodSimulatorPanel.isVisible());
 
             frame.setVisible(true);
             searchBar.setVisible(false);
@@ -200,17 +214,40 @@ public class ClassViewer {
     private void toggleLogVisibility(boolean isVisible) {
         if (isVisible) {
             verticalSplitPane.setBottomComponent(null);
+            verticalSplitPane.setDividerSize(0);
             logPanel.setVisible(false);
         } else {
             verticalSplitPane.setBottomComponent(logPanel);
             verticalSplitPane.setDividerLocation(600);
+            verticalSplitPane.setDividerSize(1);
             logPanel.setVisible(true);
+        }
+    }
+
+    public void toggleMethodSimulatorVisibility(boolean isVisible) {
+        if (isVisible) {
+            contentSplitPane.setRightComponent(null);
+            contentSplitPane.setDividerSize(0);
+            methodSimulatorPanel.setVisible(false);
+            toggleSimulatorBarVisibility(false);
+        } else {
+            contentSplitPane.setRightComponent(methodSimulatorPanel);
+            contentSplitPane.setDividerLocation(700);
+            contentSplitPane.setDividerSize(1);
+            methodSimulatorPanel.setVisible(true);
+            toggleSimulatorBarVisibility(true);
         }
     }
 
     private void toggleSearchBarVisibility(boolean isVisible) {
         searchBar.setVisible(isVisible);
         searchBar.focus();
+        frame.revalidate();
+        frame.repaint();
+    }
+
+    private void toggleSimulatorBarVisibility(boolean isVisible) {
+        simulatorBar.setVisible(isVisible);
         frame.revalidate();
         frame.repaint();
     }
@@ -222,6 +259,14 @@ public class ClassViewer {
     private void showGlobalSearchTab() {
         navigationPanel.selectSearchTab();
         searchPanel.select();
+    }
+
+    public void setStackAreaText(Stack<Object> stack) {
+        methodSimulatorPanel.setStackAreaText(stack);
+    }
+
+    public void setLocalVariableAreaText(Map<Integer, Object> localVariables) {
+        methodSimulatorPanel.setLocalVariableAreaText(localVariables);
     }
 
     public LogPanel getLogPanel() {
@@ -238,6 +283,10 @@ public class ClassViewer {
 
     public TreePanel getTreePanel() {
         return treePanel;
+    }
+
+    public MethodSimulatorPanel getMethodSimulatorPanel() {
+        return methodSimulatorPanel;
     }
 
     public JFrame getFrame() {

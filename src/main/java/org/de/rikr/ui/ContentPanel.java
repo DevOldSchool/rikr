@@ -226,4 +226,40 @@ public class ContentPanel extends JScrollPane {
             }
         }
     }
+
+    public int getLineNumberOfPattern(String pattern) {
+        Document doc = contentPane.getDocument();
+        Element rootElement = doc.getDefaultRootElement();
+
+        try {
+            String content = doc.getText(0, doc.getLength());
+            int offset = content.indexOf(pattern);
+
+            if (offset != -1) {
+                return rootElement.getElementIndex(offset);
+            }
+        } catch (BadLocationException e) {
+            e.printStackTrace();
+        }
+
+        return -1;
+    }
+
+    public void setCaretPositionToLineNumber(int lineNumber) {
+        Document doc = contentPane.getDocument();
+        Element rootElement = doc.getDefaultRootElement();
+
+        // Check if the line number is valid
+        if (lineNumber < 0 || lineNumber >= rootElement.getElementCount()) {
+            System.err.println("Unable to set caret position in ContentPanel, invalid line number");
+            return;
+        }
+
+        // Get the start offset of the specified line
+        Element lineElement = rootElement.getElement(lineNumber);
+        int startOffset = lineElement.getStartOffset();
+
+        // Set the caret position to the start offset of the line
+        contentPane.setCaretPosition(startOffset);
+    }
 }
