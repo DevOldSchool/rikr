@@ -108,4 +108,31 @@ public class ClassNodeUtil {
 
         return null;
     }
+
+    public static void stripAnnotations(ClassNode classNode) {
+        if (classNode.visibleAnnotations != null) {
+            classNode.visibleAnnotations.clear();
+        }
+        if (classNode.invisibleAnnotations != null) {
+            classNode.invisibleAnnotations.clear();
+        }
+
+        for (FieldNode fieldNode : classNode.fields) {
+            if (fieldNode.visibleAnnotations != null) {
+                fieldNode.visibleAnnotations.clear();
+            }
+            if (fieldNode.invisibleAnnotations != null) {
+                fieldNode.invisibleAnnotations.clear();
+            }
+        }
+
+        for (MethodNode methodNode : classNode.methods) {
+            if (methodNode.visibleAnnotations != null) {
+                methodNode.visibleAnnotations.clear();
+            }
+            if (methodNode.invisibleAnnotations != null) {
+                methodNode.invisibleAnnotations.clear();
+            }
+        }
+    }
 }

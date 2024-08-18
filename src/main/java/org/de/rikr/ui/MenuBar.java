@@ -12,6 +12,7 @@ public class MenuBar extends JMenuBar {
     private final JMenuItem groupBySuperclassItem;
     private final JMenuItem groupByInterfaceItem;
     private final JMenuItem removeGroupingItem;
+    private final JCheckBoxMenuItem annotationItem;
 
     public MenuBar(Rikr controller, ActionListener openFileAction, ActionListener showSearchAction, ActionListener showProjectAction, ActionListener showGlobalSearchAction, ActionListener toggleLogAction) {
         this.controller = controller;
@@ -29,6 +30,11 @@ public class MenuBar extends JMenuBar {
         searchItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()));
         searchItem.addActionListener(showSearchAction);
         editMenu.add(searchItem);
+
+        annotationItem = new JCheckBoxMenuItem("Strip annotations");
+        annotationItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()));
+        annotationItem.addActionListener(showSearchAction);
+        editMenu.add(annotationItem);
 
         // View menu
         JMenu viewMenu = new JMenu("View");
@@ -84,6 +90,10 @@ public class MenuBar extends JMenuBar {
         // Remove grouping
         removeGroupingItem.addActionListener(e -> {
             controller.getUserInterface().getTreePanel().updateTree(controller.getJarClassesMap(), false, false);
+        });
+
+        annotationItem.addActionListener(e -> {
+            controller.getProcessor().setStripAnnotations(annotationItem.isSelected());
         });
     }
 }

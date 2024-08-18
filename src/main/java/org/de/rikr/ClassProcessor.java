@@ -19,6 +19,7 @@ public class ClassProcessor {
     private final Map<String, List<ClassNode>> jarClassesMap;
     private final ClassComparator classComparator;
     private final MethodComparator methodComparator;
+    private boolean stripAnnotations;
 
     public ClassProcessor(Logger logger) {
         this.logger = logger;
@@ -26,6 +27,7 @@ public class ClassProcessor {
         jarClassesMap = new HashMap<>();
         classComparator = new ClassComparator();
         methodComparator = new MethodComparator();
+        stripAnnotations = false;
     }
 
     public void processJarFiles(File[] jarFiles) {
@@ -120,12 +122,12 @@ public class ClassProcessor {
     }
 
     private Map<String, List<ClassNode>> readJarFile(File file) throws IOException {
-        JarLoader jarLoader = new JarLoader();
+        JarLoader jarLoader = new JarLoader(stripAnnotations);
         return jarLoader.readClasses(file);
     }
 
     private ClassNode readClassFile(File file) throws IOException {
-        ClassFileLoader classLoader = new ClassFileLoader();
+        ClassFileLoader classLoader = new ClassFileLoader(stripAnnotations);
         return classLoader.readClass(file);
     }
 
@@ -143,5 +145,13 @@ public class ClassProcessor {
 
     public boolean areMethodsBehaviorallyEquivalent(List<ClassNode> classNodes1, MethodNode methodNode1, List<ClassNode> classNodes2, MethodNode methodNode2) {
         return methodComparator.areBehaviorallyEquivalent(classNodes1, methodNode1, classNodes2, methodNode2);
+    }
+
+    public boolean isStripAnnotations() {
+        return stripAnnotations;
+    }
+
+    public void setStripAnnotations(boolean stripAnnotations) {
+        this.stripAnnotations = stripAnnotations;
     }
 }

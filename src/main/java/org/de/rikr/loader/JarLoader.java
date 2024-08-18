@@ -1,5 +1,6 @@
 package org.de.rikr.loader;
 
+import org.de.rikr.utilities.ClassNodeUtil;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.tree.ClassNode;
 
@@ -10,6 +11,11 @@ import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
 public class JarLoader {
+    private final boolean stripAnnotations;
+
+    public JarLoader(boolean stripAnnotations) {
+        this.stripAnnotations = stripAnnotations;
+    }
 
     public Map<String, List<ClassNode>> readClasses(File jarFile) throws IOException {
         Map<String, List<ClassNode>> jarClassesMap = new HashMap<>();
@@ -25,6 +31,11 @@ public class JarLoader {
                     ClassNode classNode = new ClassNode();
                     ClassReader classReader = new ClassReader(jar.getInputStream(entry));
                     classReader.accept(classNode, ClassReader.SKIP_FRAMES);
+
+                    if (stripAnnotations) {
+                        ClassNodeUtil.stripAnnotations(classNode);
+                    }
+
                     jarClassesMap.computeIfAbsent(jarName, k -> new ArrayList<>()).add(classNode);
                 }
             }

@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 public class Rikr {
-    private ClassViewer userInterface;
+    private final ClassViewer userInterface;
     private ClassProcessor processor;
 
     public Rikr() {
