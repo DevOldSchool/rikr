@@ -2,8 +2,7 @@ package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
 import org.de.rikr.ui.model.*;
-import org.objectweb.asm.tree.ClassNode;
-import org.objectweb.asm.tree.MethodNode;
+import org.objectweb.asm.tree.*;
 
 import javax.swing.*;
 import javax.swing.event.PopupMenuEvent;
@@ -28,6 +27,7 @@ public class TreePopupMenu extends JPopupMenu {
     private final JMenuItem findMatchingClassNodes;
     private final JMenuItem getClassNodeSignature;
     private final JMenuItem simulateMethod;
+    private final JMenuItem findUsage;
 
     public TreePopupMenu(Rikr controller, JTree tree) {
         this.controller = controller;
@@ -43,6 +43,7 @@ public class TreePopupMenu extends JPopupMenu {
         findMatchingClassNodes = new JMenuItem("Find Matching Class Nodes");
         getClassNodeSignature = new JMenuItem("Get Class Node Signature");
         simulateMethod = new JMenuItem("Simulate Method");
+        findUsage = new JMenuItem("Find Usage");
 
         add(renameItem);
         add(removeItem);
@@ -80,6 +81,8 @@ public class TreePopupMenu extends JPopupMenu {
                         add(findImplementors);
                     } else if (selectedNode instanceof MethodNodeMutableTreeNode) {
                         add(simulateMethod);
+                    } else if (selectedNode instanceof FieldNodeMutableTreeNode) {
+                        add(findUsage);
                     }
                 }
             }
@@ -297,6 +300,30 @@ public class TreePopupMenu extends JPopupMenu {
                 MethodNode methodNode = methodNodeMutableTreeNode.getMethodNode();
 
                 controller.getUserInterface().getMethodSimulatorPanel().initSimulate(parentNode, methodNode);
+            }
+        });
+
+        findUsage.addActionListener(e -> {
+            DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
+            if (selectedNode == null) {
+                return;
+            }
+
+            if (selectedNode instanceof FieldNodeMutableTreeNode fieldNodeMutableTreeNode) {
+                ClassNodeMutableTreeNode parentNode = (ClassNodeMutableTreeNode) fieldNodeMutableTreeNode.getParent();
+                FieldNode fieldNode = fieldNodeMutableTreeNode.getFieldNode();
+
+                for (ClassNode classNode : controller.getClasses(parentNode.getJarName())) {
+                    for (MethodNode methodNode : classNode.methods) {
+                        for (AbstractInsnNode abstractInsnNode : methodNode.instructions) {
+                            if (abstractInsnNode instanceof FieldInsnNode fieldInsnNode) {
+                                if (fieldInsnNode.owner.equals(parentNode.getClassNode().name) && fieldInsnNode.name.equals(fieldNode.name)) {
+                                    controller.log(String.format("Found field usage in %s -> %s%s -> %s.%s", classNode.name, methodNode.name, methodNode.desc, parentNode.getClassNode().name, fieldNode.name));
+                                }
+                            }
+                        }
+                    }
+                }
             }
         });
     }
