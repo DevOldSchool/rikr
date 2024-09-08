@@ -63,7 +63,6 @@ public class SearchPanel extends JPanel {
         add(scrollPane, BorderLayout.CENTER);
 
         defaultBackgroundColor = matchCaseButton.getBackground();
-
         matchCase = false;
         matchWord = false;
     }
@@ -109,6 +108,10 @@ public class SearchPanel extends JPanel {
         listModel.clear();
 
         String query = searchField.getText();
+        if (query.length() < 2) {
+            return;
+        }
+
         if (!matchCase) {
             query = query.toLowerCase();
         }
@@ -189,6 +192,68 @@ public class SearchPanel extends JPanel {
                                             classNode,
                                             "\"" + stringCst + "\"",
                                             "LDC \"" + stringCst + "\""));
+                                }
+
+                                if (ldcInsnNode.cst instanceof Integer intCst) {
+                                    if (!areEqualStrings(intCst.toString(), query)) {
+                                        continue;
+                                    }
+
+                                    listModel.addElement(new SearchResultItem(
+                                            intCst.toString(),
+                                            Images.getImage("instruction"),
+                                            classNode,
+                                            intCst.toString(),
+                                            "LDC " + intCst));
+                                }
+
+                                if (ldcInsnNode.cst instanceof Long longCst) {
+                                    if (!areEqualStrings(longCst.toString(), query)) {
+                                        continue;
+                                    }
+
+                                    listModel.addElement(new SearchResultItem(
+                                            longCst.toString(),
+                                            Images.getImage("instruction"),
+                                            classNode,
+                                            longCst.toString(),
+                                            "LDC " + longCst));
+                                }
+                            }
+
+                            if (abstractInsnNode instanceof TypeInsnNode typeInsnNode) {
+                                if (areEqualStrings(typeInsnNode.desc, query)) {
+                                    listModel.addElement(new SearchResultItem(
+                                            typeInsnNode.desc,
+                                            Images.getImage("instruction"),
+                                            classNode,
+                                            typeInsnNode.desc,
+                                            "NEW " + typeInsnNode.desc
+                                    ));
+                                }
+                            }
+
+                            if (abstractInsnNode instanceof FieldInsnNode fieldInsnNode) {
+                                if (areEqualStrings(fieldInsnNode.name, query)) {
+                                    listModel.addElement(new SearchResultItem(
+                                            fieldInsnNode.name,
+                                            Images.getImage("instruction"),
+                                            classNode,
+                                            fieldInsnNode.name,
+                                            "GETSTATIC " + fieldInsnNode.owner + "." + fieldInsnNode.name
+                                    ));
+                                }
+                            }
+
+                            if (abstractInsnNode instanceof MethodInsnNode methodInsnNode) {
+                                if (areEqualStrings(methodInsnNode.name, query)) {
+                                    listModel.addElement(new SearchResultItem(
+                                            methodInsnNode.name,
+                                            Images.getImage("instruction"),
+                                            classNode,
+                                            methodInsnNode.name,
+                                            "INVOKEINTERFACE " + methodInsnNode.owner + "." + methodInsnNode.name + " " + methodInsnNode.desc
+                                    ));
                                 }
                             }
                         }

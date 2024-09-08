@@ -3,6 +3,7 @@ package org.de.rikr.utilities;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldNode;
+import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
 
 import java.io.IOException;
@@ -134,5 +135,15 @@ public class ClassNodeUtil {
                 methodNode.invisibleAnnotations.clear();
             }
         }
+    }
+
+    public static MethodNode getMethodNode(ClassNode classNode, MethodInsnNode methodInsnNode) {
+        for (MethodNode methodNode : classNode.methods) {
+            if (methodInsnNode.name.equals(methodNode.name) && methodInsnNode.desc.equals(methodNode.desc)) {
+                return methodNode;
+            }
+        }
+
+        return null;
     }
 }

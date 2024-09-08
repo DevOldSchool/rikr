@@ -81,6 +81,7 @@ public class TreePopupMenu extends JPopupMenu {
                         add(findImplementors);
                     } else if (selectedNode instanceof MethodNodeMutableTreeNode) {
                         add(simulateMethod);
+                        add(findUsage);
                     } else if (selectedNode instanceof FieldNodeMutableTreeNode) {
                         add(findUsage);
                     }
@@ -318,7 +319,35 @@ public class TreePopupMenu extends JPopupMenu {
                         for (AbstractInsnNode abstractInsnNode : methodNode.instructions) {
                             if (abstractInsnNode instanceof FieldInsnNode fieldInsnNode) {
                                 if (fieldInsnNode.owner.equals(parentNode.getClassNode().name) && fieldInsnNode.name.equals(fieldNode.name)) {
-                                    controller.log(String.format("Found field usage in %s -> %s%s -> %s.%s", classNode.name, methodNode.name, methodNode.desc, parentNode.getClassNode().name, fieldNode.name));
+                                    controller.log(String.format("Found field usage in %s -> %s%s -> %s.%s",
+                                            classNode.name,
+                                            methodNode.name,
+                                            methodNode.desc,
+                                            parentNode.getClassNode().name,
+                                            fieldNode.name));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (selectedNode instanceof MethodNodeMutableTreeNode methodNodeMutableTreeNode) {
+                ClassNodeMutableTreeNode parentNode = (ClassNodeMutableTreeNode) methodNodeMutableTreeNode.getParent();
+                MethodNode parentMethodNode = methodNodeMutableTreeNode.getMethodNode();
+
+                for (ClassNode classNode : controller.getClasses(parentNode.getJarName())) {
+                    for (MethodNode methodNode : classNode.methods) {
+                        for (AbstractInsnNode abstractInsnNode : methodNode.instructions) {
+                            if (abstractInsnNode instanceof MethodInsnNode methodInsnNode) {
+                                if (methodInsnNode.owner.equals(parentNode.getClassNode().name) && methodInsnNode.name.equals(parentMethodNode.name)) {
+                                    controller.log(
+                                            String.format("Found method usage in %s -> %s%s -> %s.%s",
+                                                    classNode.name,
+                                                    methodNode.name,
+                                                    methodNode.desc,
+                                                    parentNode.getClassNode().name,
+                                                    parentMethodNode.name));
                                 }
                             }
                         }
