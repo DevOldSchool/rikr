@@ -98,6 +98,7 @@ public class SearchBar extends JPanel {
     }
 
     public void focus() {
+        searchField.selectAll();
         searchField.requestFocus();
     }
 

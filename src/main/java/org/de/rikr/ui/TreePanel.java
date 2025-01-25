@@ -11,21 +11,54 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreeNode;
 import javax.swing.tree.TreePath;
+import java.awt.*;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
 
-public class TreePanel extends JScrollPane {
+public class TreePanel extends JPanel {
     private final Rikr controller;
     private final JTree tree;
     private final TreePopupMenu popupMenu;
     private final DefaultTreeModel treeModel;
     private final TreeSelectionHandler treeSelectionHandler;
+    private final JTextField searchField;
+    private final JButton matchCaseButton;
+    private final JButton matchWordButton;
+    private boolean matchCase;
+    private boolean matchWord;
+    private final Color defaultBackgroundColor;
 
     public TreePanel(Rikr controller) {
         this.controller = controller;
+        setLayout(new BorderLayout());
         setBorder(null);
+
+        // Create the search bar
+        JPanel searchBarPanel = new JPanel(new BorderLayout());
+        searchField = new JTextField();
+        searchField.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        matchCaseButton = new JButton(Images.getImage("match-case"));
+        matchCaseButton.setToolTipText("Match Case");
+        matchCaseButton.setBorderPainted(false);
+        matchWordButton = new JButton(Images.getImage("match-word"));
+        matchWordButton.setToolTipText("Match Words");
+        matchWordButton.setBorderPainted(false);
+
+        // Create a panel for the buttons
+        JPanel buttonsPanel = new JPanel();
+        buttonsPanel.setBackground(Theme.BACKGROUND_COLOR);
+        buttonsPanel.setLayout(new BoxLayout(buttonsPanel, BoxLayout.X_AXIS));
+        buttonsPanel.add(matchCaseButton);
+        buttonsPanel.add(matchWordButton);
+
+        // Add components to the main panel
+        searchBarPanel.add(searchField, BorderLayout.CENTER);
+        searchBarPanel.add(buttonsPanel, BorderLayout.EAST);
 
         DefaultMutableTreeNode root = new DefaultMutableTreeNode("JAR Files");
         treeModel = new DefaultTreeModel(root);
@@ -39,10 +72,37 @@ public class TreePanel extends JScrollPane {
 
         popupMenu = new TreePopupMenu(controller, tree);
 
-        setViewportView(tree);
+        // Add components to the panel
+        JScrollPane scrollPane = new JScrollPane(tree);
+        scrollPane.setBorder(null);
+        add(searchBarPanel, BorderLayout.NORTH);
+        add(scrollPane, BorderLayout.CENTER);
+
+        defaultBackgroundColor = matchCaseButton.getBackground();
+        matchCase = false;
+        matchWord = false;
     }
 
     public void init() {
+        searchField.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyReleased(KeyEvent e) {
+                performSearch();
+            }
+        });
+
+        searchField.addActionListener(e -> performSearch());
+
+        matchCaseButton.addActionListener(e -> {
+            matchCase = !matchCase;
+            toggleButton(matchCaseButton, matchCase);
+        });
+
+        matchWordButton.addActionListener(e -> {
+            matchWord = !matchWord;
+            toggleButton(matchWordButton, matchWord);
+        });
+
         // Add a custom mouse listener to the JTree
         tree.addMouseListener(new MouseAdapter() {
             @Override
@@ -237,5 +297,64 @@ public class TreePanel extends JScrollPane {
         }
 
         controller.getUserInterface().getTreePanel().updateNode(selectedNode);
+    }
+
+    public void performSearch() {
+        String query = searchField.getText();
+
+        // Reset to default
+        if (query.isEmpty()) {
+            tree.clearSelection();
+            tree.setModel(treeModel);
+        }
+
+        if (query.length() < 2) {
+            return;
+        }
+
+        if (!matchCase) {
+            query = query.toLowerCase();
+        }
+
+        DefaultMutableTreeNode root = (DefaultMutableTreeNode) treeModel.getRoot();
+        Enumeration<?> e = root.breadthFirstEnumeration();
+
+        while (e.hasMoreElements()) {
+            DefaultMutableTreeNode node = (DefaultMutableTreeNode) e.nextElement();
+            if (areEqualStrings(node.getUserObject().toString(), query)) {
+                TreeNode[] pathToNode = node.getPath();
+                TreePath treePath = new TreePath(pathToNode);
+                tree.scrollPathToVisible(treePath);
+                tree.setSelectionPath(treePath);
+                break;
+            }
+        }
+    }
+
+    private void toggleButton(JButton button, boolean toggle) {
+        if (toggle) {
+            button.setBackground(Theme.SEARCH_BUTTON_SELECTED_COLOR);
+        } else {
+            button.setBackground(defaultBackgroundColor);
+        }
+
+        performSearch();
+    }
+
+    private boolean areEqualStrings(String first, String second) {
+        if (!matchCase) {
+            first = first.toLowerCase();
+            second = second.toLowerCase();
+        }
+
+        if (matchWord) {
+            return first.equals(second);
+        }
+
+        return first.contains(second);
+    }
+
+    public void select() {
+        searchField.grabFocus();
     }
 }
