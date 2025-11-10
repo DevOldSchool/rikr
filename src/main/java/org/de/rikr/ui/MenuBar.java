@@ -8,6 +8,7 @@ import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
 
 public class MenuBar extends JMenuBar {
+    private final JCheckBoxMenuItem splitAsmJavaItem;
     private final Rikr controller;
     private final JMenuItem groupBySuperclassItem;
     private final JMenuItem groupByInterfaceItem;
@@ -63,6 +64,10 @@ public class MenuBar extends JMenuBar {
         viewMenu.add(groupByInterfaceItem);
         viewMenu.add(removeGroupingItem);
 
+        viewMenu.addSeparator();
+        splitAsmJavaItem = new JCheckBoxMenuItem("Split ASM and Java");
+        viewMenu.add(splitAsmJavaItem);
+
         // Window menu
         JMenu windowMenu = new JMenu("Window");
         JMenuItem toggleLogItem = new JMenuItem("Toggle Log");
@@ -95,5 +100,9 @@ public class MenuBar extends JMenuBar {
         annotationItem.addActionListener(e -> {
             controller.getProcessor().setStripAnnotations(annotationItem.isSelected());
         });
+    }
+
+    public JCheckBoxMenuItem getSplitAsmJavaItem() {
+        return splitAsmJavaItem;
     }
 }

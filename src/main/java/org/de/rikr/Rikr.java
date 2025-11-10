@@ -40,32 +40,29 @@ public class Rikr {
 
     public void loadJarFiles(File[] jarFiles) {
         processor.processJarFiles(jarFiles);
-        userInterface.updateTree(processor.getJarClassesMap());
+        userInterface.updateTree(processor.getJarClassesView());
     }
 
     public void loadClassFiles(File[] classFiles) {
         processor.processClassFiles(classFiles);
-        userInterface.updateTree(processor.getJarClassesMap());
+        userInterface.updateTree(processor.getJarClassesView());
     }
 
     public Map<String, List<ClassNode>> getJarClassesMap() {
-        return processor.getJarClassesMap();
+        // Expose read-only view to prevent accidental external mutations
+        return processor.getJarClassesView();
     }
 
     public void removeJar(String jarName) {
-        processor.getJarClassesMap().remove(jarName);
+        processor.removeJar(jarName);
     }
 
     public void removeClass(String jarName, ClassNode classNode) {
-        List<ClassNode> classNodes = processor.getJarClassesMap().get(jarName);
-
-        if (classNodes != null) {
-            classNodes.remove(classNode);
-        }
+        processor.removeClass(jarName, classNode);
     }
 
     public List<ClassNode> getClasses(String jarName) {
-        return processor.getJarClassesMap().get(jarName);
+        return processor.getClasses(jarName);
     }
 
     public static void main(String[] args) {

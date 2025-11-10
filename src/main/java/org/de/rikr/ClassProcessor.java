@@ -2,6 +2,7 @@ package org.de.rikr;
 
 import org.de.rikr.behavioral.ClassComparator;
 import org.de.rikr.behavioral.MethodComparator;
+import org.de.rikr.decompiler.JetBrainsDecompilerService;
 import org.de.rikr.loader.ClassFileLoader;
 import org.de.rikr.loader.JarLoader;
 import org.objectweb.asm.tree.ClassNode;
@@ -21,6 +22,9 @@ public class ClassProcessor {
     private final MethodComparator methodComparator;
     private boolean stripAnnotations;
 
+    private final Map<String, Map<String, String>> decompiledByJar = new HashMap<>();
+    private final Map<String, String> decompiledByClass = new HashMap<>();
+
     public ClassProcessor(Logger logger) {
         this.logger = logger;
 
@@ -36,6 +40,9 @@ public class ClassProcessor {
                 Map<String, List<ClassNode>> singleJarClassesMap = readJarFile(file);
                 jarClassesMap.put(file.getName(), singleJarClassesMap.get(file.getName()));
                 logger.log("Loaded " + singleJarClassesMap.get(file.getName()).size() + " classes from " + file.getName());
+
+                // Kick off background full-jar decompilation and cache results
+                startBackgroundJarDecompile(file);
             } catch (IOException e) {
                 logger.log("Error processing jar file: " + file.getName());
             }
@@ -73,7 +80,7 @@ public class ClassProcessor {
                 implementingClasses.add(classNode);
             }
         }
-        
+
         return implementingClasses;
     }
 
@@ -83,8 +90,8 @@ public class ClassProcessor {
         for (ClassNode classNode : classes) {
             if (classNode.superName != null) {
                 superclassGroups
-                        .computeIfAbsent(classNode.superName, k -> new ArrayList<>())
-                        .add(classNode);
+                    .computeIfAbsent(classNode.superName, k -> new ArrayList<>())
+                    .add(classNode);
             }
         }
 
@@ -98,8 +105,8 @@ public class ClassProcessor {
             if (classNode.interfaces != null) {
                 for (String interfaceName : classNode.interfaces) {
                     interfaceGroups
-                            .computeIfAbsent(interfaceName, k -> new ArrayList<>())
-                            .add(classNode);
+                        .computeIfAbsent(interfaceName, k -> new ArrayList<>())
+                        .add(classNode);
                 }
             }
         }
@@ -132,8 +139,47 @@ public class ClassProcessor {
         return classLoader.readClass(file);
     }
 
-    public Map<String, List<ClassNode>> getJarClassesMap() {
-        return jarClassesMap;
+    /**
+     * Returns an unmodifiable view of the current jar->classes mapping.
+     * Both the map and the contained lists are unmodifiable.
+     */
+    public Map<String, List<ClassNode>> getJarClassesView() {
+        Map<String, List<ClassNode>> copy = new HashMap<>();
+        for (Map.Entry<String, List<ClassNode>> e : jarClassesMap.entrySet()) {
+            copy.put(e.getKey(), java.util.Collections.unmodifiableList(e.getValue()));
+        }
+        return java.util.Collections.unmodifiableMap(copy);
+    }
+
+    /**
+     * Removes an entire jar and all its classes from the store.
+     *
+     * @param jarName the jar key
+     * @return true if a mapping existed and was removed
+     */
+    public boolean removeJar(String jarName) {
+        return jarClassesMap.remove(jarName) != null;
+    }
+
+    /**
+     * Removes a single class from a given jar group if present.
+     *
+     * @param jarName   jar key
+     * @param classNode the class to remove
+     * @return true if removed
+     */
+    public boolean removeClass(String jarName, ClassNode classNode) {
+        List<ClassNode> list = jarClassesMap.get(jarName);
+        if (list == null) return false;
+        return list.remove(classNode);
+    }
+
+    /**
+     * Returns the mutable list of classes for a given jar name, or null.
+     * Prefer using getJarClassesView() for read-only iteration.
+     */
+    public List<ClassNode> getClasses(String jarName) {
+        return jarClassesMap.get(jarName);
     }
 
     public List<String> getNonStaticFieldDescriptions(ClassNode classNode) {
@@ -154,5 +200,45 @@ public class ClassProcessor {
 
     public void setStripAnnotations(boolean stripAnnotations) {
         this.stripAnnotations = stripAnnotations;
+    }
+
+    private void startBackgroundJarDecompile(File jarFile) {
+        String jarName = jarFile.getName();
+        if (decompiledByJar.containsKey(jarName)) {
+            return;
+        }
+
+        Thread thread = new Thread(() -> {
+            try {
+                logger.log("[Decompiler] Warming up sources for JAR: " + jarName);
+                JetBrainsDecompilerService jetBrainsDecompilerService = new JetBrainsDecompilerService(logger);
+                Map<String, String> sources = jetBrainsDecompilerService.decompileJarSources(jarFile);
+                cacheDecompiledSources(jarName, sources);
+                logger.log("[Decompiler] Warm-up complete for " + jarName + ", sources=" + sources.size());
+            } catch (Throwable ex) {
+                logger.log("[Decompiler] Warm-up failed for " + jarName + ": " + ex.getMessage());
+            }
+        }, "rikr-jar-decompiler-" + jarName);
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    private synchronized void cacheDecompiledSources(String jarName, Map<String, String> sources) {
+        if (sources == null || sources.isEmpty()) {
+            return;
+        }
+        decompiledByJar.put(jarName, sources);
+
+        for (Map.Entry<String, String> e : sources.entrySet()) {
+            decompiledByClass.putIfAbsent(e.getKey(), e.getValue());
+        }
+    }
+
+    public String getDecompiledSourceByClass(String internalName) {
+        if (internalName == null) {
+            return null;
+        }
+
+        return decompiledByClass.get(internalName);
     }
 }

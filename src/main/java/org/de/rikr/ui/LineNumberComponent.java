@@ -66,21 +66,25 @@ public class LineNumberComponent extends JComponent {
         g.fillRect(clip.x, clip.y, clip.width, clip.height);
 
         // Draw line highlight
-        Rectangle2D caretRectangle;
+        Rectangle2D caretRectangle = null;
         try {
             caretRectangle = textPane.modelToView2D(textPane.getCaretPosition());
         } catch (BadLocationException e) {
-            throw new RuntimeException(e);
+            // Ignore and skip highlight if caret position is invalid
         }
 
-        g.setColor(Theme.BACKGROUND_COLOR);
-        g.fillRect(0, (int) caretRectangle.getY(), this.getWidth(), (int) caretRectangle.getHeight() + lineHeightOffset);
+        if (caretRectangle != null) {
+            g.setColor(Theme.BACKGROUND_COLOR);
+            g.fillRect(0, (int) caretRectangle.getY(), this.getWidth(), (int) caretRectangle.getHeight() + lineHeightOffset);
+        }
 
         // Draw line numbers
         g.setFont(defaultFont);
 
         int startOffset = textPane.viewToModel2D(new Point(0, clip.y));
         int endOffset = textPane.viewToModel2D(new Point(0, clip.y + clip.height));
+        if (startOffset < 0) startOffset = 0;
+        if (endOffset < 0) endOffset = textPane.getDocument().getLength();
 
         Element root = textPane.getDocument().getDefaultRootElement();
         int startLine = root.getElementIndex(startOffset);
@@ -93,7 +97,7 @@ public class LineNumberComponent extends JComponent {
                 Rectangle2D elementRectangle = textPane.modelToView2D(root.getElement(i).getStartOffset());
 
                 if (elementRectangle != null) {
-                    if (caretRectangle.getY() == elementRectangle.getY()) {
+                    if (caretRectangle != null && caretRectangle.getY() == elementRectangle.getY()) {
                         g.setColor(Theme.CONTENT_HIGHLIGHT_TEXT_COLOR);
                     }
                     String lineNumber = String.valueOf(i + 1);

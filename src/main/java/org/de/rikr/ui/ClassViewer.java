@@ -25,7 +25,11 @@ public class ClassViewer {
     private final NavigationPanel navigationPanel;
     private final TreePanel treePanel;
     private final SearchBar searchBar;
-    private final ContentPanel contentPanel;
+    private final ContentPanel contentPanelLeft;
+    private final ContentPanel contentPanelRight;
+    private JSplitPane asmJavaSplitPane;
+    private boolean asmJavaSplitEnabled = false;
+    private ClassNode lastDisplayedClassNode;
     private final LogPanel logPanel;
     private final JPanel projectPanel;
     private final SearchPanel searchPanel;
@@ -59,7 +63,8 @@ public class ClassViewer {
 
         // Initialize panels
         treePanel = new TreePanel(controller);
-        contentPanel = new ContentPanel(controller);
+        contentPanelLeft = new ContentPanel(controller);
+        contentPanelRight = new ContentPanel(controller, true); // Java-only panel
         searchBar = new SearchBar(controller, e -> toggleSearchBarVisibility(false));
         logPanel = new LogPanel();
         projectPanel = new JPanel(new BorderLayout());
@@ -72,7 +77,7 @@ public class ClassViewer {
         rightPanel = new JPanel(new BorderLayout());
 
         rightPanel.add(searchBar, BorderLayout.NORTH);
-        contentSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, contentPanel, methodSimulatorPanel);
+        contentSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, contentPanelLeft, methodSimulatorPanel);
         contentSplitPane.setDividerLocation(700);
         contentSplitPane.setResizeWeight(0.80);
         rightPanel.add(contentSplitPane, BorderLayout.CENTER);
@@ -80,9 +85,9 @@ public class ClassViewer {
 
         // Create the navigation panel
         navigationPanel = new NavigationPanel(
-                controller,
-                e -> showProjectPanel(),
-                e -> showSearchPanel()
+            controller,
+            e -> showProjectPanel(),
+            e -> showSearchPanel()
         );
 
         // Create a split pane for the navigation panel and tree panel
@@ -125,14 +130,34 @@ public class ClassViewer {
 
         // Initialize menu bar
         menuBar = new MenuBar(
-                controller,
-                e -> openFileDialog(),
-                e -> toggleSearchBarVisibility(false),
-                e -> showProjectTab(),
-                e -> showGlobalSearchTab(),
-                e -> toggleLogVisibility(logPanel.isVisible())
+            controller,
+            e -> openFileDialog(),
+            e -> toggleSearchBarVisibility(false),
+            e -> showProjectTab(),
+            e -> showGlobalSearchTab(),
+            e -> toggleLogVisibility(logPanel.isVisible())
         );
         frame.setJMenuBar(menuBar);
+
+        // Wire split view toggle
+        menuBar.getSplitAsmJavaItem().addActionListener(e -> {
+            boolean selected = menuBar.getSplitAsmJavaItem().isSelected();
+            asmJavaSplitEnabled = selected;
+            if (selected) {
+                asmJavaSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, contentPanelLeft, contentPanelRight);
+                asmJavaSplitPane.setResizeWeight(0.5);
+                asmJavaSplitPane.setDividerSize(5);
+                contentSplitPane.setLeftComponent(asmJavaSplitPane);
+                if (lastDisplayedClassNode != null) {
+                    contentPanelRight.displayBytecode(lastDisplayedClassNode);
+                }
+            } else {
+                contentSplitPane.setLeftComponent(contentPanelLeft);
+                asmJavaSplitPane = null;
+            }
+            frame.revalidate();
+            frame.repaint();
+        });
 
         // Search toggle
         InputMap inputMap = frame.getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
@@ -149,7 +174,8 @@ public class ClassViewer {
     }
 
     public void init() {
-        contentPanel.init();
+        contentPanelLeft.init();
+        contentPanelRight.init();
         navigationPanel.init();
         treePanel.init();
         searchBar.init();
@@ -165,7 +191,7 @@ public class ClassViewer {
             frame.setVisible(true);
             searchBar.setVisible(false);
 
-            contentPanel.getContentPane().grabFocus();
+            contentPanelLeft.getContentPane().grabFocus();
         });
     }
 
@@ -174,11 +200,17 @@ public class ClassViewer {
     }
 
     public void displayBytecode(ClassNode classNode) {
-        contentPanel.displayBytecode(classNode);
+        lastDisplayedClassNode = classNode;
+
+        contentPanelLeft.displayBytecode(classNode);
+        if (asmJavaSplitEnabled) {
+            contentPanelRight.displayBytecode(classNode);
+        }
     }
 
     public void clearContent() {
-        contentPanel.clear();
+        contentPanelLeft.clear();
+        contentPanelRight.clear();
     }
 
     private void showProjectPanel() {
@@ -274,11 +306,11 @@ public class ClassViewer {
     }
 
     public ContentPanel getContentPanel() {
-        return contentPanel;
+        return contentPanelLeft;
     }
 
     public JTextPane getContentPane() {
-        return contentPanel.getContentPane();
+        return contentPanelLeft.getContentPane();
     }
 
     public TreePanel getTreePanel() {

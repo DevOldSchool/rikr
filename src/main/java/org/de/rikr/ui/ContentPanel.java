@@ -1,6 +1,7 @@
 package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
+import org.de.rikr.decompiler.JetBrainsDecompilerService;
 import org.de.rikr.ui.handler.RenameActionHandler;
 import org.de.rikr.ui.highlighter.LineHighlighter;
 import org.de.rikr.ui.highlighter.SyntaxHighlighter;
@@ -30,6 +31,7 @@ public class ContentPanel extends JScrollPane {
     private final StyledDocument document;
     private final Style style;
     private final SyntaxHighlighter syntaxHighlighter;
+    private final SyntaxHighlighter javaSyntaxHighlighter;
     private StringWriter stringWriter;
     private PrintWriter printWriter;
     private Textifier textifier;
@@ -37,9 +39,25 @@ public class ContentPanel extends JScrollPane {
 
     private final RenameActionHandler renameActionHandler;
     private final int[] originalCaretPosition = new int[1];
+    private LineNumberComponent lineNumberComponent;
+
+    private final JetBrainsDecompilerService decompilerService;
+    private final boolean javaOnlyMode;
+
+    // Java highlight request support (for split view ASM->Java mapping)
+    private String lastRequestedHighlightWord;
+    private java.util.List<String> lastRequestedHighlightWords;
+    private Object lastHighlightTag;
+    private final Highlighter.HighlightPainter javaHighlightPainter = new DefaultHighlighter.DefaultHighlightPainter(Theme.CONTENT_SELECTED_HIGHLIGHT_COLOR);
 
     public ContentPanel(Rikr controller) {
+        this(controller, false);
+    }
+
+    public ContentPanel(Rikr controller, boolean javaOnlyMode) {
         this.controller = controller;
+        this.decompilerService = new JetBrainsDecompilerService(controller::log);
+        this.javaOnlyMode = javaOnlyMode;
         setBorder(null);
 
         contentPane = new ScrollableTextPane();
@@ -51,6 +69,7 @@ public class ContentPanel extends JScrollPane {
         setViewportView(contentPane);
 
         syntaxHighlighter = new SyntaxHighlighter();
+        javaSyntaxHighlighter = new SyntaxHighlighter();
         new LineHighlighter(contentPane, Theme.BACKGROUND_COLOR);
         stringWriter = new StringWriter();
         printWriter = new PrintWriter(stringWriter);
@@ -71,7 +90,7 @@ public class ContentPanel extends JScrollPane {
         contentPane.setComponentPopupMenu(null);
 
         // Add line number component
-        LineNumberComponent lineNumberComponent = new LineNumberComponent(contentPane);
+        lineNumberComponent = new LineNumberComponent(contentPane);
         setRowHeaderView(lineNumberComponent);
     }
 
@@ -97,19 +116,68 @@ public class ContentPanel extends JScrollPane {
     }
 
     public void displayBytecode(ClassNode classNode) {
-        SwingUtilities.invokeLater(() -> {
-            clear();
-            document.setCharacterAttributes(0, document.getLength(), style, true);
-            contentPane.selectAll();
+        // Keep for backward compatibility; delegates to displayClass
+        displayClass(classNode);
+    }
 
-            // Get the classes bytecode in human-readable form
-            classNode.accept(traceClassVisitor);
-            printWriter.flush();
+    public void displayClass(ClassNode classNode) {
+        if (javaOnlyMode) {
+            // Render decompiled Java in this panel
+            SwingUtilities.invokeLater(() -> {
+                clear();
+                document.setCharacterAttributes(0, document.getLength(), style, true);
+                contentPane.selectAll();
 
-            // Highlight and set caret position
-            syntaxHighlighter.highlight(document, stringWriter.toString());
-            contentPane.setCaretPosition(0);
-        });
+                // Try cache first
+                String cached = controller.getProcessor() != null ? controller.getProcessor().getDecompiledSourceByClass(classNode.name) : null;
+                if (cached != null && !cached.isEmpty()) {
+                    javaSyntaxHighlighter.highlight(document, cached);
+                    contentPane.setCaretPosition(0);
+                } else {
+                    contentPane.setText("// Decompiling with JetBrains engine...\n");
+                    decompileInBackgroundJavaOnly(classNode);
+                }
+            });
+        } else {
+            // Render ASM
+            SwingUtilities.invokeLater(() -> {
+                clear();
+                document.setCharacterAttributes(0, document.getLength(), style, true);
+                contentPane.selectAll();
+
+                // Get the class bytecode in human-readable form
+                classNode.accept(traceClassVisitor);
+                printWriter.flush();
+
+                // Highlight and set caret position
+                syntaxHighlighter.highlight(document, stringWriter.toString());
+                contentPane.setCaretPosition(0);
+            });
+        }
+    }
+
+    private void decompileInBackgroundJavaOnly(ClassNode classNode) {
+        // Try cache first (pre-decompiled on jar load)
+        String cached = controller.getProcessor() != null ? controller.getProcessor().getDecompiledSourceByClass(classNode.name) : null;
+        if (cached != null && !cached.isEmpty()) {
+            SwingUtilities.invokeLater(() -> {
+                javaSyntaxHighlighter.highlight(document, cached);
+                contentPane.setCaretPosition(0);
+            });
+            return;
+        }
+
+        new Thread(() -> {
+            String src = decompilerService.decompile(classNode);
+            SwingUtilities.invokeLater(() -> {
+                if (src == null || src.isEmpty()) {
+                    contentPane.setText("// Failed to decompile using JetBrains decompiler.\n");
+                } else {
+                    javaSyntaxHighlighter.highlight(document, src);
+                    contentPane.setCaretPosition(0);
+                }
+            });
+        }, "rikr-decompiler-thread").start();
     }
 
     public void clear() {

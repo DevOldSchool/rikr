@@ -111,13 +111,30 @@ public class ClassNodeUtil {
     }
 
     public static void stripAnnotations(ClassNode classNode) {
+        // Class-level annotations
         if (classNode.visibleAnnotations != null) {
             classNode.visibleAnnotations.clear();
         }
         if (classNode.invisibleAnnotations != null) {
             classNode.invisibleAnnotations.clear();
         }
+        if (classNode.visibleTypeAnnotations != null) {
+            classNode.visibleTypeAnnotations.clear();
+        }
+        if (classNode.invisibleTypeAnnotations != null) {
+            classNode.invisibleTypeAnnotations.clear();
+        }
+        // Record components (Java 16+)
+        if (classNode.recordComponents != null) {
+            for (org.objectweb.asm.tree.RecordComponentNode rc : classNode.recordComponents) {
+                if (rc.visibleAnnotations != null) rc.visibleAnnotations.clear();
+                if (rc.invisibleAnnotations != null) rc.invisibleAnnotations.clear();
+                if (rc.visibleTypeAnnotations != null) rc.visibleTypeAnnotations.clear();
+                if (rc.invisibleTypeAnnotations != null) rc.invisibleTypeAnnotations.clear();
+            }
+        }
 
+        // Field-level annotations
         for (FieldNode fieldNode : classNode.fields) {
             if (fieldNode.visibleAnnotations != null) {
                 fieldNode.visibleAnnotations.clear();
@@ -125,8 +142,15 @@ public class ClassNodeUtil {
             if (fieldNode.invisibleAnnotations != null) {
                 fieldNode.invisibleAnnotations.clear();
             }
+            if (fieldNode.visibleTypeAnnotations != null) {
+                fieldNode.visibleTypeAnnotations.clear();
+            }
+            if (fieldNode.invisibleTypeAnnotations != null) {
+                fieldNode.invisibleTypeAnnotations.clear();
+            }
         }
 
+        // Method-level annotations
         for (MethodNode methodNode : classNode.methods) {
             if (methodNode.visibleAnnotations != null) {
                 methodNode.visibleAnnotations.clear();
@@ -134,6 +158,32 @@ public class ClassNodeUtil {
             if (methodNode.invisibleAnnotations != null) {
                 methodNode.invisibleAnnotations.clear();
             }
+            if (methodNode.visibleTypeAnnotations != null) {
+                methodNode.visibleTypeAnnotations.clear();
+            }
+            if (methodNode.invisibleTypeAnnotations != null) {
+                methodNode.invisibleTypeAnnotations.clear();
+            }
+            // Parameter annotations
+            if (methodNode.visibleParameterAnnotations != null) {
+                for (var arr : methodNode.visibleParameterAnnotations) {
+                    if (arr != null) arr.clear();
+                }
+            }
+            if (methodNode.invisibleParameterAnnotations != null) {
+                for (var arr : methodNode.invisibleParameterAnnotations) {
+                    if (arr != null) arr.clear();
+                }
+            }
+            // Local variable annotations (if present)
+            if (methodNode.visibleLocalVariableAnnotations != null) {
+                methodNode.visibleLocalVariableAnnotations.clear();
+            }
+            if (methodNode.invisibleLocalVariableAnnotations != null) {
+                methodNode.invisibleLocalVariableAnnotations.clear();
+            }
+            // Default value of annotation methods
+            methodNode.annotationDefault = null;
         }
     }
 
