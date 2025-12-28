@@ -355,6 +355,9 @@ public class TreePanel extends JPanel {
     }
 
     public void select() {
-        searchField.grabFocus();
+        int length = searchField.getText() != null ? searchField.getText().length() : 0;
+        searchField.setCaretPosition(length);
+        searchField.moveCaretPosition(length);
+        searchField.requestFocusInWindow();
     }
 }

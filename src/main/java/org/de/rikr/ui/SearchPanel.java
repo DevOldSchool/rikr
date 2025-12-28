@@ -11,6 +11,7 @@ import java.awt.*;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.lang.reflect.Modifier;
+import java.util.ArrayList;
 import java.util.List;
 
 public class SearchPanel extends JPanel {
@@ -23,6 +24,8 @@ public class SearchPanel extends JPanel {
     private boolean matchCase;
     private boolean matchWord;
     private final Color defaultBackgroundColor;
+    private static final int SEARCH_DEBOUNCE_MS = 250;
+    private Timer searchDebounceTimer;
 
     public SearchPanel(Rikr controller) {
         this.controller = controller;
@@ -69,14 +72,24 @@ public class SearchPanel extends JPanel {
     }
 
     public void init() {
+        searchDebounceTimer = new Timer(SEARCH_DEBOUNCE_MS, e -> performSearch());
+        searchDebounceTimer.setRepeats(false);
+
         searchField.addKeyListener(new KeyAdapter() {
             @Override
             public void keyReleased(KeyEvent e) {
-                performSearch();
+                int code = e.getKeyCode();
+                if (code == KeyEvent.VK_BACK_SPACE || code == KeyEvent.VK_DELETE) {
+                    if (searchField.getSelectionStart() != searchField.getSelectionEnd()) {
+                        int len = searchField.getText() != null ? searchField.getText().length() : 0;
+                        searchField.setCaretPosition(len);
+                    }
+                }
+                triggerSearchDebounced();
             }
         });
-
-        searchField.addActionListener(e -> performSearch());
+        
+        searchField.addActionListener(e -> triggerSearchImmediate());
 
         matchCaseButton.addActionListener(e -> {
             matchCase = !matchCase;
@@ -92,7 +105,7 @@ public class SearchPanel extends JPanel {
             if (!e.getValueIsAdjusting()) {
                 SearchResultItem selectedItem = resultsList.getSelectedValue();
 
-                if (selectedItem == null) {
+                if (selectedItem == null || !selectedItem.isSelectable() || selectedItem.getPattern() == null) {
                     return;
                 }
 
@@ -122,162 +135,172 @@ public class SearchPanel extends JPanel {
                 List<ClassNode> classes = controller.getJarClassesMap().get(jarName);
 
                 for (ClassNode classNode : classes) {
-                    if (areEqualStrings(classNode.name, query)) {
-                        Icon resultItemIcon;
-
-                        if (Modifier.isInterface(classNode.access)) {
-                            resultItemIcon = ClassNodeImages.getImage("interface");
-                        } else {
-                            resultItemIcon = ClassNodeImages.getImage("class");
-                        }
-
-                        listModel.addElement(new SearchResultItem(
-                                classNode.name,
-                                resultItemIcon,
-                                classNode,
-                                classNode.name,
-                                ClassNodeUtil.getPattern(classNode, null, null)));
-                    }
+                    List<SearchResultItem> children = new ArrayList<>();
+                    boolean classNameMatch = areEqualStrings(classNode.name, query);
 
                     // Search interfaces implemented by the class
                     for (String interfaceName : classNode.interfaces) {
                         if (areEqualStrings(interfaceName, query)) {
-                            listModel.addElement(new SearchResultItem(
-                                    interfaceName,
-                                    ClassNodeImages.getImage("interface"),
-                                    classNode,
-                                    classNode.name,
-                                    ClassNodeUtil.getPattern(classNode, null, null)));
+                            children.add(new SearchResultItem(
+                                interfaceName,
+                                ClassNodeImages.getImage("interface"),
+                                classNode,
+                                classNode.name,
+                                ClassNodeUtil.getPattern(classNode, null, null),
+                                1
+                            ));
                         }
                     }
 
                     // Search class-level annotations
-                    addAnnotationMatchesForClass(classNode, query);
+                    addAnnotationMatchesForClass(classNode, query, children);
 
                     // Search fields and their annotations
                     for (FieldNode fieldNode : classNode.fields) {
                         if (areEqualStrings(fieldNode.name, query)) {
-                            listModel.addElement(new SearchResultItem(
-                                    fieldNode.name,
-                                    ClassNodeImages.getFieldNodeImage(fieldNode),
-                                    classNode,
-                                    fieldNode.name,
-                                    ClassNodeUtil.getFieldNodePattern(fieldNode)));
+                            children.add(new SearchResultItem(
+                                fieldNode.name,
+                                ClassNodeImages.getFieldNodeImage(fieldNode),
+                                classNode,
+                                fieldNode.name,
+                                ClassNodeUtil.getFieldNodePattern(fieldNode),
+                                1));
                         }
 
                         if (areEqualStrings(fieldNode.desc, query)) {
-                            listModel.addElement(new SearchResultItem(
-                                    fieldNode.desc,
-                                    ClassNodeImages.getFieldNodeImage(fieldNode),
-                                    classNode,
-                                    fieldNode.desc,
-                                    ClassNodeUtil.getFieldNodePattern(fieldNode)));
+                            children.add(new SearchResultItem(
+                                fieldNode.desc,
+                                ClassNodeImages.getFieldNodeImage(fieldNode),
+                                classNode,
+                                fieldNode.desc,
+                                ClassNodeUtil.getFieldNodePattern(fieldNode),
+                                1));
                         }
 
-                        addAnnotationMatchesForField(classNode, fieldNode, query);
+                        addAnnotationMatchesForField(classNode, fieldNode, query, children);
                     }
 
                     // Search methods, descriptors, instructions, and method-level annotations
                     for (MethodNode methodNode : classNode.methods) {
-                        if (areEqualStrings(methodNode.name, query)) {
-                            listModel.addElement(new SearchResultItem(
-                                    methodNode.name,
-                                    ClassNodeImages.getMethodNodeImage(methodNode),
-                                    classNode,
-                                    methodNode.name,
-                                    ClassNodeUtil.getMethodNodePattern(methodNode)
-                            ));
-                        }
+                        boolean methodNameMatch = areEqualStrings(methodNode.name, query);
+                        boolean methodDescMatch = areEqualStrings(methodNode.desc, query);
 
-                        if (areEqualStrings(methodNode.desc, query)) {
-                            listModel.addElement(new SearchResultItem(
-                                    methodNode.desc,
-                                    ClassNodeImages.getMethodNodeImage(methodNode),
-                                    classNode,
-                                    methodNode.name,
-                                    ClassNodeUtil.getMethodNodePattern(methodNode)
-                            ));
-                        }
-
-                        addAnnotationMatchesForMethod(classNode, methodNode, query);
+                        // Collect instruction matches per method (to be nested under the method)
+                        List<SearchResultItem> instructionChildren = new ArrayList<>();
 
                         for (AbstractInsnNode abstractInsnNode : methodNode.instructions) {
                             if (abstractInsnNode instanceof LdcInsnNode ldcInsnNode) {
                                 if (ldcInsnNode.cst instanceof String stringCst) {
-                                    if (!areEqualStrings(stringCst, query)) {
-                                        continue;
-                                    }
-
-                                    listModel.addElement(new SearchResultItem(
+                                    if (areEqualStrings(stringCst, query)) {
+                                        instructionChildren.add(new SearchResultItem(
                                             stringCst,
                                             Images.getImage("instruction"),
                                             classNode,
                                             "\"" + stringCst + "\"",
-                                            "LDC \"" + stringCst + "\""));
-                                }
-
-                                if (ldcInsnNode.cst instanceof Integer intCst) {
-                                    if (!areEqualStrings(intCst.toString(), query)) {
-                                        continue;
+                                            "LDC \"" + stringCst + "\"",
+                                            2));
                                     }
-
-                                    listModel.addElement(new SearchResultItem(
+                                } else if (ldcInsnNode.cst instanceof Integer intCst) {
+                                    if (areEqualStrings(intCst.toString(), query)) {
+                                        instructionChildren.add(new SearchResultItem(
                                             intCst.toString(),
                                             Images.getImage("instruction"),
                                             classNode,
                                             intCst.toString(),
-                                            "LDC " + intCst));
-                                }
-
-                                if (ldcInsnNode.cst instanceof Long longCst) {
-                                    if (!areEqualStrings(longCst.toString(), query)) {
-                                        continue;
+                                            "LDC " + intCst,
+                                            2));
                                     }
-
-                                    listModel.addElement(new SearchResultItem(
+                                } else if (ldcInsnNode.cst instanceof Long longCst) {
+                                    if (areEqualStrings(longCst.toString(), query)) {
+                                        instructionChildren.add(new SearchResultItem(
                                             longCst.toString(),
                                             Images.getImage("instruction"),
                                             classNode,
                                             longCst.toString(),
-                                            "LDC " + longCst));
+                                            "LDC " + longCst,
+                                            2));
+                                    }
                                 }
                             }
 
                             if (abstractInsnNode instanceof TypeInsnNode typeInsnNode) {
                                 if (areEqualStrings(typeInsnNode.desc, query)) {
-                                    listModel.addElement(new SearchResultItem(
-                                            typeInsnNode.desc,
-                                            Images.getImage("instruction"),
-                                            classNode,
-                                            typeInsnNode.desc,
-                                            "NEW " + typeInsnNode.desc
+                                    instructionChildren.add(new SearchResultItem(
+                                        typeInsnNode.desc,
+                                        Images.getImage("instruction"),
+                                        classNode,
+                                        typeInsnNode.desc,
+                                        "NEW " + typeInsnNode.desc,
+                                        2
                                     ));
                                 }
                             }
 
                             if (abstractInsnNode instanceof FieldInsnNode fieldInsnNode) {
                                 if (areEqualStrings(fieldInsnNode.name, query)) {
-                                    listModel.addElement(new SearchResultItem(
-                                            fieldInsnNode.name,
-                                            Images.getImage("instruction"),
-                                            classNode,
-                                            fieldInsnNode.name,
-                                            "GETSTATIC " + fieldInsnNode.owner + "." + fieldInsnNode.name
+                                    instructionChildren.add(new SearchResultItem(
+                                        fieldInsnNode.name,
+                                        Images.getImage("instruction"),
+                                        classNode,
+                                        fieldInsnNode.name,
+                                        "GETSTATIC " + fieldInsnNode.owner + "." + fieldInsnNode.name,
+                                        2
                                     ));
                                 }
                             }
 
                             if (abstractInsnNode instanceof MethodInsnNode methodInsnNode) {
                                 if (areEqualStrings(methodInsnNode.name, query)) {
-                                    listModel.addElement(new SearchResultItem(
-                                            methodInsnNode.name,
-                                            Images.getImage("instruction"),
-                                            classNode,
-                                            methodInsnNode.name,
-                                            "INVOKEINTERFACE " + methodInsnNode.owner + "." + methodInsnNode.name + " " + methodInsnNode.desc
+                                    instructionChildren.add(new SearchResultItem(
+                                        methodInsnNode.name,
+                                        Images.getImage("instruction"),
+                                        classNode,
+                                        methodInsnNode.name,
+                                        "INVOKEINTERFACE " + methodInsnNode.owner + "." + methodInsnNode.name + " " + methodInsnNode.desc,
+                                        2
                                     ));
                                 }
                             }
+                        }
+
+                        // Method-level annotations (stay at indent 1)
+                        addAnnotationMatchesForMethod(classNode, methodNode, query, children);
+
+                        // If method name or desc matches, or there are any instruction matches, add one method row
+                        if (methodNameMatch || methodDescMatch || !instructionChildren.isEmpty()) {
+                            children.add(new SearchResultItem(
+                                methodNode.name,
+                                ClassNodeImages.getMethodNodeImage(methodNode),
+                                classNode,
+                                methodNode.name,
+                                ClassNodeUtil.getMethodNodePattern(methodNode),
+                                1
+                            ));
+
+                            // Append instruction children under the method row
+                            for (SearchResultItem instr : instructionChildren) {
+                                children.add(instr);
+                            }
+                        }
+                    }
+
+                    if (!children.isEmpty() || classNameMatch) {
+                        // Add class header first (now clickable to navigate to the class)
+                        Icon headerIcon = Modifier.isInterface(classNode.access)
+                            ? ClassNodeImages.getImage("interface")
+                            : ClassNodeImages.getImage("class");
+                        listModel.addElement(new SearchResultItem(
+                            classNode.name,
+                            headerIcon,
+                            classNode,
+                            classNode.name,
+                            ClassNodeUtil.getPattern(classNode, null, null),
+                            0,
+                            true
+                        ));
+                        // Add children
+                        for (SearchResultItem child : children) {
+                            listModel.addElement(child);
                         }
                     }
                 }
@@ -292,51 +315,68 @@ public class SearchPanel extends JPanel {
             button.setBackground(defaultBackgroundColor);
         }
 
+        // Use debounce to avoid lag when toggling options rapidly
+        triggerSearchDebounced();
+    }
+
+    private void triggerSearchDebounced() {
+        if (searchDebounceTimer == null) {
+            // init() not called yet; fall back to immediate search
+            performSearch();
+            return;
+        }
+        searchDebounceTimer.restart();
+    }
+
+    private void triggerSearchImmediate() {
+        if (searchDebounceTimer != null) {
+            searchDebounceTimer.stop();
+        }
         performSearch();
     }
 
     // ----- Annotation search helpers -----
-    private void addAnnotationMatchesForClass(ClassNode classNode, String query) {
+    private void addAnnotationMatchesForClass(ClassNode classNode, String query, List<SearchResultItem> acc) {
         Icon icon = Modifier.isInterface(classNode.access) ? ClassNodeImages.getImage("interface") : ClassNodeImages.getImage("class");
         if (classNode.visibleAnnotations != null) {
             for (AnnotationNode an : classNode.visibleAnnotations) {
-                addAnnotationResultIfMatch(icon, classNode, null, null, an, query);
+                addAnnotationResultIfMatch(icon, classNode, null, null, an, query, acc);
             }
         }
         if (classNode.invisibleAnnotations != null) {
             for (AnnotationNode an : classNode.invisibleAnnotations) {
-                addAnnotationResultIfMatch(icon, classNode, null, null, an, query);
+                addAnnotationResultIfMatch(icon, classNode, null, null, an, query, acc);
             }
         }
     }
 
-    private void addAnnotationMatchesForField(ClassNode owner, FieldNode fieldNode, String query) {
+    private void addAnnotationMatchesForField(ClassNode owner, FieldNode fieldNode, String query, List<SearchResultItem> acc) {
         if (fieldNode.visibleAnnotations != null) {
             for (AnnotationNode an : fieldNode.visibleAnnotations) {
-                addAnnotationResultIfMatch(ClassNodeImages.getFieldNodeImage(fieldNode), owner, fieldNode, null, an, query);
+                addAnnotationResultIfMatch(ClassNodeImages.getFieldNodeImage(fieldNode), owner, fieldNode, null, an, query, acc);
             }
         }
         if (fieldNode.invisibleAnnotations != null) {
             for (AnnotationNode an : fieldNode.invisibleAnnotations) {
-                addAnnotationResultIfMatch(ClassNodeImages.getFieldNodeImage(fieldNode), owner, fieldNode, null, an, query);
+                addAnnotationResultIfMatch(ClassNodeImages.getFieldNodeImage(fieldNode), owner, fieldNode, null, an, query, acc);
             }
         }
     }
 
-    private void addAnnotationMatchesForMethod(ClassNode owner, MethodNode methodNode, String query) {
+    private void addAnnotationMatchesForMethod(ClassNode owner, MethodNode methodNode, String query, List<SearchResultItem> acc) {
         if (methodNode.visibleAnnotations != null) {
             for (AnnotationNode an : methodNode.visibleAnnotations) {
-                addAnnotationResultIfMatch(ClassNodeImages.getMethodNodeImage(methodNode), owner, null, methodNode, an, query);
+                addAnnotationResultIfMatch(ClassNodeImages.getMethodNodeImage(methodNode), owner, null, methodNode, an, query, acc);
             }
         }
         if (methodNode.invisibleAnnotations != null) {
             for (AnnotationNode an : methodNode.invisibleAnnotations) {
-                addAnnotationResultIfMatch(ClassNodeImages.getMethodNodeImage(methodNode), owner, null, methodNode, an, query);
+                addAnnotationResultIfMatch(ClassNodeImages.getMethodNodeImage(methodNode), owner, null, methodNode, an, query, acc);
             }
         }
     }
 
-    private void addAnnotationResultIfMatch(Icon icon, ClassNode classNode, FieldNode fieldNode, MethodNode methodNode, AnnotationNode an, String query) {
+    private void addAnnotationResultIfMatch(Icon icon, ClassNode classNode, FieldNode fieldNode, MethodNode methodNode, AnnotationNode an, String query, List<SearchResultItem> acc) {
         String desc = an.desc != null ? an.desc : "";
         String simple = getAnnotationSimpleName(desc);
         String withAt = "@" + simple;
@@ -350,12 +390,12 @@ public class SearchPanel extends JPanel {
         boolean valuesMatch = annotationElementsMatch(an, query);
 
         if (areEqualStrings(desc, query)
-                || areEqualStrings(simple, query)
-                || areEqualStrings(withAt, query)
-                || (fqcn != null && areEqualStrings(fqcn, query))
-                || (fullDescSignature != null && areEqualStrings(fullDescSignature, query))
-                || (fullFqcnSignature != null && areEqualStrings(fullFqcnSignature, query))
-                || valuesMatch) {
+            || areEqualStrings(simple, query)
+            || areEqualStrings(withAt, query)
+            || (fqcn != null && areEqualStrings(fqcn, query))
+            || (fullDescSignature != null && areEqualStrings(fullDescSignature, query))
+            || (fullFqcnSignature != null && areEqualStrings(fullFqcnSignature, query))
+            || valuesMatch) {
             String text = withAt;
             String name;
             String pattern;
@@ -370,7 +410,7 @@ public class SearchPanel extends JPanel {
                 pattern = ClassNodeUtil.getPattern(classNode, null, null);
             }
 
-            listModel.addElement(new SearchResultItem(text, icon, classNode, name, pattern));
+            acc.add(new SearchResultItem(text, icon, classNode, name, pattern, 1));
         }
     }
 
@@ -478,6 +518,9 @@ public class SearchPanel extends JPanel {
     }
 
     public void select() {
-        searchField.grabFocus();
+        int length = searchField.getText() != null ? searchField.getText().length() : 0;
+        searchField.setCaretPosition(length);
+        searchField.moveCaretPosition(length);
+        searchField.requestFocusInWindow();
     }
 }

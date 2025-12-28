@@ -194,7 +194,8 @@ public class ClassViewer {
         SwingUtilities.invokeLater(() -> {
             toggleLogVisibility(logPanel.isVisible());
             toggleMethodSimulatorVisibility(methodSimulatorPanel.isVisible());
-
+            
+            frame.setLocationRelativeTo(null);
             frame.setVisible(true);
             searchBar.setVisible(false);
 

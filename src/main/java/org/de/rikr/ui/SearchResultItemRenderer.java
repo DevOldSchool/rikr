@@ -8,9 +8,11 @@ import java.awt.*;
 public class SearchResultItemRenderer extends JLabel implements ListCellRenderer<SearchResultItem> {
     @Override
     public Component getListCellRendererComponent(JList<? extends SearchResultItem> list, SearchResultItem value, int index, boolean isSelected, boolean cellHasFocus) {
-        String text = "<html>" + value.getText() + " <font color='gray'>" + value.getClassNode().name + "</font></html>";
+        int indent = Math.max(0, value.getIndentLevel());
+        setBorder(BorderFactory.createEmptyBorder(0, indent * 16, 0, 0));
 
-        setText(text);
+        String html = "<html>" + value.getText() + " <font color='gray'>" + value.getClassNode().name + "</font></html>";
+        setText(html);
         setIcon(value.getIcon());
 
         if (isSelected) {

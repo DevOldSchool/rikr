@@ -98,8 +98,10 @@ public class SearchBar extends JPanel {
     }
 
     public void focus() {
-        searchField.selectAll();
-        searchField.requestFocus();
+        int length = searchField.getText() != null ? searchField.getText().length() : 0;
+        searchField.setCaretPosition(length);
+        searchField.moveCaretPosition(length);
+        searchField.requestFocusInWindow();
     }
 
     public void search() {
