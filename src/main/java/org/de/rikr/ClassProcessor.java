@@ -5,15 +5,19 @@ import org.de.rikr.behavioral.MethodComparator;
 import org.de.rikr.decompiler.JetBrainsDecompilerService;
 import org.de.rikr.loader.ClassFileLoader;
 import org.de.rikr.loader.JarLoader;
+import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.MethodNode;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.util.*;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
+import java.util.jar.JarOutputStream;
 
 public class ClassProcessor {
     private final Logger logger;
@@ -22,6 +26,7 @@ public class ClassProcessor {
     private final MethodComparator methodComparator;
     private boolean stripAnnotations;
 
+    private final Map<String, File> originalJarPaths = new HashMap<>();
     private final Map<String, Map<String, String>> decompiledByJar = new HashMap<>();
     private final Map<String, String> decompiledByClass = new HashMap<>();
 
@@ -39,6 +44,7 @@ public class ClassProcessor {
             try {
                 Map<String, List<ClassNode>> singleJarClassesMap = readJarFile(file);
                 jarClassesMap.put(file.getName(), singleJarClassesMap.get(file.getName()));
+                originalJarPaths.put(file.getName(), file.getAbsoluteFile());
                 logger.log("Loaded " + singleJarClassesMap.get(file.getName()).size() + " classes from " + file.getName());
 
                 // Kick off background full-jar decompilation and cache results
@@ -131,11 +137,13 @@ public class ClassProcessor {
 
     private Map<String, List<ClassNode>> readJarFile(File file) throws IOException {
         JarLoader jarLoader = new JarLoader(stripAnnotations);
+
         return jarLoader.readClasses(file);
     }
 
     private ClassNode readClassFile(File file) throws IOException {
         ClassFileLoader classLoader = new ClassFileLoader(stripAnnotations);
+
         return classLoader.readClass(file);
     }
 
@@ -145,9 +153,10 @@ public class ClassProcessor {
      */
     public Map<String, List<ClassNode>> getJarClassesView() {
         Map<String, List<ClassNode>> copy = new HashMap<>();
-        for (Map.Entry<String, List<ClassNode>> e : jarClassesMap.entrySet()) {
-            copy.put(e.getKey(), java.util.Collections.unmodifiableList(e.getValue()));
+        for (Map.Entry<String, List<ClassNode>> entry : jarClassesMap.entrySet()) {
+            copy.put(entry.getKey(), java.util.Collections.unmodifiableList(entry.getValue()));
         }
+
         return java.util.Collections.unmodifiableMap(copy);
     }
 
@@ -170,7 +179,10 @@ public class ClassProcessor {
      */
     public boolean removeClass(String jarName, ClassNode classNode) {
         List<ClassNode> list = jarClassesMap.get(jarName);
-        if (list == null) return false;
+        if (list == null) {
+            return false;
+        }
+
         return list.remove(classNode);
     }
 
@@ -200,6 +212,150 @@ public class ClassProcessor {
 
     public void setStripAnnotations(boolean stripAnnotations) {
         this.stripAnnotations = stripAnnotations;
+    }
+
+    public byte[] toBytes(ClassNode classNode) {
+        ClassWriter classWriter = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        classNode.accept(classWriter);
+
+        return classWriter.toByteArray();
+    }
+
+    public void saveClassToFile(ClassNode classNode, File dest) throws IOException {
+        if (dest == null) {
+            throw new IllegalArgumentException("dest is null");
+        }
+
+        File parent = dest.getParentFile();
+        if (parent != null && !parent.exists() && !parent.mkdirs()) {
+            throw new IOException("Failed to create directories: " + parent);
+        }
+
+        try (FileOutputStream fos = new FileOutputStream(dest)) {
+            fos.write(toBytes(classNode));
+        }
+    }
+
+    public void exportJarGroupToJar(String jarName, File destJar) throws IOException {
+        List<ClassNode> list = jarClassesMap.get(jarName);
+        if (list == null) {
+            throw new IOException("Unknown jar group: " + jarName);
+        }
+
+        saveToJarInternal(destJar, list);
+    }
+
+    public boolean overwriteOriginalJar(String jarName) throws IOException {
+        File original = originalJarPaths.get(jarName);
+        if (original == null) {
+            return false;
+        }
+
+        List<ClassNode> list = jarClassesMap.get(jarName);
+        if (list == null) {
+            return false;
+        }
+
+        // Prepare replacement map
+        Map<String, byte[]> replacements = new HashMap<>();
+        for (ClassNode classNode : list) {
+            replacements.put(classNode.name + ".class", toBytes(classNode));
+        }
+
+        File backup = new File(original.getParentFile(), original.getName() + ".bak");
+        File temp = new File(original.getParentFile(), original.getName() + ".rikr.tmp");
+
+        // Write temp jar by copying entries and replacing class bytes
+        try (JarFile jarFile = new JarFile(original); JarOutputStream jarOutputStream = new JarOutputStream(new FileOutputStream(temp))) {
+            byte[] buffer = new byte[8192];
+            Set<String> written = new HashSet<>();
+            Set<String> targetClassEntries = new HashSet<>();
+
+            for (ClassNode classNode : list) {
+                targetClassEntries.add(classNode.name + ".class");
+            }
+
+            Enumeration<JarEntry> entries = jarFile.entries();
+            while (entries.hasMoreElements()) {
+                JarEntry entry = entries.nextElement();
+                String name = entry.getName();
+
+                // If this is a class entry that is no longer present (e.g., due to rename), skip copying it
+                if (name.endsWith(".class") && !targetClassEntries.contains(name) && !replacements.containsKey(name)) {
+                    continue;
+                }
+
+                byte[] replacement = replacements.get(name);
+                JarEntry newEntry = new JarEntry(name);
+                jarOutputStream.putNextEntry(newEntry);
+
+                if (replacement != null) {
+                    jarOutputStream.write(replacement);
+                    written.add(name);
+                } else {
+                    try (InputStream inputStream = jarFile.getInputStream(entry)) {
+                        int read;
+                        while ((read = inputStream.read(buffer)) != -1) {
+                            jarOutputStream.write(buffer, 0, read);
+                        }
+                    }
+                }
+
+                jarOutputStream.closeEntry();
+            }
+
+            // Add any new classes not present originally
+            for (Map.Entry<String, byte[]> entry : replacements.entrySet()) {
+                if (!written.contains(entry.getKey())) {
+                    JarEntry newEntry = new JarEntry(entry.getKey());
+                    jarOutputStream.putNextEntry(newEntry);
+                    jarOutputStream.write(entry.getValue());
+                    jarOutputStream.closeEntry();
+                }
+            }
+        }
+
+        if (backup.exists()) {
+            Files.delete(backup.toPath());
+        }
+
+        Files.move(original.toPath(), backup.toPath());
+        Files.move(temp.toPath(), original.toPath());
+        logger.log("Overwrote JAR: " + original.getAbsolutePath() + " (backup at " + backup.getName() + ")");
+
+        return true;
+    }
+
+    private void saveToJarInternal(File destJar, List<ClassNode> classes) throws IOException {
+        if (destJar == null) {
+            throw new IllegalArgumentException("destJar is null");
+        }
+
+        File parent = destJar.getParentFile();
+        if (parent != null && !parent.exists() && !parent.mkdirs()) {
+            throw new IOException("Failed to create directories: " + parent);
+        }
+
+        Set<String> seen = new HashSet<>();
+        try (JarOutputStream jarOutputStream = new JarOutputStream(new FileOutputStream(destJar))) {
+            for (ClassNode classNode : classes) {
+                String name = classNode.name + ".class";
+                if (!seen.add(name)) {
+                    continue;
+                }
+
+                JarEntry entry = new JarEntry(name);
+                jarOutputStream.putNextEntry(entry);
+                jarOutputStream.write(toBytes(classNode));
+                jarOutputStream.closeEntry();
+            }
+        }
+
+        logger.log("Saved " + seen.size() + " classes to JAR: " + destJar.getAbsolutePath());
+    }
+
+    public File getOriginalJarFile(String jarName) {
+        return originalJarPaths.get(jarName);
     }
 
     private void startBackgroundJarDecompile(File jarFile) {

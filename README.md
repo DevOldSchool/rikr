@@ -8,8 +8,8 @@ The following items are listed in no particular order and are here as a todo lis
 
 #### Saving
 
-- Save your project.
-- Save changes to class files in Jar.
+- ~~Save your project.~~
+- ~~Save changes to class files in Jar.~~
 
 #### User interface to step through instructions.
 

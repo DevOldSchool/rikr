@@ -15,7 +15,17 @@ public class MenuBar extends JMenuBar {
     private final JMenuItem removeGroupingItem;
     private final JCheckBoxMenuItem annotationItem;
 
-    public MenuBar(Rikr controller, ActionListener openFileAction, ActionListener showSearchAction, ActionListener showProjectAction, ActionListener showGlobalSearchAction, ActionListener toggleLogAction) {
+    public MenuBar(
+        Rikr controller,
+        ActionListener openFileAction,
+        ActionListener showSearchAction,
+        ActionListener showProjectAction,
+        ActionListener showGlobalSearchAction,
+        ActionListener toggleLogAction,
+        ActionListener saveSelectedClassAction,
+        ActionListener saveSelectedJarAction,
+        ActionListener overwriteOriginalJarAction
+    ) {
         this.controller = controller;
 
         // File menu
@@ -24,6 +34,24 @@ public class MenuBar extends JMenuBar {
         openFileItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()));
         openFileItem.addActionListener(openFileAction);
         fileMenu.add(openFileItem);
+        fileMenu.addSeparator();
+
+        JMenuItem saveSelectedClassItem = new JMenuItem("Save Selected Class");
+        saveSelectedClassItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx() | KeyEvent.CTRL_DOWN_MASK));
+        saveSelectedClassItem.addActionListener(saveSelectedClassAction);
+
+        JMenuItem saveSelectedJarItem = new JMenuItem("Save Selected JAR");
+        saveSelectedJarItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx() | KeyEvent.ALT_DOWN_MASK));
+        saveSelectedJarItem.addActionListener(saveSelectedJarAction);
+
+        JMenuItem overwriteOriginalJarItem = new JMenuItem("Overwrite Original JAR");
+        overwriteOriginalJarItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()));
+        overwriteOriginalJarItem.addActionListener(overwriteOriginalJarAction);
+
+        fileMenu.add(saveSelectedClassItem);
+        fileMenu.add(saveSelectedJarItem);
+        fileMenu.addSeparator();
+        fileMenu.add(overwriteOriginalJarItem);
 
         // Edit menu
         JMenu editMenu = new JMenu("Edit");
@@ -33,7 +61,7 @@ public class MenuBar extends JMenuBar {
         editMenu.add(searchItem);
 
         annotationItem = new JCheckBoxMenuItem("Strip annotations");
-        annotationItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()));
+        annotationItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx() | KeyEvent.SHIFT_DOWN_MASK));
         annotationItem.addActionListener(showSearchAction);
         editMenu.add(annotationItem);
 

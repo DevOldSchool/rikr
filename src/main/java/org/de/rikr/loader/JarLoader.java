@@ -30,7 +30,8 @@ public class JarLoader {
                     String jarName = jarFile.getName();
                     ClassNode classNode = new ClassNode();
                     ClassReader classReader = new ClassReader(jar.getInputStream(entry));
-                    classReader.accept(classNode, ClassReader.SKIP_FRAMES);
+                    // Preserve existing frames from the class file to avoid needing to recompute them later
+                    classReader.accept(classNode, 0);
 
                     if (stripAnnotations) {
                         ClassNodeUtil.stripAnnotations(classNode);
