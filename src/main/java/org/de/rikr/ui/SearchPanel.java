@@ -3,6 +3,7 @@ package org.de.rikr.ui;
 import org.de.rikr.Rikr;
 import org.de.rikr.ui.model.SearchResultItem;
 import org.de.rikr.utilities.ClassNodeUtil;
+import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.*;
 
 import javax.swing.*;
@@ -138,6 +139,22 @@ public class SearchPanel extends JPanel {
                                 ClassNodeUtil.getPattern(classNode, null, null)));
                     }
 
+                    // Search interfaces implemented by the class
+                    for (String interfaceName : classNode.interfaces) {
+                        if (areEqualStrings(interfaceName, query)) {
+                            listModel.addElement(new SearchResultItem(
+                                    interfaceName,
+                                    ClassNodeImages.getImage("interface"),
+                                    classNode,
+                                    classNode.name,
+                                    ClassNodeUtil.getPattern(classNode, null, null)));
+                        }
+                    }
+
+                    // Search class-level annotations
+                    addAnnotationMatchesForClass(classNode, query);
+
+                    // Search fields and their annotations
                     for (FieldNode fieldNode : classNode.fields) {
                         if (areEqualStrings(fieldNode.name, query)) {
                             listModel.addElement(new SearchResultItem(
@@ -156,8 +173,11 @@ public class SearchPanel extends JPanel {
                                     fieldNode.desc,
                                     ClassNodeUtil.getFieldNodePattern(fieldNode)));
                         }
+
+                        addAnnotationMatchesForField(classNode, fieldNode, query);
                     }
 
+                    // Search methods, descriptors, instructions, and method-level annotations
                     for (MethodNode methodNode : classNode.methods) {
                         if (areEqualStrings(methodNode.name, query)) {
                             listModel.addElement(new SearchResultItem(
@@ -178,6 +198,8 @@ public class SearchPanel extends JPanel {
                                     ClassNodeUtil.getMethodNodePattern(methodNode)
                             ));
                         }
+
+                        addAnnotationMatchesForMethod(classNode, methodNode, query);
 
                         for (AbstractInsnNode abstractInsnNode : methodNode.instructions) {
                             if (abstractInsnNode instanceof LdcInsnNode ldcInsnNode) {
@@ -271,6 +293,175 @@ public class SearchPanel extends JPanel {
         }
 
         performSearch();
+    }
+
+    // ----- Annotation search helpers -----
+    private void addAnnotationMatchesForClass(ClassNode classNode, String query) {
+        Icon icon = Modifier.isInterface(classNode.access) ? ClassNodeImages.getImage("interface") : ClassNodeImages.getImage("class");
+        if (classNode.visibleAnnotations != null) {
+            for (AnnotationNode an : classNode.visibleAnnotations) {
+                addAnnotationResultIfMatch(icon, classNode, null, null, an, query);
+            }
+        }
+        if (classNode.invisibleAnnotations != null) {
+            for (AnnotationNode an : classNode.invisibleAnnotations) {
+                addAnnotationResultIfMatch(icon, classNode, null, null, an, query);
+            }
+        }
+    }
+
+    private void addAnnotationMatchesForField(ClassNode owner, FieldNode fieldNode, String query) {
+        if (fieldNode.visibleAnnotations != null) {
+            for (AnnotationNode an : fieldNode.visibleAnnotations) {
+                addAnnotationResultIfMatch(ClassNodeImages.getFieldNodeImage(fieldNode), owner, fieldNode, null, an, query);
+            }
+        }
+        if (fieldNode.invisibleAnnotations != null) {
+            for (AnnotationNode an : fieldNode.invisibleAnnotations) {
+                addAnnotationResultIfMatch(ClassNodeImages.getFieldNodeImage(fieldNode), owner, fieldNode, null, an, query);
+            }
+        }
+    }
+
+    private void addAnnotationMatchesForMethod(ClassNode owner, MethodNode methodNode, String query) {
+        if (methodNode.visibleAnnotations != null) {
+            for (AnnotationNode an : methodNode.visibleAnnotations) {
+                addAnnotationResultIfMatch(ClassNodeImages.getMethodNodeImage(methodNode), owner, null, methodNode, an, query);
+            }
+        }
+        if (methodNode.invisibleAnnotations != null) {
+            for (AnnotationNode an : methodNode.invisibleAnnotations) {
+                addAnnotationResultIfMatch(ClassNodeImages.getMethodNodeImage(methodNode), owner, null, methodNode, an, query);
+            }
+        }
+    }
+
+    private void addAnnotationResultIfMatch(Icon icon, ClassNode classNode, FieldNode fieldNode, MethodNode methodNode, AnnotationNode an, String query) {
+        String desc = an.desc != null ? an.desc : "";
+        String simple = getAnnotationSimpleName(desc);
+        String withAt = "@" + simple;
+        String fqcn = getAnnotationClassName(desc);
+
+        // Build full signature strings including element key/value pairs
+        String fullDescSignature = formatAnnotation(an, true);   // @Lpkg/Ann;(key="val")
+        String fullFqcnSignature = fqcn != null ? formatAnnotationWithName(an, fqcn) : null; // @pkg.Ann(key="val")
+
+        // Also prepare value-only strings for matching (e.g., just "om" or value=...)
+        boolean valuesMatch = annotationElementsMatch(an, query);
+
+        if (areEqualStrings(desc, query)
+                || areEqualStrings(simple, query)
+                || areEqualStrings(withAt, query)
+                || (fqcn != null && areEqualStrings(fqcn, query))
+                || (fullDescSignature != null && areEqualStrings(fullDescSignature, query))
+                || (fullFqcnSignature != null && areEqualStrings(fullFqcnSignature, query))
+                || valuesMatch) {
+            String text = withAt;
+            String name;
+            String pattern;
+            if (methodNode != null) {
+                name = methodNode.name;
+                pattern = ClassNodeUtil.getMethodNodePattern(methodNode);
+            } else if (fieldNode != null) {
+                name = fieldNode.name;
+                pattern = ClassNodeUtil.getFieldNodePattern(fieldNode);
+            } else {
+                name = classNode.name;
+                pattern = ClassNodeUtil.getPattern(classNode, null, null);
+            }
+
+            listModel.addElement(new SearchResultItem(text, icon, classNode, name, pattern));
+        }
+    }
+
+    private String getAnnotationSimpleName(String desc) {
+        if (desc == null) return "";
+        // desc example: Ljava/lang/Deprecated; -> Deprecated
+        int lastSlash = desc.lastIndexOf('/') + 1;
+        int end = desc.endsWith(";") ? desc.length() - 1 : desc.length();
+        int start = desc.startsWith("L") ? 1 : 0;
+        int simpleStart = Math.max(lastSlash, start);
+        if (simpleStart >= end) return desc;
+        return desc.substring(simpleStart, end);
+    }
+
+    private String getAnnotationClassName(String desc) {
+        if (desc == null) return null;
+        // Lpkg/Name; -> pkg.Name
+        String s = desc;
+        if (s.startsWith("L")) s = s.substring(1);
+        if (s.endsWith(";")) s = s.substring(0, s.length() - 1);
+        return s.replace('/', '.');
+    }
+
+    // Build full annotation string like @Lpkg/Ann;(key="val") or @pkg.Ann(key="val")
+    private String formatAnnotation(AnnotationNode an, boolean useDescriptorName) {
+        String name = useDescriptorName ? (an.desc != null ? an.desc : "") : getAnnotationClassName(an.desc);
+        return formatAnnotationWithName(an, name);
+    }
+
+    private String formatAnnotationWithName(AnnotationNode an, String displayName) {
+        StringBuilder sb = new StringBuilder();
+        sb.append('@');
+        sb.append(displayName != null ? displayName : "");
+        if (an.values != null && !an.values.isEmpty()) {
+            sb.append('(');
+            for (int i = 0; i < an.values.size(); i += 2) {
+                String key = String.valueOf(an.values.get(i));
+                Object val = an.values.get(i + 1);
+                sb.append(key).append('=');
+                sb.append(formatAnnotationValue(val));
+                if (i + 2 < an.values.size()) sb.append(',').append(' ');
+            }
+            sb.append(')');
+        }
+        return sb.toString();
+    }
+
+    private String formatAnnotationValue(Object val) {
+        if (val == null) return "null";
+        if (val instanceof String s) {
+            return "\"" + s + "\"";
+        }
+        if (val instanceof Type t) {
+            return t.getDescriptor();
+        }
+        if (val instanceof String[] enumArr && enumArr.length == 2) {
+            // {desc, name}
+            return enumArr[0] + "." + enumArr[1];
+        }
+        if (val instanceof AnnotationNode nested) {
+            return formatAnnotation(nested, true);
+        }
+        if (val instanceof List<?> list) {
+            StringBuilder sb = new StringBuilder();
+            sb.append('{');
+            for (int i = 0; i < list.size(); i++) {
+                sb.append(formatAnnotationValue(list.get(i)));
+                if (i + 1 < list.size()) sb.append(',').append(' ');
+            }
+            sb.append('}');
+            return sb.toString();
+        }
+        return String.valueOf(val);
+    }
+
+    private boolean annotationElementsMatch(AnnotationNode an, String query) {
+        if (an.values == null || an.values.isEmpty()) return false;
+        for (int i = 0; i < an.values.size(); i += 2) {
+            String key = String.valueOf(an.values.get(i));
+            Object val = an.values.get(i + 1);
+            String valStr = formatAnnotationValue(val);
+            // Try a few variants
+            if (areEqualStrings(key, query)) return true;
+            if (areEqualStrings(valStr, query)) return true;
+            // Unquoted value for strings
+            if (val instanceof String s && areEqualStrings(s, query)) return true;
+            // key=value variants
+            String pair = key + "=" + valStr;
+            if (areEqualStrings(pair, query)) return true;
+        }
+        return false;
     }
 
     private boolean areEqualStrings(String first, String second) {
