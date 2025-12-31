@@ -2,6 +2,9 @@ package org.de.rikr.ui;
 
 import com.formdev.flatlaf.util.SystemInfo;
 import org.de.rikr.Rikr;
+import org.de.rikr.settings.Settings;
+import org.de.rikr.settings.SettingsManager;
+import org.de.rikr.theme.Theme;
 import org.de.rikr.ui.model.ClassMutableTreeNode;
 import org.de.rikr.ui.model.ClassNodeMutableTreeNode;
 import org.de.rikr.ui.model.JarMutableTreeNode;
@@ -142,9 +145,21 @@ public class ClassViewer {
             e -> toggleLogVisibility(logPanel.isVisible()),
             e -> saveSelectedClass(),
             e -> saveSelectedJar(),
-            e -> overwriteOriginalJar()
+            e -> overwriteOriginalJar(),
+            e -> openSettingsDialog()
         );
         frame.setJMenuBar(menuBar);
+
+        // Put Preferences under the app menu
+        if (SystemInfo.isMacOS && java.awt.Desktop.isDesktopSupported()) {
+            java.awt.Desktop desktop = java.awt.Desktop.getDesktop();
+            try {
+                if (desktop.isSupported(java.awt.Desktop.Action.APP_PREFERENCES)) {
+                    desktop.setPreferencesHandler(e -> openSettingsDialog());
+                }
+            } catch (UnsupportedOperationException ignored) {
+            }
+        }
 
         // Wire split view toggle
         menuBar.getSplitAsmJavaItem().addActionListener(e -> {
@@ -155,6 +170,9 @@ public class ClassViewer {
                 asmJavaSplitPane.setResizeWeight(0.5);
                 asmJavaSplitPane.setDividerSize(5);
                 contentSplitPane.setLeftComponent(asmJavaSplitPane);
+
+                SettingsManager.refreshThemeFor(contentPanelRight);
+                SettingsManager.updateComponentTree(asmJavaSplitPane);
                 if (lastDisplayedClassNode != null) {
                     contentPanelRight.displayBytecode(lastDisplayedClassNode);
                 }
@@ -178,6 +196,32 @@ public class ClassViewer {
                 toggleSearchBarVisibility(true);
             }
         });
+
+        applyTheme();
+        SettingsManager.addListener(s -> applyTheme());
+    }
+
+    private void applyTheme() {
+        try {
+            if (menuBar != null) {
+                menuBar.setOpaque(true);
+                menuBar.setBackground(Theme.BACKGROUND_COLOR);
+            }
+
+            if (projectPanel != null) {
+                projectPanel.setBackground(Theme.BACKGROUND_COLOR);
+            }
+
+            if (rightPanel != null) {
+                rightPanel.setBackground(Theme.BACKGROUND_COLOR);
+            }
+
+            if (frame != null) {
+                frame.revalidate();
+                frame.repaint();
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     public void init() {
@@ -194,7 +238,7 @@ public class ClassViewer {
         SwingUtilities.invokeLater(() -> {
             toggleLogVisibility(logPanel.isVisible());
             toggleMethodSimulatorVisibility(methodSimulatorPanel.isVisible());
-            
+
             frame.setLocationRelativeTo(null);
             frame.setVisible(true);
             searchBar.setVisible(false);
@@ -222,13 +266,17 @@ public class ClassViewer {
     }
 
     private void showProjectPanel() {
-        ((JSplitPane) ((JSplitPane) verticalSplitPane.getTopComponent()).getLeftComponent()).setRightComponent(projectPanel);
+        JSplitPane leftOfTop = (JSplitPane) ((JSplitPane) verticalSplitPane.getTopComponent()).getLeftComponent();
+        leftOfTop.setRightComponent(projectPanel);
+        SettingsManager.refreshThemeFor(projectPanel);
         frame.revalidate();
         frame.repaint();
     }
 
     private void showSearchPanel() {
-        ((JSplitPane) ((JSplitPane) verticalSplitPane.getTopComponent()).getLeftComponent()).setRightComponent(searchPanel);
+        JSplitPane leftOfTop = (JSplitPane) ((JSplitPane) verticalSplitPane.getTopComponent()).getLeftComponent();
+        leftOfTop.setRightComponent(searchPanel);
+        SettingsManager.refreshThemeFor(searchPanel);
         frame.revalidate();
         frame.repaint();
     }
@@ -261,6 +309,7 @@ public class ClassViewer {
             verticalSplitPane.setDividerLocation(600);
             verticalSplitPane.setDividerSize(1);
             logPanel.setVisible(true);
+            SettingsManager.refreshThemeFor(logPanel);
         }
     }
 
@@ -454,5 +503,45 @@ public class ClassViewer {
         }
 
         return null;
+    }
+
+    private void openSettingsDialog() {
+        JDialog dialog = new JDialog(frame, "Settings", true);
+        Settings initial = SettingsManager.getCurrent();
+        SettingsPanel panel = new SettingsPanel(initial);
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JButton apply = new JButton("Apply");
+        JButton ok = new JButton("OK");
+        JButton cancel = new JButton("Cancel");
+        buttons.add(cancel);
+        buttons.add(apply);
+        buttons.add(ok);
+
+        apply.addActionListener(e -> applySettings(panel));
+        ok.addActionListener(e -> {
+            applySettings(panel);
+            dialog.dispose();
+        });
+        cancel.addActionListener(e -> dialog.dispose());
+
+        JPanel content = new JPanel(new BorderLayout());
+        content.add(panel, BorderLayout.CENTER);
+        content.add(buttons, BorderLayout.SOUTH);
+        dialog.setContentPane(content);
+        dialog.pack();
+        dialog.setLocationRelativeTo(frame);
+        dialog.setVisible(true);
+    }
+
+    private void applySettings(SettingsPanel panel) {
+        Settings s = panel.collectSettings();
+        SettingsManager.applyAndSave(s, frame);
+        // Refresh current views
+        if (lastDisplayedClassNode != null) {
+            contentPanelLeft.displayClass(lastDisplayedClassNode);
+            if (asmJavaSplitEnabled && contentPanelRight != null) {
+                contentPanelRight.displayBytecode(lastDisplayedClassNode);
+            }
+        }
     }
 }

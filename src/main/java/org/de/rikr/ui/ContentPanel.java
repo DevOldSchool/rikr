@@ -2,6 +2,8 @@ package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
 import org.de.rikr.decompiler.JetBrainsDecompilerService;
+import org.de.rikr.settings.SettingsManager;
+import org.de.rikr.theme.Theme;
 import org.de.rikr.ui.handler.RenameActionHandler;
 import org.de.rikr.ui.highlighter.LineHighlighter;
 import org.de.rikr.ui.highlighter.SyntaxHighlighter;
@@ -32,6 +34,7 @@ public class ContentPanel extends JScrollPane {
     private final Style style;
     private final SyntaxHighlighter syntaxHighlighter;
     private final SyntaxHighlighter javaSyntaxHighlighter;
+    private final LineHighlighter lineHighlighter;
     private StringWriter stringWriter;
     private PrintWriter printWriter;
     private Textifier textifier;
@@ -43,12 +46,6 @@ public class ContentPanel extends JScrollPane {
 
     private final JetBrainsDecompilerService decompilerService;
     private final boolean javaOnlyMode;
-
-    // Java highlight request support (for split view ASM->Java mapping)
-    private String lastRequestedHighlightWord;
-    private java.util.List<String> lastRequestedHighlightWords;
-    private Object lastHighlightTag;
-    private final Highlighter.HighlightPainter javaHighlightPainter = new DefaultHighlighter.DefaultHighlightPainter(Theme.CONTENT_SELECTED_HIGHLIGHT_COLOR);
 
     public ContentPanel(Rikr controller) {
         this(controller, false);
@@ -70,7 +67,7 @@ public class ContentPanel extends JScrollPane {
 
         syntaxHighlighter = new SyntaxHighlighter();
         javaSyntaxHighlighter = new SyntaxHighlighter();
-        new LineHighlighter(contentPane, Theme.BACKGROUND_COLOR);
+        lineHighlighter = new LineHighlighter(contentPane, Theme.BACKGROUND_COLOR);
         stringWriter = new StringWriter();
         printWriter = new PrintWriter(stringWriter);
         textifier = new Textifier();
@@ -92,6 +89,36 @@ public class ContentPanel extends JScrollPane {
         // Add line number component
         lineNumberComponent = new LineNumberComponent(contentPane);
         setRowHeaderView(lineNumberComponent);
+
+        // Apply colors now and on theme change
+        applyTheme();
+        SettingsManager.addListener(s -> applyTheme());
+    }
+
+    private void applyTheme() {
+        contentPane.setBackground(Theme.CONTENT_BACKGROUND_COLOR);
+
+        setCorner(JScrollPane.LOWER_RIGHT_CORNER, PanelUtil.createCorner());
+        setCorner(JScrollPane.UPPER_RIGHT_CORNER, PanelUtil.createCorner());
+        setCorner(JScrollPane.LOWER_LEFT_CORNER, PanelUtil.createCorner());
+        setCorner(JScrollPane.UPPER_LEFT_CORNER, PanelUtil.createCorner());
+
+        JScrollBar vsb = getVerticalScrollBar();
+        if (vsb != null) {
+            vsb.setBackground(SettingsManager.getScrollBarTrackColor());
+        }
+
+        JScrollBar hsb = getHorizontalScrollBar();
+        if (hsb != null) {
+            hsb.setBackground(SettingsManager.getScrollBarTrackColor());
+        }
+
+        if (lineHighlighter != null) {
+            lineHighlighter.setColor(Theme.BACKGROUND_COLOR);
+        }
+
+        revalidate();
+        repaint();
     }
 
     public void init() {

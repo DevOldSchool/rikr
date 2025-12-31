@@ -1,4 +1,4 @@
-package org.de.rikr.ui;
+package org.de.rikr.resources;
 
 import java.awt.*;
 import java.io.IOException;
@@ -11,7 +11,7 @@ public class Fonts {
     public static void loadFonts() {
         // Define font paths and their associated names
         String[][] fontData = {
-                {"JetBrainsMono-Regular", "/fonts/JetBrainsMono-Regular.ttf"},
+            {"JetBrainsMono-Regular", "/fonts/JetBrainsMono-Regular.ttf"},
         };
 
         // Load custom fonts

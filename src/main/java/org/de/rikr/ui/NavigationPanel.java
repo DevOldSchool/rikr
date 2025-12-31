@@ -1,6 +1,8 @@
 package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
+import org.de.rikr.settings.SettingsManager;
+import org.de.rikr.theme.Theme;
 
 import javax.swing.*;
 import java.awt.*;
@@ -10,6 +12,7 @@ public class NavigationPanel extends JPanel {
     private final Rikr controller;
     private final JButton projectButton;
     private final JButton searchButton;
+    private boolean projectSelected = true;
 
     public NavigationPanel(Rikr controller, ActionListener projectAction, ActionListener searchAction) {
         this.controller = controller;
@@ -36,19 +39,23 @@ public class NavigationPanel extends JPanel {
         add(searchButton);
         add(Box.createRigidArea(new Dimension(36, 5)));
 
-        projectButton.setBackground(Theme.NAVBAR_BUTTON_SELECTED_COLOR);
-        searchButton.setBackground(Theme.BACKGROUND_COLOR);
+        applyTheme();
+
+        // React to theme changes
+        SettingsManager.addListener(s -> {
+            applyTheme();
+        });
     }
 
     public void init() {
         projectButton.addActionListener(e -> {
-            projectButton.setBackground(Theme.NAVBAR_BUTTON_SELECTED_COLOR);
-            searchButton.setBackground(Theme.BACKGROUND_COLOR);
+            projectSelected = true;
+            applyTheme();
         });
 
         searchButton.addActionListener(e -> {
-            searchButton.setBackground(Theme.NAVBAR_BUTTON_SELECTED_COLOR);
-            projectButton.setBackground(Theme.BACKGROUND_COLOR);
+            projectSelected = false;
+            applyTheme();
         });
     }
 
@@ -58,5 +65,19 @@ public class NavigationPanel extends JPanel {
 
     public void selectSearchTab() {
         searchButton.doClick();
+    }
+
+    private void applyTheme() {
+        setBackground(Theme.BACKGROUND_COLOR);
+        if (projectSelected) {
+            projectButton.setBackground(Theme.NAVBAR_BUTTON_SELECTED_COLOR);
+            searchButton.setBackground(Theme.BACKGROUND_COLOR);
+        } else {
+            searchButton.setBackground(Theme.NAVBAR_BUTTON_SELECTED_COLOR);
+            projectButton.setBackground(Theme.BACKGROUND_COLOR);
+        }
+        
+        revalidate();
+        repaint();
     }
 }

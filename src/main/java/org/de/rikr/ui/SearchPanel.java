@@ -1,6 +1,8 @@
 package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
+import org.de.rikr.settings.SettingsManager;
+import org.de.rikr.theme.Theme;
 import org.de.rikr.ui.model.SearchResultItem;
 import org.de.rikr.utilities.ClassNodeUtil;
 import org.objectweb.asm.Type;
@@ -23,7 +25,10 @@ public class SearchPanel extends JPanel {
     private final JButton matchWordButton;
     private boolean matchCase;
     private boolean matchWord;
-    private final Color defaultBackgroundColor;
+    private Color defaultBackgroundColor;
+    private JPanel buttonsPanel;
+    private JPanel searchBarPanel;
+    private JScrollPane scrollPane;
     private static final int SEARCH_DEBOUNCE_MS = 250;
     private Timer searchDebounceTimer;
 
@@ -33,7 +38,7 @@ public class SearchPanel extends JPanel {
         setBorder(null);
 
         // Create the search bar
-        JPanel searchBarPanel = new JPanel(new BorderLayout());
+        searchBarPanel = new JPanel(new BorderLayout());
         searchField = new JTextField();
         searchField.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
         matchCaseButton = new JButton(Images.getImage("match-case"));
@@ -44,7 +49,7 @@ public class SearchPanel extends JPanel {
         matchWordButton.setBorderPainted(false);
 
         // Create a panel for the buttons
-        JPanel buttonsPanel = new JPanel();
+        buttonsPanel = new JPanel();
         buttonsPanel.setBackground(Theme.BACKGROUND_COLOR);
         buttonsPanel.setLayout(new BoxLayout(buttonsPanel, BoxLayout.X_AXIS));
         buttonsPanel.add(matchCaseButton);
@@ -59,7 +64,7 @@ public class SearchPanel extends JPanel {
         resultsList = new JList<>(listModel);
         resultsList.setCellRenderer(new SearchResultItemRenderer());
         resultsList.setBackground(Theme.BACKGROUND_COLOR);
-        JScrollPane scrollPane = new JScrollPane(resultsList);
+        scrollPane = new JScrollPane(resultsList);
         scrollPane.setBorder(null);
 
         // Add components to the panel
@@ -69,6 +74,46 @@ public class SearchPanel extends JPanel {
         defaultBackgroundColor = matchCaseButton.getBackground();
         matchCase = false;
         matchWord = false;
+
+        applyTheme();
+        SettingsManager.addListener(s -> applyTheme());
+    }
+
+    private void applyTheme() {
+        if (buttonsPanel != null) {
+            buttonsPanel.setBackground(Theme.BACKGROUND_COLOR);
+        }
+
+        if (resultsList != null) {
+            resultsList.setBackground(Theme.BACKGROUND_COLOR);
+            resultsList.repaint();
+        }
+
+        if (scrollPane != null) {
+            Color track = SettingsManager.getScrollBarTrackColor();
+
+            scrollPane.setCorner(JScrollPane.LOWER_RIGHT_CORNER, PanelUtil.createCorner());
+            scrollPane.setCorner(JScrollPane.UPPER_RIGHT_CORNER, PanelUtil.createCorner());
+            scrollPane.setCorner(JScrollPane.LOWER_LEFT_CORNER, PanelUtil.createCorner());
+            scrollPane.setCorner(JScrollPane.UPPER_LEFT_CORNER, PanelUtil.createCorner());
+
+            // Match scrollbars to track color for seamless corners
+            JScrollBar vsb = scrollPane.getVerticalScrollBar();
+            if (vsb != null) {
+                vsb.setBackground(track);
+            }
+            JScrollBar hsb = scrollPane.getHorizontalScrollBar();
+            if (hsb != null) {
+                hsb.setBackground(track);
+            }
+        }
+
+        defaultBackgroundColor = matchCaseButton.getBackground();
+        matchCaseButton.setBackground(matchCase ? Theme.SEARCH_BUTTON_SELECTED_COLOR : defaultBackgroundColor);
+        matchWordButton.setBackground(matchWord ? Theme.SEARCH_BUTTON_SELECTED_COLOR : defaultBackgroundColor);
+
+        revalidate();
+        repaint();
     }
 
     public void init() {
@@ -88,7 +133,7 @@ public class SearchPanel extends JPanel {
                 triggerSearchDebounced();
             }
         });
-        
+
         searchField.addActionListener(e -> triggerSearchImmediate());
 
         matchCaseButton.addActionListener(e -> {

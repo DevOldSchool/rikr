@@ -1,5 +1,8 @@
 package org.de.rikr.ui;
 
+import org.de.rikr.resources.Fonts;
+import org.de.rikr.theme.Theme;
+
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;

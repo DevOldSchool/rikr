@@ -1,6 +1,8 @@
 package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
+import org.de.rikr.settings.SettingsManager;
+import org.de.rikr.theme.Theme;
 
 import javax.swing.*;
 import java.awt.*;
@@ -10,6 +12,7 @@ public class SimulatorBar extends JPanel {
     private final Rikr controller;
     private final JButton stepForwardsButton;
     private final JButton stepBackwardsButton;
+    private final JPanel topPanel;
 
     public SimulatorBar(Rikr controller, ActionListener closeListener) {
         this.controller = controller;
@@ -24,13 +27,23 @@ public class SimulatorBar extends JPanel {
         closeButton.setBorderPainted(false);
         closeButton.addActionListener(closeListener);
 
-        JPanel topPanel = new JPanel();
+        topPanel = new JPanel();
         topPanel.add(stepForwardsButton);
         topPanel.add(stepBackwardsButton);
         topPanel.add(closeButton);
         topPanel.setBackground(Theme.BACKGROUND_COLOR);
 
         add(topPanel, BorderLayout.NORTH);
+
+        applyTheme();
+        SettingsManager.addListener(s -> applyTheme());
+    }
+
+    private void applyTheme() {
+        topPanel.setBackground(Theme.BACKGROUND_COLOR);
+        
+        revalidate();
+        repaint();
     }
 
     public void init() {

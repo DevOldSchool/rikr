@@ -1,6 +1,8 @@
 package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
+import org.de.rikr.settings.SettingsManager;
+import org.de.rikr.theme.Theme;
 
 import javax.swing.*;
 import javax.swing.text.*;
@@ -24,7 +26,8 @@ public class SearchBar extends JPanel {
 
     private final List<int[]> searchResults;
     private int currentResultIndex;
-    private final Color defaultBackgroundColor;
+    private Color defaultBackgroundColor;
+    private final JPanel topPanel;
 
     public SearchBar(Rikr controller, ActionListener closeListener) {
         this.controller = controller;
@@ -53,7 +56,7 @@ public class SearchBar extends JPanel {
         searchResults = new ArrayList<>();
         currentResultIndex = -1;
 
-        JPanel topPanel = new JPanel();
+        topPanel = new JPanel();
         topPanel.add(searchField);
         topPanel.add(matchCaseButton);
         topPanel.add(matchWordButton);
@@ -69,6 +72,9 @@ public class SearchBar extends JPanel {
 
         matchCase = false;
         matchWord = false;
+
+        applyTheme();
+        SettingsManager.addListener(s -> applyTheme());
     }
 
     public void init() {
@@ -206,5 +212,15 @@ public class SearchBar extends JPanel {
         }
 
         search();
+    }
+
+    private void applyTheme() {
+        topPanel.setBackground(Theme.BACKGROUND_COLOR);
+        defaultBackgroundColor = matchCaseButton.getBackground();
+        matchCaseButton.setBackground(matchCase ? Theme.SEARCH_BUTTON_SELECTED_COLOR : defaultBackgroundColor);
+        matchWordButton.setBackground(matchWord ? Theme.SEARCH_BUTTON_SELECTED_COLOR : defaultBackgroundColor);
+        
+        revalidate();
+        repaint();
     }
 }

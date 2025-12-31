@@ -2,6 +2,8 @@ package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
 import org.de.rikr.behavioral.MethodSimulator;
+import org.de.rikr.settings.SettingsManager;
+import org.de.rikr.theme.Theme;
 import org.de.rikr.ui.model.ClassNodeMutableTreeNode;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.MethodNode;
@@ -42,6 +44,17 @@ public class MethodSimulatorPanel extends JPanel {
 
         add(stackScrollPane);
         add(localVariableScrollPane);
+
+        applyTheme();
+        SettingsManager.addListener(s -> applyTheme());
+    }
+
+    private void applyTheme() {
+        stackArea.setBackground(Theme.BACKGROUND_COLOR);
+        localVariableArea.setBackground(Theme.BACKGROUND_COLOR);
+        
+        revalidate();
+        repaint();
     }
 
     public void init() {

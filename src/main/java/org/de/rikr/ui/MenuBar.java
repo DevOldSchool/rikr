@@ -1,5 +1,6 @@
 package org.de.rikr.ui;
 
+import com.formdev.flatlaf.util.SystemInfo;
 import org.de.rikr.Rikr;
 
 import javax.swing.*;
@@ -24,7 +25,8 @@ public class MenuBar extends JMenuBar {
         ActionListener toggleLogAction,
         ActionListener saveSelectedClassAction,
         ActionListener saveSelectedJarAction,
-        ActionListener overwriteOriginalJarAction
+        ActionListener overwriteOriginalJarAction,
+        ActionListener openSettingsAction
     ) {
         this.controller = controller;
 
@@ -64,6 +66,15 @@ public class MenuBar extends JMenuBar {
         annotationItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx() | KeyEvent.SHIFT_DOWN_MASK));
         annotationItem.addActionListener(showSearchAction);
         editMenu.add(annotationItem);
+
+        // Settings (non-macOS only; on macOS it appears under the application menu as Preferences)
+        if (!SystemInfo.isMacOS) {
+            JMenuItem settingsItem = new JMenuItem("Settings");
+            settingsItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_COMMA, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()));
+            settingsItem.addActionListener(openSettingsAction);
+            editMenu.addSeparator();
+            editMenu.add(settingsItem);
+        }
 
         // View menu
         JMenu viewMenu = new JMenu("View");

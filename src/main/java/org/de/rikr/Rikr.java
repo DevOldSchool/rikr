@@ -1,10 +1,10 @@
 package org.de.rikr;
 
-import com.formdev.flatlaf.intellijthemes.FlatDarkFlatIJTheme;
 import com.formdev.flatlaf.util.SystemInfo;
+import org.de.rikr.resources.Fonts;
+import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.ui.ClassNodeImages;
 import org.de.rikr.ui.ClassViewer;
-import org.de.rikr.ui.Fonts;
 import org.de.rikr.ui.Images;
 import org.objectweb.asm.tree.ClassNode;
 
@@ -72,15 +72,12 @@ public class Rikr {
             System.setProperty("apple.awt.application.name", "Rikr");
         }
 
-        // Modify look and feel defaults
-        UIManager.put("SplitPaneDivider.gripDotCount", 0);
-
         Images.loadImages();
         ClassNodeImages.loadImages();
         Fonts.loadFonts();
 
         SwingUtilities.invokeLater(() -> {
-            FlatDarkFlatIJTheme.setup();
+            SettingsManager.applyThemeStartup();
             Rikr rikr = new Rikr();
             rikr.start();
         });

@@ -1,6 +1,8 @@
 package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
+import org.de.rikr.settings.SettingsManager;
+import org.de.rikr.theme.Theme;
 import org.de.rikr.ui.handler.TreeSelectionHandler;
 import org.de.rikr.ui.model.ClassMutableTreeNode;
 import org.de.rikr.ui.model.JarMutableTreeNode;
@@ -31,7 +33,10 @@ public class TreePanel extends JPanel {
     private final JButton matchWordButton;
     private boolean matchCase;
     private boolean matchWord;
-    private final Color defaultBackgroundColor;
+    private Color defaultBackgroundColor;
+    private JPanel buttonsPanel;
+    private JPanel searchBarPanel;
+    private JScrollPane scrollPane;
 
     public TreePanel(Rikr controller) {
         this.controller = controller;
@@ -39,7 +44,7 @@ public class TreePanel extends JPanel {
         setBorder(null);
 
         // Create the search bar
-        JPanel searchBarPanel = new JPanel(new BorderLayout());
+        searchBarPanel = new JPanel(new BorderLayout());
         searchField = new JTextField();
         searchField.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
         matchCaseButton = new JButton(Images.getImage("match-case"));
@@ -50,7 +55,7 @@ public class TreePanel extends JPanel {
         matchWordButton.setBorderPainted(false);
 
         // Create a panel for the buttons
-        JPanel buttonsPanel = new JPanel();
+        buttonsPanel = new JPanel();
         buttonsPanel.setBackground(Theme.BACKGROUND_COLOR);
         buttonsPanel.setLayout(new BoxLayout(buttonsPanel, BoxLayout.X_AXIS));
         buttonsPanel.add(matchCaseButton);
@@ -73,7 +78,7 @@ public class TreePanel extends JPanel {
         popupMenu = new TreePopupMenu(controller, tree);
 
         // Add components to the panel
-        JScrollPane scrollPane = new JScrollPane(tree);
+        scrollPane = new JScrollPane(tree);
         scrollPane.setBorder(null);
         add(searchBarPanel, BorderLayout.NORTH);
         add(scrollPane, BorderLayout.CENTER);
@@ -81,6 +86,49 @@ public class TreePanel extends JPanel {
         defaultBackgroundColor = matchCaseButton.getBackground();
         matchCase = false;
         matchWord = false;
+
+        applyTheme();
+        SettingsManager.addListener(s -> applyTheme());
+    }
+
+    private void applyTheme() {
+        if (searchBarPanel != null) {
+            searchBarPanel.setBackground(Theme.BACKGROUND_COLOR);
+        }
+
+        if (buttonsPanel != null) {
+            buttonsPanel.setBackground(Theme.BACKGROUND_COLOR);
+        }
+
+        if (tree != null) {
+            tree.setBackground(Theme.BACKGROUND_COLOR);
+        }
+
+        if (scrollPane != null) {
+            scrollPane.getViewport().setBackground(Theme.BACKGROUND_COLOR);
+
+            scrollPane.setCorner(JScrollPane.LOWER_RIGHT_CORNER, PanelUtil.createCorner());
+            scrollPane.setCorner(JScrollPane.UPPER_RIGHT_CORNER, PanelUtil.createCorner());
+            scrollPane.setCorner(JScrollPane.LOWER_LEFT_CORNER, PanelUtil.createCorner());
+            scrollPane.setCorner(JScrollPane.UPPER_LEFT_CORNER, PanelUtil.createCorner());
+
+            // Match scrollbars to track color for seamless corners
+            JScrollBar vsb = scrollPane.getVerticalScrollBar();
+            if (vsb != null) {
+                vsb.setBackground(SettingsManager.getScrollBarTrackColor());
+            }
+            JScrollBar hsb = scrollPane.getHorizontalScrollBar();
+            if (hsb != null) {
+                hsb.setBackground(SettingsManager.getScrollBarTrackColor());
+            }
+        }
+
+        defaultBackgroundColor = matchCaseButton.getBackground();
+        matchCaseButton.setBackground(matchCase ? Theme.SEARCH_BUTTON_SELECTED_COLOR : defaultBackgroundColor);
+        matchWordButton.setBackground(matchWord ? Theme.SEARCH_BUTTON_SELECTED_COLOR : defaultBackgroundColor);
+
+        revalidate();
+        repaint();
     }
 
     public void init() {
