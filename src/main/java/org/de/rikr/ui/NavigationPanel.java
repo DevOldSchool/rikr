@@ -1,6 +1,7 @@
 package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
+import org.de.rikr.resources.Images;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;
 
@@ -76,7 +77,7 @@ public class NavigationPanel extends JPanel {
             searchButton.setBackground(Theme.NAVBAR_BUTTON_SELECTED_COLOR);
             projectButton.setBackground(Theme.BACKGROUND_COLOR);
         }
-        
+
         revalidate();
         repaint();
     }

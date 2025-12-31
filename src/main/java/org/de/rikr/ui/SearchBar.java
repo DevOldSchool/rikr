@@ -1,6 +1,7 @@
 package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
+import org.de.rikr.resources.Images;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;
 
@@ -219,7 +220,7 @@ public class SearchBar extends JPanel {
         defaultBackgroundColor = matchCaseButton.getBackground();
         matchCaseButton.setBackground(matchCase ? Theme.SEARCH_BUTTON_SELECTED_COLOR : defaultBackgroundColor);
         matchWordButton.setBackground(matchWord ? Theme.SEARCH_BUTTON_SELECTED_COLOR : defaultBackgroundColor);
-        
+
         revalidate();
         repaint();
     }

@@ -1,6 +1,7 @@
 package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
+import org.de.rikr.resources.Images;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;
 import org.de.rikr.ui.model.SearchResultItem;

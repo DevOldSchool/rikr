@@ -37,9 +37,9 @@ The following items are listed in no particular order and are here as a todo lis
 
 #### Settings
 
-- Set font and size.
-- Set theme.
-- Set syntax highlight colors.
+- ~~Set font and size.~~
+- ~~Set theme.~~
+- ~~Set syntax highlight colors.~~
 
 #### Application icon
 

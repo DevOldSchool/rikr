@@ -7,11 +7,11 @@ import javax.swing.plaf.basic.BasicSplitPaneDivider;
 import javax.swing.plaf.basic.BasicSplitPaneUI;
 import java.awt.*;
 
-public class DragAwareSplitPaneUI extends BasicSplitPaneUI {
+public class DragAwareSplitPane extends BasicSplitPaneUI {
     private final int dragSize;
     private final int dragOffset;
 
-    public DragAwareSplitPaneUI(int dragSize, int dragOffset) {
+    public DragAwareSplitPane(int dragSize, int dragOffset) {
         this.dragSize = dragSize;
         this.dragOffset = dragOffset;
     }

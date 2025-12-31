@@ -6,6 +6,6 @@ public class SplitPane extends JSplitPane {
     public SplitPane(int split, int dividerDragSize) {
         super(split);
 
-        this.setUI(new DragAwareSplitPaneUI(dividerDragSize, dividerDragSize / 2));
+        this.setUI(new DragAwareSplitPane(dividerDragSize, dividerDragSize / 2));
     }
 }

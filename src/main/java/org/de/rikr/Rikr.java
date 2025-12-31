@@ -2,10 +2,10 @@ package org.de.rikr;
 
 import com.formdev.flatlaf.util.SystemInfo;
 import org.de.rikr.resources.Fonts;
+import org.de.rikr.resources.Images;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.ui.ClassNodeImages;
 import org.de.rikr.ui.ClassViewer;
-import org.de.rikr.ui.Images;
 import org.objectweb.asm.tree.ClassNode;
 
 import javax.swing.*;

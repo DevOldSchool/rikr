@@ -1,4 +1,6 @@
-package org.de.rikr.ui;
+package org.de.rikr.resources;
+
+import org.de.rikr.ui.ClassNodeImages;
 
 import javax.swing.*;
 import java.net.URL;
@@ -9,11 +11,11 @@ public class Images {
 
     public static void loadImages() {
         String[] imageNames = {
-                "folder",
-                "search",
-                "match-case",
-                "match-word",
-                "instruction"
+            "folder",
+            "search",
+            "match-case",
+            "match-word",
+            "instruction"
         };
 
         for (String imageName : imageNames) {
