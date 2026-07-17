@@ -1,12 +1,15 @@
 package org.de.rikr.resources;
 
-import java.awt.*;
+import java.awt.Font;
+import java.awt.FontFormatException;
+import java.awt.GraphicsEnvironment;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
+import java.util.Map;
 
 public class Fonts {
-    public static HashMap<String, Font> fonts = new HashMap<>();
+    private static final Map<String, Font> FONTS = new HashMap<>();
 
     public static void loadFonts() {
         // Define font paths and their associated names
@@ -20,31 +23,28 @@ public class Fonts {
             String fontPath = data[1];
 
             Font font = loadFont(fontPath).deriveFont(13f);
-            fonts.put(fontName, font);
+            FONTS.put(fontName, font);
         }
     }
 
     public static Font loadFont(String path) {
-        Font font = null;
-
         try {
             try (InputStream inputStream = Fonts.class.getResourceAsStream(path)) {
                 if (inputStream == null) {
                     throw new IOException("Font file not found: " + path);
                 }
 
-                font = Font.createFont(Font.TRUETYPE_FONT, inputStream);
+                Font font = Font.createFont(Font.TRUETYPE_FONT, inputStream);
                 GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
                 ge.registerFont(font);
+                return font;
             }
         } catch (FontFormatException | IOException e) {
-            e.printStackTrace();
+            throw new IllegalStateException("Failed to load font: " + path, e);
         }
-
-        return font;
     }
 
     public static Font getDefaultFont() {
-        return fonts.get("JetBrainsMono-Regular");
+        return FONTS.get("JetBrainsMono-Regular");
     }
 }

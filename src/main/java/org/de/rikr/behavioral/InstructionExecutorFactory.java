@@ -10,8 +10,11 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Logger;
 
 public class InstructionExecutorFactory {
+    private static final Logger LOGGER = Logger.getLogger(InstructionExecutorFactory.class.getName());
+
     private final Map<Integer, InstructionExecutor> executorCache = new HashMap<>();
     private final List<Integer> skipCacheOpcodes;
 
@@ -183,7 +186,7 @@ public class InstructionExecutorFactory {
             default:
                 executor = new DefaultExecutor();
                 if (instruction.getOpcode() != -1) {
-                    System.out.println("Unhandled instruction: " + opcode + " (" + Printer.OPCODES[opcode] + ")");
+                    LOGGER.fine(() -> "Unhandled instruction: " + opcode + " (" + Printer.OPCODES[opcode] + ")");
                 }
                 break;
         }

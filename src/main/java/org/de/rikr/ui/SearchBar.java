@@ -13,8 +13,12 @@ import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class SearchBar extends JPanel {
+    private static final Logger LOGGER = Logger.getLogger(SearchBar.class.getName());
+
     private final Rikr controller;
     private final JTextField searchField;
     private final JButton upButton;
@@ -176,7 +180,7 @@ public class SearchBar extends JPanel {
                 pos = endPos;
             }
         } catch (BadLocationException e) {
-            e.printStackTrace();
+            LOGGER.log(Level.WARNING, "Failed to highlight search results.", e);
         }
     }
 

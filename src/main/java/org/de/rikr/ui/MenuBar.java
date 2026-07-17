@@ -137,7 +137,7 @@ public class MenuBar extends JMenuBar {
         });
 
         annotationItem.addActionListener(e -> {
-            controller.getProcessor().setStripAnnotations(annotationItem.isSelected());
+            controller.setStripAnnotations(annotationItem.isSelected());
         });
     }
 

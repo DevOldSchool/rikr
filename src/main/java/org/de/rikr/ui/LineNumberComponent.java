@@ -10,8 +10,12 @@ import javax.swing.text.BadLocationException;
 import javax.swing.text.Element;
 import java.awt.*;
 import java.awt.geom.Rectangle2D;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class LineNumberComponent extends JComponent {
+    private static final Logger LOGGER = Logger.getLogger(LineNumberComponent.class.getName());
+
     private static final int MARGIN = 5;
     private final JTextPane textPane;
     private final Font defaultFont;
@@ -108,7 +112,7 @@ public class LineNumberComponent extends JComponent {
                     g.drawString(lineNumber, MARGIN, y + lineHeightOffset);
                 }
             } catch (BadLocationException e) {
-                e.printStackTrace();
+                LOGGER.log(Level.WARNING, "Failed to paint line number.", e);
             }
         }
 

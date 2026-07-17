@@ -5,18 +5,17 @@ import org.de.rikr.Rikr;
 import org.de.rikr.settings.Settings;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;
-import org.de.rikr.ui.model.ClassMutableTreeNode;
-import org.de.rikr.ui.model.ClassNodeMutableTreeNode;
-import org.de.rikr.ui.model.JarMutableTreeNode;
+import org.de.rikr.ui.action.ClassFileActions;
 import org.objectweb.asm.tree.ClassNode;
 
 import javax.swing.*;
 import javax.swing.plaf.basic.BasicSplitPaneDivider;
 import javax.swing.plaf.basic.BasicSplitPaneUI;
-import javax.swing.tree.DefaultMutableTreeNode;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.io.File;
 import java.util.List;
 import java.util.Map;
@@ -43,12 +42,19 @@ public class ClassViewer {
     private final MethodSimulatorPanel methodSimulatorPanel;
     private final JPanel rightPanel;
     private final SimulatorBar simulatorBar;
+    private final ClassFileActions classFileActions;
 
     public ClassViewer(Rikr controller) {
         this.controller = controller;
         frame = new JFrame("Rikr");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setSize(1200, 800);
+        frame.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                controller.shutdown();
+            }
+        });
 
         if (SystemInfo.isMacOS) {
             if (SystemInfo.isMacFullWindowContentSupported) {
@@ -79,6 +85,7 @@ public class ClassViewer {
         searchPanel = new SearchPanel(controller);
         methodSimulatorPanel = new MethodSimulatorPanel(controller);
         simulatorBar = new SimulatorBar(controller, e -> toggleMethodSimulatorVisibility(methodSimulatorPanel.isVisible()));
+        classFileActions = new ClassFileActions(controller, frame, treePanel);
 
         // Create a panel to hold both the search panel and content panel
         rightPanel = new JPanel(new BorderLayout());
@@ -143,9 +150,9 @@ public class ClassViewer {
             e -> showProjectTab(),
             e -> showGlobalSearchTab(),
             e -> toggleLogVisibility(logPanel.isVisible()),
-            e -> saveSelectedClass(),
-            e -> saveSelectedJar(),
-            e -> overwriteOriginalJar(),
+            e -> classFileActions.saveSelectedClass(),
+            e -> classFileActions.saveSelectedJar(),
+            e -> classFileActions.overwriteOriginalJar(),
             e -> openSettingsDialog()
         );
         frame.setJMenuBar(menuBar);
@@ -380,129 +387,6 @@ public class ClassViewer {
 
     public JFrame getFrame() {
         return frame;
-    }
-
-    private void saveSelectedClass() {
-        DefaultMutableTreeNode node = getTreePanel().getSelectedNode();
-        if (node == null) {
-            JOptionPane.showMessageDialog(frame, "No selection.", "Save Class", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-
-        ClassNode classNode = null;
-        if (node instanceof ClassMutableTreeNode) {
-            classNode = ((ClassMutableTreeNode) node).getClassNode();
-        } else if (node instanceof ClassNodeMutableTreeNode) {
-            classNode = ((ClassNodeMutableTreeNode) node).getClassNode();
-        }
-
-        if (classNode == null) {
-            JOptionPane.showMessageDialog(frame, "Please select a class node to save.", "Save Class", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-
-        String defaultName = classNode.name.substring(classNode.name.lastIndexOf('/') + 1) + ".class";
-
-        JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("Save Class");
-        chooser.setSelectedFile(new java.io.File(defaultName));
-        int res = chooser.showSaveDialog(frame);
-        if (res == JFileChooser.APPROVE_OPTION) {
-            java.io.File file = chooser.getSelectedFile();
-
-            try {
-                controller.getProcessor().saveClassToFile(classNode, file);
-                controller.log("Saved class to " + file.getAbsolutePath());
-            } catch (Exception ex) {
-                controller.log("Save class failed: " + ex.getMessage());
-                JOptionPane.showMessageDialog(frame, "Save class failed: " + ex.getMessage(), "Save Class", JOptionPane.ERROR_MESSAGE);
-            }
-        }
-    }
-
-    private void saveSelectedJar() {
-        String jarName = resolveSelectedJarName();
-        if (jarName == null) {
-            JOptionPane.showMessageDialog(frame, "Please select a JAR group or a class within it.", "Save Selected JAR", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-
-        JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("Save Selected JAR");
-        chooser.setSelectedFile(new java.io.File(jarName));
-
-        int res = chooser.showSaveDialog(frame);
-        if (res == JFileChooser.APPROVE_OPTION) {
-            java.io.File file = chooser.getSelectedFile();
-
-            if (!file.getName().toLowerCase().endsWith(".jar")) {
-                file = new java.io.File(file.getParentFile(), file.getName() + ".jar");
-            }
-
-            try {
-                controller.getProcessor().exportJarGroupToJar(jarName, file);
-                controller.log("Saved JAR to " + file.getAbsolutePath());
-            } catch (Exception ex) {
-                controller.log("Save JAR failed: " + ex.getMessage());
-                JOptionPane.showMessageDialog(frame, "Save failed: " + ex.getMessage(), "Save Selected JAR", JOptionPane.ERROR_MESSAGE);
-            }
-        }
-    }
-
-    private void overwriteOriginalJar() {
-        String jarName = resolveSelectedJarName();
-        if (jarName == null) {
-            JOptionPane.showMessageDialog(frame, "Please select a JAR group or a class within it.", "Overwrite Original JAR", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-
-        java.io.File original = controller.getProcessor().getOriginalJarFile(jarName);
-        if (original == null) {
-            JOptionPane.showMessageDialog(frame, "Original JAR path unknown for '" + jarName + "'. Try 'Export Selected JAR…' instead.", "Overwrite Original JAR", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-
-        try {
-            boolean ok = controller.getProcessor().overwriteOriginalJar(jarName);
-
-            if (ok) {
-                controller.log("Overwrote original JAR: " + original.getAbsolutePath());
-            } else {
-                JOptionPane.showMessageDialog(frame, "Could not determine original JAR for '" + jarName + "'.", "Overwrite Original JAR", JOptionPane.ERROR_MESSAGE);
-            }
-        } catch (Exception ex) {
-            controller.log("Overwrite failed: " + ex.getMessage());
-            JOptionPane.showMessageDialog(frame, "Overwrite failed: " + ex.getMessage(), "Overwrite Original JAR", JOptionPane.ERROR_MESSAGE);
-        }
-    }
-
-    private String resolveSelectedJarName() {
-        DefaultMutableTreeNode node = getTreePanel().getSelectedNode();
-
-        switch (node) {
-            case null -> {
-                return null;
-            }
-            case JarMutableTreeNode jarMutableTreeNode -> {
-                return jarMutableTreeNode.getJarName();
-            }
-            case ClassMutableTreeNode classMutableTreeNode -> {
-                return classMutableTreeNode.getJarName();
-            }
-            case ClassNodeMutableTreeNode classNodeMutableTreeNode -> {
-                return classNodeMutableTreeNode.getJarName();
-            }
-            default -> {
-            }
-        }
-
-        // if user selected field/method, its parent is a ClassNodeMutableTreeNode under a ClassMutableTreeNode
-        javax.swing.tree.TreeNode parent = node.getParent();
-        if (parent instanceof ClassNodeMutableTreeNode classNodeMutableTreeNode) {
-            return classNodeMutableTreeNode.getJarName();
-        }
-
-        return null;
     }
 
     private void openSettingsDialog() {

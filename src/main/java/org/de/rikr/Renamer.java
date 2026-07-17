@@ -1,5 +1,6 @@
 package org.de.rikr;
 
+import org.de.rikr.service.RenameResult;
 import org.de.rikr.utilities.ClassNodeUtil;
 import org.objectweb.asm.tree.*;
 
@@ -21,7 +22,7 @@ public class Renamer {
      * @param oldName Old name to find in class nodes
      * @param newName New name to replace old name with in class nodes
      */
-    public static void updateClassReferences(List<ClassNode> classes, String oldName, String newName) {
+    public static RenameResult updateClassReferences(List<ClassNode> classes, String oldName, String newName) {
         renamedClassReferenceCounter = 0;
         renamedClassReferenceFileCounter = 0;
 
@@ -165,6 +166,8 @@ public class Renamer {
                 renamedClassReferenceFileCounter++;
             }
         }
+
+        return new RenameResult("class", renamedClassReferenceCounter, renamedClassReferenceFileCounter);
     }
 
     /**
@@ -175,7 +178,7 @@ public class Renamer {
      * @param oldName Old name to find in class nodes
      * @param newName New name to replace old name with in class nodes
      */
-    public static void updateMethodReferences(List<ClassNode> classes, ClassNode owner, String oldName, String newName) {
+    public static RenameResult updateMethodReferences(List<ClassNode> classes, ClassNode owner, String oldName, String newName) {
         renamedMethodReferenceCounter = 0;
         renamedMethodReferenceFileCounter = 0;
 
@@ -226,6 +229,8 @@ public class Renamer {
                 renamedMethodReferenceFileCounter++;
             }
         }
+
+        return new RenameResult("method", renamedMethodReferenceCounter, renamedMethodReferenceFileCounter);
     }
 
     /**
@@ -236,7 +241,7 @@ public class Renamer {
      * @param oldName Old name to find in class nodes
      * @param newName New name to replace old name with in class nodes
      */
-    public static void updateFieldReferences(List<ClassNode> classes, ClassNode owner, String oldName, String newName) {
+    public static RenameResult updateFieldReferences(List<ClassNode> classes, ClassNode owner, String oldName, String newName) {
         renamedFieldReferenceCounter = 0;
         renamedFieldReferenceFileCounter = 0;
 
@@ -269,6 +274,8 @@ public class Renamer {
                 renamedFieldReferenceFileCounter++;
             }
         }
+
+        return new RenameResult("field", renamedFieldReferenceCounter, renamedFieldReferenceFileCounter);
     }
 
     public static int getRenamedClassReferenceCounter() {

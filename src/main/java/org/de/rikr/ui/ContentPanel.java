@@ -1,7 +1,6 @@
 package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
-import org.de.rikr.decompiler.JetBrainsDecompilerService;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;
 import org.de.rikr.ui.handler.RenameActionHandler;
@@ -44,7 +43,6 @@ public class ContentPanel extends JScrollPane {
     private final int[] originalCaretPosition = new int[1];
     private LineNumberComponent lineNumberComponent;
 
-    private final JetBrainsDecompilerService decompilerService;
     private final boolean javaOnlyMode;
 
     public ContentPanel(Rikr controller) {
@@ -53,7 +51,6 @@ public class ContentPanel extends JScrollPane {
 
     public ContentPanel(Rikr controller, boolean javaOnlyMode) {
         this.controller = controller;
-        this.decompilerService = new JetBrainsDecompilerService(controller::log);
         this.javaOnlyMode = javaOnlyMode;
         setBorder(null);
 
@@ -156,7 +153,7 @@ public class ContentPanel extends JScrollPane {
                 contentPane.selectAll();
 
                 // Try cache first
-                String cached = controller.getProcessor() != null ? controller.getProcessor().getDecompiledSourceByClass(classNode.name) : null;
+                String cached = controller.getDecompiledSourceByClass(classNode.name);
                 if (cached != null && !cached.isEmpty()) {
                     javaSyntaxHighlighter.highlight(document, cached);
                     contentPane.setCaretPosition(0);
@@ -185,7 +182,7 @@ public class ContentPanel extends JScrollPane {
 
     private void decompileInBackgroundJavaOnly(ClassNode classNode) {
         // Try cache first (pre-decompiled on jar load)
-        String cached = controller.getProcessor() != null ? controller.getProcessor().getDecompiledSourceByClass(classNode.name) : null;
+        String cached = controller.getDecompiledSourceByClass(classNode.name);
         if (cached != null && !cached.isEmpty()) {
             SwingUtilities.invokeLater(() -> {
                 javaSyntaxHighlighter.highlight(document, cached);
@@ -194,17 +191,16 @@ public class ContentPanel extends JScrollPane {
             return;
         }
 
-        new Thread(() -> {
-            String src = decompilerService.decompile(classNode);
+        controller.decompileClassAsync(classNode).thenAccept(result -> {
             SwingUtilities.invokeLater(() -> {
-                if (src == null || src.isEmpty()) {
-                    contentPane.setText("// Failed to decompile using JetBrains decompiler.\n");
+                if (!result.success() || result.source().isEmpty()) {
+                    contentPane.setText("// " + result.message() + "\n");
                 } else {
-                    javaSyntaxHighlighter.highlight(document, src);
+                    javaSyntaxHighlighter.highlight(document, result.source());
                     contentPane.setCaretPosition(0);
                 }
             });
-        }, "rikr-decompiler-thread").start();
+        });
     }
 
     public void clear() {
@@ -245,7 +241,7 @@ public class ContentPanel extends JScrollPane {
                         e.dropComplete(true);
                     }
                 } catch (Exception ex) {
-                    ex.printStackTrace();
+                    controller.log("Failed to process dropped file: " + ex.getMessage());
                 }
             }
         });
@@ -334,7 +330,7 @@ public class ContentPanel extends JScrollPane {
                 return rootElement.getElementIndex(offset);
             }
         } catch (BadLocationException e) {
-            e.printStackTrace();
+            controller.log("Unable to resolve line for pattern: " + e.getMessage());
         }
 
         return -1;

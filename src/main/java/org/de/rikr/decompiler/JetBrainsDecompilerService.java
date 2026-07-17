@@ -109,17 +109,12 @@ public class JetBrainsDecompilerService {
             IFernflowerLogger fernLogger = new IFernflowerLogger() {
                 @Override
                 public void writeMessage(String message, Severity severity) {
-                    System.out.println("[FernFlower][" + severity + "] " + message);
+                    log("[FernFlower][" + severity + "] " + message);
                 }
 
                 @Override
                 public void writeMessage(String message, Severity severity, Throwable t) {
-                    System.out.println("[FernFlower][" + severity + "] " + message);
-                    if (t != null) {
-                        StringWriter sw = new StringWriter();
-                        t.printStackTrace(new PrintWriter(sw));
-                        System.out.println(sw);
-                    }
+                    log("[FernFlower][" + severity + "] " + message, t);
                 }
             };
 
@@ -247,17 +242,12 @@ public class JetBrainsDecompilerService {
             IFernflowerLogger fernLogger = new IFernflowerLogger() {
                 @Override
                 public void writeMessage(String message, Severity severity) {
-                    System.out.println("[FernFlower][" + severity + "] " + message);
+                    log("[FernFlower][" + severity + "] " + message);
                 }
 
                 @Override
                 public void writeMessage(String message, Severity severity, Throwable t) {
-                    System.out.println("[FernFlower][" + severity + "] " + message);
-                    if (t != null) {
-                        StringWriter sw = new StringWriter();
-                        t.printStackTrace(new PrintWriter(sw));
-                        System.out.println(sw);
-                    }
+                    log("[FernFlower][" + severity + "] " + message, t);
                 }
             };
 

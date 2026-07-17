@@ -9,8 +9,11 @@ import java.io.InputStream;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Logger;
 
 public class ClassNodeClassLoader extends ClassLoader {
+    private static final Logger LOGGER = Logger.getLogger(ClassNodeClassLoader.class.getName());
+
     private final Map<String, ClassNode> classNodeMap;
 
     public ClassNodeClassLoader(List<ClassNode> classNodes) {
@@ -55,7 +58,7 @@ public class ClassNodeClassLoader extends ClassLoader {
             classNode.accept(classWriter);
             byte[] classBytes = classWriter.toByteArray();
 
-            System.out.println("Defining class: " + name);
+            LOGGER.fine(() -> "Defining class: " + name);
 
             return defineClass(name, classBytes, 0, classBytes.length);
         } else {

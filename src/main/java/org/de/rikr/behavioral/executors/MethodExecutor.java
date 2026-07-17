@@ -13,8 +13,11 @@ import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Map;
 import java.util.Stack;
+import java.util.logging.Logger;
 
 public class MethodExecutor implements InstructionExecutor {
+    private static final Logger LOGGER = Logger.getLogger(MethodExecutor.class.getName());
+
     private final ClassNodeClassLoader classLoader;
 
     public MethodExecutor(List<ClassNode> classNodes) {
@@ -104,7 +107,7 @@ public class MethodExecutor implements InstructionExecutor {
         }
 
         if (classNode == null) {
-            System.out.println("Class not found: " + owner + "." + name + descriptor);
+            LOGGER.fine(() -> "Class not found: " + owner + "." + name + descriptor);
             return null;
         }
 

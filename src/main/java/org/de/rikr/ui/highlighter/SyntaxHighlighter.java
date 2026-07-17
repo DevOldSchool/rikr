@@ -6,10 +6,14 @@ import org.de.rikr.theme.Theme;
 import javax.swing.text.*;
 import java.awt.*;
 import java.util.ArrayList;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class SyntaxHighlighter {
+    private static final Logger LOGGER = Logger.getLogger(SyntaxHighlighter.class.getName());
+
     private static final String KEYWORD_STYLE = "Keyword";
     private static final String COMMENT_STYLE = "Comment";
     private static final String NUMBER_STYLE = "Number";
@@ -68,7 +72,7 @@ public class SyntaxHighlighter {
         try {
             doc.insertString(0, content, defaultStyle);
         } catch (BadLocationException e) {
-            e.printStackTrace();
+            LOGGER.log(Level.WARNING, "Failed to insert highlighted content.", e);
         }
 
         // Apply the default style to the entire document

@@ -10,9 +10,10 @@ import java.lang.reflect.Modifier;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Map;
 
 public class ClassNodeImages {
-    public static HashMap<String, ImageIcon> images = new HashMap<>();
+    private static final Map<String, ImageIcon> IMAGES = new HashMap<>();
 
     public static void loadImages() {
         String[] imageNames = {
@@ -38,7 +39,7 @@ public class ClassNodeImages {
                 throw new RuntimeException("Image file not found: " + imageName);
             }
 
-            images.put(imageName, new ImageIcon(imageUrl));
+            IMAGES.put(imageName, new ImageIcon(imageUrl));
         }
 
         String[] types = {"field", "method"};
@@ -60,7 +61,7 @@ public class ClassNodeImages {
                         }
                     }
 
-                    images.put(key, combinedImage);
+                    IMAGES.put(key, combinedImage);
                 }
             }
         }
@@ -106,7 +107,7 @@ public class ClassNodeImages {
     }
 
     public static ImageIcon getImage(String imageName) {
-        return images.get(imageName);
+        return IMAGES.get(imageName);
     }
 
     public static ImageIcon getFieldNodeImage(FieldNode fieldNode) {

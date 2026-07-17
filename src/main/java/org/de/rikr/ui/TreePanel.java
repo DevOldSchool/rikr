@@ -220,9 +220,9 @@ public class TreePanel extends JPanel {
             Map<String, List<ClassNode>> classGroups = Map.of();
 
             if (groupBySuperclass) {
-                classGroups = controller.getProcessor().groupBySuperclass(classes);
+                classGroups = controller.groupBySuperclass(classes);
             } else if (groupByInterfaces) {
-                classGroups = controller.getProcessor().groupByInterface(classes);
+                classGroups = controller.groupByInterface(classes);
             } else {
                 // Remove grouping
                 jarNode.removeAllChildren();

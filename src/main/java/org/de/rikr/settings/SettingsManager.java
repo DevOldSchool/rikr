@@ -9,8 +9,8 @@ import org.de.rikr.theme.laf.LafDefaults;
 
 import javax.swing.*;
 import java.awt.*;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 
 public class SettingsManager {
@@ -20,7 +20,7 @@ public class SettingsManager {
         void onSettingsApplied(Settings settings);
     }
 
-    private static final List<Listener> listeners = new ArrayList<>();
+    private static final List<Listener> listeners = new CopyOnWriteArrayList<>();
 
     public static Settings getCurrent() {
         return current;
@@ -95,7 +95,7 @@ public class SettingsManager {
     }
 
     private static void notifyListeners() {
-        for (Listener listener : new ArrayList<>(listeners)) {
+        for (Listener listener : listeners) {
             try {
                 listener.onSettingsApplied(current);
             } catch (Exception ignored) {

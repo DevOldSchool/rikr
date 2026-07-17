@@ -130,7 +130,7 @@ public class TreePopupMenu extends JPopupMenu {
             if (selectedNode instanceof ClassNodeMutableTreeNode classNodeMutableTreeNode) {
                 String jarName = classNodeMutableTreeNode.getJarName();
                 ClassNode selectedClassNode = classNodeMutableTreeNode.getClassNode();
-                List<ClassNode> classes = controller.getProcessor().findClassesExtending(controller.getClasses(jarName), selectedClassNode);
+                List<ClassNode> classes = controller.findClassesExtending(controller.getClasses(jarName), selectedClassNode);
 
                 boolean foundMatch = false;
                 for (ClassNode classNode : classes) {
@@ -153,7 +153,7 @@ public class TreePopupMenu extends JPopupMenu {
             if (selectedNode instanceof InterfaceNodeMutableTreeNode interfaceNodeMutableTreeNode) {
                 String jarName = interfaceNodeMutableTreeNode.getJarName();
                 ClassNode selectedClassNode = interfaceNodeMutableTreeNode.getClassNode();
-                List<ClassNode> classes = controller.getProcessor().findClassesImplementing(controller.getClasses(jarName), selectedClassNode);
+                List<ClassNode> classes = controller.findClassesImplementing(controller.getClasses(jarName), selectedClassNode);
 
                 boolean foundMatch = false;
                 for (ClassNode classNode : classes) {
@@ -176,7 +176,7 @@ public class TreePopupMenu extends JPopupMenu {
             if (selectedNode instanceof JarMutableTreeNode jarMutableTreeNode) {
                 String jarName = jarMutableTreeNode.getJarName();
                 List<ClassNode> classes = jarMutableTreeNode.getClasses();
-                Map<String, List<ClassNode>> superclassGroups = controller.getProcessor().groupBySuperclass(classes);
+                Map<String, List<ClassNode>> superclassGroups = controller.groupBySuperclass(classes);
 
                 controller.getUserInterface().getTreePanel().addTreeNodes(selectedNode, jarName, classes, superclassGroups);
             }
@@ -191,7 +191,7 @@ public class TreePopupMenu extends JPopupMenu {
             if (selectedNode instanceof JarMutableTreeNode jarMutableTreeNode) {
                 String jarName = jarMutableTreeNode.getJarName();
                 List<ClassNode> classes = jarMutableTreeNode.getClasses();
-                Map<String, List<ClassNode>> interfaceGroups = controller.getProcessor().groupByInterface(classes);
+                Map<String, List<ClassNode>> interfaceGroups = controller.groupByInterface(classes);
 
                 controller.getUserInterface().getTreePanel().addTreeNodes(selectedNode, jarName, classes, interfaceGroups);
             }
@@ -232,8 +232,8 @@ public class TreePopupMenu extends JPopupMenu {
                 boolean hasSuperClass = !selectedClassNode.superName.equals("java/lang/Object");
                 int interfaceCount = selectedClassNode.interfaces.size();
 
-                List<String> fields = controller.getProcessor().getNonStaticFieldDescriptions(selectedClassNode);
-                List<String> methods = controller.getProcessor().getNonStaticMethodDescriptions(selectedClassNode);
+                List<String> fields = controller.getNonStaticFieldDescriptions(selectedClassNode);
+                List<String> methods = controller.getNonStaticMethodDescriptions(selectedClassNode);
 
                 informationMap.put("ClassNode", selectedClassNode.name);
                 informationMap.put("Is Interface", String.valueOf(isInterface));
@@ -257,7 +257,7 @@ public class TreePopupMenu extends JPopupMenu {
                 String jarToExclude = classMutableTreeNode.getJarName();
                 ClassNode selectedClassNode = classMutableTreeNode.getClassNode();
                 List<ClassNode> selectedClassNodes = controller.getClasses(classMutableTreeNode.getJarName());
-                Map<String, List<ClassNode>> jarMatchingMap = controller.getProcessor().findMatchingClassNodes(jarToExclude, selectedClassNode);
+                Map<String, List<ClassNode>> jarMatchingMap = controller.findMatchingClassNodes(jarToExclude, selectedClassNode);
 
                 boolean foundMatch = false;
                 for (String jarName : jarMatchingMap.keySet()) {
@@ -274,7 +274,7 @@ public class TreePopupMenu extends JPopupMenu {
                                     continue;
                                 }
 
-                                if (controller.getProcessor().areMethodsBehaviorallyEquivalent(selectedClassNodes, methodNode1, compareClassNodes, methodNode2)) {
+                                if (controller.areMethodsBehaviorallyEquivalent(selectedClassNodes, methodNode1, compareClassNodes, methodNode2)) {
                                     stringBuilder.append(String.format("\n  - Methods are behaviorally equivalent %s -> %s", methodNode1.name + methodNode1.desc, methodNode2.name + methodNode2.desc));
                                 }
                             }

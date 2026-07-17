@@ -1,7 +1,7 @@
 package org.de.rikr.ui.handler;
 
-import org.de.rikr.Renamer;
 import org.de.rikr.Rikr;
+import org.de.rikr.service.RenameResult;
 import org.de.rikr.ui.model.*;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldNode;
@@ -197,8 +197,7 @@ public class RenameActionHandler implements ActionListener {
         ClassNode classNode = node.getClassNode();
 
         if (classNode != null) {
-            Renamer.updateClassReferences(controller.getClasses(jarName), classNode.name, newName);
-            logRenameResults("class", Renamer.getRenamedClassReferenceCounter(), Renamer.getRenamedClassReferenceFileCounter());
+            logRenameResults(controller.renameClassReferences(jarName, classNode, newName));
             node.setUserObject(newName + ".class");
             DefaultMutableTreeNode childNode = (DefaultMutableTreeNode) node.getChildAt(0);
 
@@ -217,8 +216,7 @@ public class RenameActionHandler implements ActionListener {
         ClassNode classNode = node.getClassNode();
 
         if (classNode != null) {
-            Renamer.updateClassReferences(controller.getClasses(jarName), classNode.name, newName);
-            logRenameResults("class", Renamer.getRenamedClassReferenceCounter(), Renamer.getRenamedClassReferenceFileCounter());
+            logRenameResults(controller.renameClassReferences(jarName, classNode, newName));
             node.setUserObject(newName);
             parentNode.setUserObject(newName + ".class");
             controller.getUserInterface().getTreePanel().updateNode(parentNode);
@@ -233,8 +231,8 @@ public class RenameActionHandler implements ActionListener {
         ClassNode classNode = node.getClassNode();
 
         if (classNode != null) {
-            Renamer.updateClassReferences(controller.getClasses(jarName), classNode.name, newName);
-            logRenameResults("interface", Renamer.getRenamedClassReferenceCounter(), Renamer.getRenamedClassReferenceFileCounter());
+            RenameResult result = controller.renameClassReferences(jarName, classNode, newName);
+            logRenameResults(new RenameResult("interface", result.referenceCount(), result.fileCount()));
             node.setUserObject(newName);
             parentNode.setUserObject(newName + ".class");
             controller.getUserInterface().getTreePanel().updateNode(parentNode);
@@ -250,8 +248,7 @@ public class RenameActionHandler implements ActionListener {
         FieldNode fieldNode = node.getFieldNode();
 
         if (classNode != null && fieldNode != null) {
-            Renamer.updateFieldReferences(controller.getClasses(jarName), classNode, fieldNode.name, newName);
-            logRenameResults("field", Renamer.getRenamedFieldReferenceCounter(), Renamer.getRenamedFieldReferenceFileCounter());
+            logRenameResults(controller.renameFieldReferences(jarName, classNode, fieldNode, newName));
             node.setUserObject(newName + " " + fieldNode.desc);
         }
 
@@ -265,16 +262,20 @@ public class RenameActionHandler implements ActionListener {
         MethodNode methodNode = node.getMethodNode();
 
         if (classNode != null && methodNode != null) {
-            Renamer.updateMethodReferences(controller.getClasses(jarName), classNode, methodNode.name, newName);
-            logRenameResults("method", Renamer.getRenamedMethodReferenceCounter(), Renamer.getRenamedMethodReferenceFileCounter());
+            logRenameResults(controller.renameMethodReferences(jarName, classNode, methodNode, newName));
             node.setUserObject(newName + " " + methodNode.desc);
         }
 
         return classNode;
     }
 
-    private void logRenameResults(String type, int renamedCount, int fileCount) {
-        controller.log(String.format("Renamed %d %s references in %d files.", renamedCount, type, fileCount));
+    private void logRenameResults(RenameResult result) {
+        controller.log(String.format(
+            "Renamed %d %s references in %d files.",
+            result.referenceCount(),
+            result.type(),
+            result.fileCount()
+        ));
     }
 
     private void updateNodeAndDisplay(ClassNode classNode, DefaultMutableTreeNode selectedNode, String newName) {
