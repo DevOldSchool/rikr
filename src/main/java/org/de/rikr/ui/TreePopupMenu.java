@@ -30,7 +30,7 @@ public class TreePopupMenu extends JPopupMenu {
     private final JMenuItem findMatchingClassNodes;
     private final JMenuItem getClassNodeSignature;
     private final JMenuItem simulateMethod;
-    private final JMenuItem findUsage;
+    private final JMenuItem showReferences;
 
     public TreePopupMenu(Rikr controller, JTree tree) {
         this.controller = controller;
@@ -46,7 +46,7 @@ public class TreePopupMenu extends JPopupMenu {
         findMatchingClassNodes = new JMenuItem("Find Matching Class Nodes");
         getClassNodeSignature = new JMenuItem("Get Class Node Signature");
         simulateMethod = new JMenuItem("Simulate Method");
-        findUsage = new JMenuItem("Find Usage");
+        showReferences = new JMenuItem("Show References");
 
         add(renameItem);
         add(removeItem);
@@ -78,15 +78,18 @@ public class TreePopupMenu extends JPopupMenu {
                     } else if (selectedNode instanceof ClassMutableTreeNode) {
                         add(getClassNodeSignature);
                         add(findMatchingClassNodes);
+                        add(showReferences);
                     } else if (selectedNode instanceof ClassNodeMutableTreeNode) {
                         add(findExtenders);
+                        add(showReferences);
                     } else if (selectedNode instanceof InterfaceNodeMutableTreeNode) {
                         add(findImplementors);
+                        add(showReferences);
                     } else if (selectedNode instanceof MethodNodeMutableTreeNode) {
                         add(simulateMethod);
-                        add(findUsage);
+                        add(showReferences);
                     } else if (selectedNode instanceof FieldNodeMutableTreeNode) {
-                        add(findUsage);
+                        add(showReferences);
                     }
                 }
             }
@@ -276,57 +279,47 @@ public class TreePopupMenu extends JPopupMenu {
             }
         });
 
-        findUsage.addActionListener(e -> {
+        showReferences.addActionListener(e -> {
             DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
             if (selectedNode == null) {
                 return;
             }
 
-            if (selectedNode instanceof FieldNodeMutableTreeNode fieldNodeMutableTreeNode) {
-                ClassNodeMutableTreeNode parentNode = (ClassNodeMutableTreeNode) fieldNodeMutableTreeNode.getParent();
-                FieldNode fieldNode = fieldNodeMutableTreeNode.getFieldNode();
-
-                for (ClassNode classNode : controller.getClasses(parentNode.getJarName())) {
-                    for (MethodNode methodNode : classNode.methods) {
-                        for (AbstractInsnNode abstractInsnNode : methodNode.instructions) {
-                            if (abstractInsnNode instanceof FieldInsnNode fieldInsnNode) {
-                                if (fieldInsnNode.owner.equals(parentNode.getClassNode().name) && fieldInsnNode.name.equals(fieldNode.name)) {
-                                    controller.log(String.format("Found field usage in %s -> %s%s -> %s.%s",
-                                            classNode.name,
-                                            methodNode.name,
-                                            methodNode.desc,
-                                            parentNode.getClassNode().name,
-                                            fieldNode.name));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (selectedNode instanceof MethodNodeMutableTreeNode methodNodeMutableTreeNode) {
-                ClassNodeMutableTreeNode parentNode = (ClassNodeMutableTreeNode) methodNodeMutableTreeNode.getParent();
-                MethodNode parentMethodNode = methodNodeMutableTreeNode.getMethodNode();
-
-                for (ClassNode classNode : controller.getClasses(parentNode.getJarName())) {
-                    for (MethodNode methodNode : classNode.methods) {
-                        for (AbstractInsnNode abstractInsnNode : methodNode.instructions) {
-                            if (abstractInsnNode instanceof MethodInsnNode methodInsnNode) {
-                                if (methodInsnNode.owner.equals(parentNode.getClassNode().name) && methodInsnNode.name.equals(parentMethodNode.name)) {
-                                    controller.log(
-                                            String.format("Found method usage in %s -> %s%s -> %s.%s",
-                                                    classNode.name,
-                                                    methodNode.name,
-                                                    methodNode.desc,
-                                                    parentNode.getClassNode().name,
-                                                    parentMethodNode.name));
-                                }
-                            }
-                        }
-                    }
-                }
+            if (selectedNode instanceof ClassMutableTreeNode classNode) {
+                controller.getUserInterface().showClassReferences(classNode.getJarName(), classNode.getClassNode());
+            } else if (selectedNode instanceof ClassNodeMutableTreeNode classNode) {
+                controller.getUserInterface().showClassReferences(classNode.getJarName(), classNode.getClassNode());
+            } else if (selectedNode instanceof InterfaceNodeMutableTreeNode interfaceNode) {
+                controller.getUserInterface().showClassReferences(
+                    interfaceNode.getJarName(),
+                    interfaceNode.getClassNode()
+                );
+            } else if (selectedNode instanceof FieldNodeMutableTreeNode fieldNode) {
+                String jarName = getOwnerJarName((DefaultMutableTreeNode) fieldNode.getParent());
+                controller.getUserInterface().showFieldReferences(
+                    jarName,
+                    fieldNode.getOwner(),
+                    fieldNode.getFieldNode()
+                );
+            } else if (selectedNode instanceof MethodNodeMutableTreeNode methodNode) {
+                String jarName = getOwnerJarName((DefaultMutableTreeNode) methodNode.getParent());
+                controller.getUserInterface().showMethodReferences(
+                    jarName,
+                    methodNode.getOwner(),
+                    methodNode.getMethodNode()
+                );
             }
         });
+    }
+
+    private String getOwnerJarName(DefaultMutableTreeNode ownerNode) {
+        if (ownerNode instanceof ClassNodeMutableTreeNode classNode) {
+            return classNode.getJarName();
+        }
+        if (ownerNode instanceof InterfaceNodeMutableTreeNode interfaceNode) {
+            return interfaceNode.getJarName();
+        }
+        throw new IllegalStateException("Reference owner is not attached to a loaded JAR");
     }
 
     private void findAndLogMatchingClassNodes(ClassMutableTreeNode selectedNode) {

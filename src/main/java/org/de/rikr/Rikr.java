@@ -3,10 +3,12 @@ package org.de.rikr;
 import com.formdev.flatlaf.util.SystemInfo;
 import org.de.rikr.resources.Fonts;
 import org.de.rikr.resources.Images;
-import org.de.rikr.service.DecompileResult;
 import org.de.rikr.service.ClassMatch;
+import org.de.rikr.service.ClassMappingDecision;
+import org.de.rikr.service.DecompileResult;
 import org.de.rikr.service.RenameResult;
 import org.de.rikr.service.RenameService;
+import org.de.rikr.service.ReferenceResult;
 import org.de.rikr.service.SearchQuery;
 import org.de.rikr.service.SearchResult;
 import org.de.rikr.settings.SettingsManager;
@@ -21,6 +23,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 public class Rikr {
@@ -117,6 +120,90 @@ public class Rikr {
         return processor.normalizeClassDescriptor(descriptor);
     }
 
+    public List<ClassMatch> findMappingCandidates(
+        String targetJar,
+        ClassNode sourceClass,
+        int minimumSimilarityPercent,
+        int maximumResults
+    ) {
+        return processor.findMappingCandidates(targetJar, sourceClass, minimumSimilarityPercent, maximumResults);
+    }
+
+    public void acceptClassMapping(
+        String sourceJar,
+        String targetJar,
+        ClassNode sourceClass,
+        ClassMatch candidate
+    ) {
+        processor.acceptClassMapping(sourceJar, targetJar, sourceClass, candidate);
+    }
+
+    public void rejectClassMapping(
+        String sourceJar,
+        String targetJar,
+        ClassNode sourceClass,
+        ClassNode targetClass
+    ) {
+        processor.rejectClassMapping(sourceJar, targetJar, sourceClass, targetClass);
+    }
+
+    public void clearClassMappingDecisions(String sourceJar, String targetJar, ClassNode sourceClass) {
+        processor.clearClassMappingDecisions(sourceJar, targetJar, sourceClass);
+    }
+
+    public Optional<ClassMappingDecision> getAcceptedClassMapping(
+        String sourceJar,
+        String targetJar,
+        ClassNode sourceClass
+    ) {
+        return processor.getAcceptedClassMapping(sourceJar, targetJar, sourceClass);
+    }
+
+    public boolean isClassMappingRejected(
+        String sourceJar,
+        String targetJar,
+        ClassNode sourceClass,
+        ClassNode targetClass
+    ) {
+        return processor.isClassMappingRejected(sourceJar, targetJar, sourceClass, targetClass);
+    }
+
+    public List<ClassMappingDecision> getAcceptedClassMappings(String sourceJar, String targetJar) {
+        return processor.getAcceptedClassMappings(sourceJar, targetJar);
+    }
+
+    public List<ReferenceResult> findFieldReads(String jarName, ClassNode owner, FieldNode field) {
+        return processor.findFieldReads(jarName, owner, field);
+    }
+
+    public List<ReferenceResult> findFieldWrites(String jarName, ClassNode owner, FieldNode field) {
+        return processor.findFieldWrites(jarName, owner, field);
+    }
+
+    public List<ReferenceResult> findMethodCallers(String jarName, ClassNode owner, MethodNode method) {
+        return processor.findMethodCallers(jarName, owner, method);
+    }
+
+    public List<ReferenceResult> findMethodCallees(String jarName, ClassNode owner, MethodNode method) {
+        return processor.findMethodCallees(jarName, owner, method);
+    }
+
+    public List<ReferenceResult> findTypeReferences(String jarName, ClassNode targetClass) {
+        return processor.findTypeReferences(jarName, targetClass);
+    }
+
+    public List<ClassMappingDecision> autoAcceptUniqueClassMappings(
+        String sourceJar,
+        String targetJar,
+        int minimumSimilarityPercent
+    ) {
+        return processor.autoAcceptUniqueClassMappings(sourceJar, targetJar, minimumSimilarityPercent);
+    }
+
+    public void exportAcceptedClassMappings(File destination, String sourceJar, String targetJar) throws IOException {
+        processor.exportAcceptedClassMappings(destination, sourceJar, targetJar);
+    }
+
     public boolean areMethodsBehaviorallyEquivalent(
         List<ClassNode> classNodes1,
         MethodNode methodNode1,
@@ -167,15 +254,24 @@ public class Rikr {
     }
 
     public RenameResult renameClassReferences(String jarName, ClassNode classNode, String newName) {
-        return renameService.renameClassReferences(getClasses(jarName), classNode.name, newName);
+        processor.invalidateClassMappings(jarName, classNode);
+        RenameResult result = renameService.renameClassReferences(getClasses(jarName), classNode.name, newName);
+        processor.refreshReferenceIndex(jarName);
+        return result;
     }
 
     public RenameResult renameFieldReferences(String jarName, ClassNode owner, FieldNode fieldNode, String newName) {
-        return renameService.renameFieldReferences(getClasses(jarName), owner, fieldNode.name, newName);
+        processor.invalidateClassMappings(jarName, owner);
+        RenameResult result = renameService.renameFieldReferences(getClasses(jarName), owner, fieldNode.name, newName);
+        processor.refreshReferenceIndex(jarName);
+        return result;
     }
 
     public RenameResult renameMethodReferences(String jarName, ClassNode owner, MethodNode methodNode, String newName) {
-        return renameService.renameMethodReferences(getClasses(jarName), owner, methodNode.name, newName);
+        processor.invalidateClassMappings(jarName, owner);
+        RenameResult result = renameService.renameMethodReferences(getClasses(jarName), owner, methodNode.name, newName);
+        processor.refreshReferenceIndex(jarName);
+        return result;
     }
 
     public void shutdown() {

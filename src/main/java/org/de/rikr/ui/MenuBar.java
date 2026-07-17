@@ -22,6 +22,8 @@ public class MenuBar extends JMenuBar {
         ActionListener showSearchAction,
         ActionListener showProjectAction,
         ActionListener showGlobalSearchAction,
+        ActionListener showMappingAction,
+        ActionListener showReferencesAction,
         ActionListener toggleLogAction,
         ActionListener saveSelectedClassAction,
         ActionListener saveSelectedJarAction,
@@ -87,6 +89,22 @@ public class MenuBar extends JMenuBar {
         globalSearchItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx() | KeyEvent.SHIFT_DOWN_MASK));
         globalSearchItem.addActionListener(showGlobalSearchAction);
         viewMenu.add(globalSearchItem);
+
+        JMenuItem mappingItem = new JMenuItem("Cross-JAR Mappings");
+        mappingItem.setAccelerator(KeyStroke.getKeyStroke(
+            KeyEvent.VK_M,
+            Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx() | KeyEvent.SHIFT_DOWN_MASK
+        ));
+        mappingItem.addActionListener(showMappingAction);
+        viewMenu.add(mappingItem);
+
+        JMenuItem referencesItem = new JMenuItem("References and Call Hierarchy");
+        referencesItem.setAccelerator(KeyStroke.getKeyStroke(
+            KeyEvent.VK_R,
+            Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx() | KeyEvent.SHIFT_DOWN_MASK
+        ));
+        referencesItem.addActionListener(showReferencesAction);
+        viewMenu.add(referencesItem);
 
         viewMenu.addSeparator();
 

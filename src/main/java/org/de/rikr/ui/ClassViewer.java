@@ -2,11 +2,14 @@ package org.de.rikr.ui;
 
 import com.formdev.flatlaf.util.SystemInfo;
 import org.de.rikr.Rikr;
+import org.de.rikr.service.ReferenceResult;
 import org.de.rikr.settings.Settings;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;
 import org.de.rikr.ui.action.ClassFileActions;
 import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.FieldNode;
+import org.objectweb.asm.tree.MethodNode;
 
 import javax.swing.*;
 import javax.swing.plaf.basic.BasicSplitPaneDivider;
@@ -26,6 +29,7 @@ public class ClassViewer {
     private final Rikr controller;
     private final MenuBar menuBar;
     private final JSplitPane mainSplitPane;
+    private final JSplitPane leftSplitPane;
     private final JSplitPane contentSplitPane;
     private final JSplitPane verticalSplitPane;
     private final NavigationPanel navigationPanel;
@@ -39,6 +43,8 @@ public class ClassViewer {
     private final LogPanel logPanel;
     private final JPanel projectPanel;
     private final SearchPanel searchPanel;
+    private final MappingWorkspacePanel mappingWorkspacePanel;
+    private final ReferenceWorkspacePanel referenceWorkspacePanel;
     private final MethodSimulatorPanel methodSimulatorPanel;
     private final JPanel rightPanel;
     private final SimulatorBar simulatorBar;
@@ -83,6 +89,8 @@ public class ClassViewer {
         projectPanel = new JPanel(new BorderLayout());
         projectPanel.add(treePanel, BorderLayout.CENTER);
         searchPanel = new SearchPanel(controller);
+        mappingWorkspacePanel = new MappingWorkspacePanel(controller);
+        referenceWorkspacePanel = new ReferenceWorkspacePanel(controller);
         methodSimulatorPanel = new MethodSimulatorPanel(controller);
         simulatorBar = new SimulatorBar(controller, e -> toggleMethodSimulatorVisibility(methodSimulatorPanel.isVisible()));
         classFileActions = new ClassFileActions(controller, frame, treePanel);
@@ -101,11 +109,13 @@ public class ClassViewer {
         navigationPanel = new NavigationPanel(
             controller,
             e -> showProjectPanel(),
-            e -> showSearchPanel()
+            e -> showSearchPanel(),
+            e -> showMappingPanel(),
+            e -> showReferencePanel()
         );
 
         // Create a split pane for the navigation panel and tree panel
-        JSplitPane leftSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+        leftSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
         leftSplitPane.setLeftComponent(navigationPanel);
         leftSplitPane.setRightComponent(projectPanel);
         leftSplitPane.setDividerSize(1);
@@ -149,6 +159,8 @@ public class ClassViewer {
             e -> toggleSearchBarVisibility(false),
             e -> showProjectTab(),
             e -> showGlobalSearchTab(),
+            e -> showMappingTab(),
+            e -> showReferencesTab(),
             e -> toggleLogVisibility(logPanel.isVisible()),
             e -> classFileActions.saveSelectedClass(),
             e -> classFileActions.saveSelectedJar(),
@@ -240,6 +252,7 @@ public class ClassViewer {
         logPanel.init();
         menuBar.init();
         searchPanel.init();
+        mappingWorkspacePanel.init();
         simulatorBar.init();
 
         SwingUtilities.invokeLater(() -> {
@@ -255,7 +268,10 @@ public class ClassViewer {
     }
 
     public void updateTree(Map<String, List<ClassNode>> jarClassesMap) {
-        SwingUtilities.invokeLater(() -> treePanel.updateTree(jarClassesMap));
+        SwingUtilities.invokeLater(() -> {
+            treePanel.updateTree(jarClassesMap);
+            mappingWorkspacePanel.refreshJars(jarClassesMap);
+        });
     }
 
     public void displayBytecode(ClassNode classNode) {
@@ -267,23 +283,68 @@ public class ClassViewer {
         }
     }
 
+    public void showClassReferences(String jarName, ClassNode classNode) {
+        referenceWorkspacePanel.showClassReferences(jarName, classNode);
+        navigationPanel.selectReferencesTab();
+    }
+
+    public void showFieldReferences(String jarName, ClassNode owner, FieldNode field) {
+        referenceWorkspacePanel.showFieldReferences(jarName, owner, field);
+        navigationPanel.selectReferencesTab();
+    }
+
+    public void showMethodReferences(String jarName, ClassNode owner, MethodNode method) {
+        referenceWorkspacePanel.showMethodReferences(jarName, owner, method);
+        navigationPanel.selectReferencesTab();
+    }
+
+    public void openReferenceResult(ReferenceResult result) {
+        navigationPanel.selectProjectTab();
+        displayBytecode(result.navigationClass());
+        SwingUtilities.invokeLater(() -> contentPanelLeft.selectTextAfterPattern(
+            result.navigationPattern(),
+            result.highlightText()
+        ));
+    }
+
     public void clearContent() {
         contentPanelLeft.clear();
         contentPanelRight.clear();
     }
 
     private void showProjectPanel() {
-        JSplitPane leftOfTop = (JSplitPane) ((JSplitPane) verticalSplitPane.getTopComponent()).getLeftComponent();
-        leftOfTop.setRightComponent(projectPanel);
+        leftSplitPane.setRightComponent(projectPanel);
+        mainSplitPane.setRightComponent(rightPanel);
+        mainSplitPane.setDividerLocation(300);
         SettingsManager.refreshThemeFor(projectPanel);
         frame.revalidate();
         frame.repaint();
     }
 
     private void showSearchPanel() {
-        JSplitPane leftOfTop = (JSplitPane) ((JSplitPane) verticalSplitPane.getTopComponent()).getLeftComponent();
-        leftOfTop.setRightComponent(searchPanel);
+        leftSplitPane.setRightComponent(searchPanel);
+        mainSplitPane.setRightComponent(rightPanel);
+        mainSplitPane.setDividerLocation(300);
         SettingsManager.refreshThemeFor(searchPanel);
+        frame.revalidate();
+        frame.repaint();
+    }
+
+    private void showMappingPanel() {
+        leftSplitPane.setRightComponent(projectPanel);
+        mainSplitPane.setRightComponent(mappingWorkspacePanel);
+        mainSplitPane.setDividerLocation(300);
+        mappingWorkspacePanel.refreshJars(controller.getJarClassesMap());
+        SettingsManager.refreshThemeFor(mappingWorkspacePanel);
+        frame.revalidate();
+        frame.repaint();
+    }
+
+    private void showReferencePanel() {
+        leftSplitPane.setRightComponent(projectPanel);
+        mainSplitPane.setRightComponent(referenceWorkspacePanel);
+        mainSplitPane.setDividerLocation(300);
+        SettingsManager.refreshThemeFor(referenceWorkspacePanel);
         frame.revalidate();
         frame.repaint();
     }
@@ -355,6 +416,14 @@ public class ClassViewer {
     private void showGlobalSearchTab() {
         navigationPanel.selectSearchTab();
         searchPanel.select();
+    }
+
+    private void showMappingTab() {
+        navigationPanel.selectMappingTab();
+    }
+
+    private void showReferencesTab() {
+        navigationPanel.selectReferencesTab();
     }
 
     public void setStackAreaText(Stack<Object> stack) {

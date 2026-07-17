@@ -20,15 +20,24 @@ The following items are listed in no particular order and are here as a todo lis
 
 #### User interface for class mapping between Jars.
 
-- View class information and matching class information.
-    - Field count, method count, interface count.
+- ~~View class information and matching class information.~~
+    - ~~Field count, method count, interface count.~~
 - ~~List of classes based on percentage matching.~~
+- ~~Accept or reject one-to-one class mappings.~~
+- ~~Auto-match unique candidates above a configurable threshold.~~
+- ~~Export accepted mappings as JSON.~~
 
 #### Global search
 
 - ~~Search through all class nodes across all loaded jars including instructions.~~
 - ~~Search filters, include static, include instructions.~~
 - ~~Search result hierarchy, class, field, method, instruction.~~
+
+#### References and call hierarchy
+
+- ~~Navigate method callers and callees.~~
+- ~~Separate field reads from field writes.~~
+- ~~Find inheritance, descriptor, and bytecode type references.~~
 
 #### Control flow graph
 
@@ -48,3 +57,23 @@ The following items are listed in no particular order and are here as a todo lis
 - Building.
 - Running.
 - User guides.
+
+## Cross-JAR mapping workspace
+
+Load at least two JARs, then open **View > Cross-JAR Mappings** or press
+`Ctrl/Cmd+Shift+M`. Select source and target JARs to review ranked structural
+matches with side-by-side field, method, interface, and superclass details.
+
+Accepted mappings are one-to-one within a JAR pair. Rejected candidates are
+remembered for the current session, and **Auto-match unique** only accepts a
+source class when its highest-scoring available candidate is unambiguous.
+Accepted mappings can be exported as JSON.
+
+## References and call hierarchy
+
+Right-click a class, field, or method in the project tree and choose
+**Show References**. Classes show inheritance, descriptor, and bytecode type
+references; fields separate reads from writes; methods separate callers from
+callees. Double-click a result, or select it and press Enter, to open and
+highlight the relevant member. The reference index is rebuilt when JAR content
+changes, so queries do not repeatedly scan every instruction.
