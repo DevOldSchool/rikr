@@ -3,6 +3,7 @@ package org.de.rikr;
 import org.de.rikr.behavioral.ClassComparator;
 import org.de.rikr.behavioral.MethodComparator;
 import org.de.rikr.service.ClassLoadingService;
+import org.de.rikr.service.ClassMatch;
 import org.de.rikr.service.DecompileResult;
 import org.de.rikr.service.DecompilerCacheService;
 import org.de.rikr.service.JarExportService;
@@ -18,12 +19,15 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 public class ClassProcessor implements AutoCloseable {
     private static final String LOOSE_CLASS_GROUP = "Classes";
+    private static final int MIN_CLASS_MATCH_PERCENT = 50;
+    private static final int MAX_CLASS_MATCHES_PER_JAR = 10;
 
     private final Logger logger;
     private final ProjectRepository projectRepository;
@@ -126,15 +130,37 @@ public class ClassProcessor implements AutoCloseable {
     }
 
     public Map<String, List<ClassNode>> findMatchingClassNodes(String jarToExclude, ClassNode classNodeToMatch) {
-        Map<String, List<ClassNode>> matching = new HashMap<>();
+        Map<String, List<ClassNode>> matching = new LinkedHashMap<>();
 
-        for (Map.Entry<String, List<ClassNode>> entry : projectRepository.getJarClassesView().entrySet()) {
+        for (Map.Entry<String, List<ClassNode>> entry : getSortedJarEntries()) {
             if (entry.getKey().equals(jarToExclude)) {
                 continue;
             }
 
             List<ClassNode> classes = classComparator.getMatchingClassNodes(entry.getValue(), classNodeToMatch);
-            matching.putIfAbsent(entry.getKey(), classes);
+            if (!classes.isEmpty()) {
+                matching.put(entry.getKey(), classes);
+            }
+        }
+
+        return matching;
+    }
+
+    public Map<String, List<ClassMatch>> findSimilarClassNodes(String jarToExclude, ClassNode classNodeToMatch) {
+        Map<String, List<ClassMatch>> matching = new LinkedHashMap<>();
+
+        for (Map.Entry<String, List<ClassNode>> entry : getSortedJarEntries()) {
+            if (entry.getKey().equals(jarToExclude)) {
+                continue;
+            }
+
+            List<ClassMatch> matches = classComparator.getClassNodeMatches(entry.getValue(), classNodeToMatch).stream()
+                .filter(match -> match.similarityPercent() >= MIN_CLASS_MATCH_PERCENT)
+                .limit(MAX_CLASS_MATCHES_PER_JAR)
+                .toList();
+            if (!matches.isEmpty()) {
+                matching.put(entry.getKey(), matches);
+            }
         }
 
         return matching;
@@ -162,6 +188,10 @@ public class ClassProcessor implements AutoCloseable {
 
     public List<String> getNonStaticMethodDescriptions(ClassNode classNode) {
         return classComparator.getNonStaticMethodDescriptions(classNode);
+    }
+
+    public String normalizeClassDescriptor(String descriptor) {
+        return classComparator.normalizeDescriptor(descriptor);
     }
 
     public boolean areMethodsBehaviorallyEquivalent(
@@ -224,5 +254,11 @@ public class ClassProcessor implements AutoCloseable {
     @Override
     public void close() {
         decompilerCacheService.close();
+    }
+
+    private List<Map.Entry<String, List<ClassNode>>> getSortedJarEntries() {
+        return projectRepository.getJarClassesView().entrySet().stream()
+            .sorted(Map.Entry.comparingByKey())
+            .toList();
     }
 }

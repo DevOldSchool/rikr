@@ -22,7 +22,7 @@ The following items are listed in no particular order and are here as a todo lis
 
 - View class information and matching class information.
     - Field count, method count, interface count.
-- List of classes based on percentage matching.
+- ~~List of classes based on percentage matching.~~
 
 #### Global search
 

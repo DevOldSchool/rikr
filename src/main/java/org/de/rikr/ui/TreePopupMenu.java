@@ -1,6 +1,7 @@
 package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
+import org.de.rikr.service.ClassMatch;
 import org.de.rikr.ui.model.*;
 import org.objectweb.asm.tree.*;
 
@@ -10,9 +11,11 @@ import javax.swing.event.PopupMenuListener;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import java.lang.reflect.Modifier;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 
 public class TreePopupMenu extends JPopupMenu {
     private final Rikr controller;
@@ -229,7 +232,8 @@ public class TreePopupMenu extends JPopupMenu {
 
                 boolean isInterface = Modifier.isInterface(selectedClassNode.access);
                 boolean isAbstract = Modifier.isAbstract(selectedClassNode.access);
-                boolean hasSuperClass = !selectedClassNode.superName.equals("java/lang/Object");
+                boolean hasSuperClass = selectedClassNode.superName != null
+                    && !"java/lang/Object".equals(selectedClassNode.superName);
                 int interfaceCount = selectedClassNode.interfaces.size();
 
                 List<String> fields = controller.getNonStaticFieldDescriptions(selectedClassNode);
@@ -254,39 +258,7 @@ public class TreePopupMenu extends JPopupMenu {
             }
 
             if (selectedNode instanceof ClassMutableTreeNode classMutableTreeNode) {
-                String jarToExclude = classMutableTreeNode.getJarName();
-                ClassNode selectedClassNode = classMutableTreeNode.getClassNode();
-                List<ClassNode> selectedClassNodes = controller.getClasses(classMutableTreeNode.getJarName());
-                Map<String, List<ClassNode>> jarMatchingMap = controller.findMatchingClassNodes(jarToExclude, selectedClassNode);
-
-                boolean foundMatch = false;
-                for (String jarName : jarMatchingMap.keySet()) {
-                    List<ClassNode> compareClassNodes = controller.getClasses(jarName);
-
-                    for (ClassNode classNode : jarMatchingMap.get(jarName)) {
-                        StringBuilder stringBuilder = new StringBuilder();
-                        stringBuilder.append(String.format("Found matching class node %s in jar %s", classNode.name, jarName));
-                        foundMatch = true;
-
-                        for (MethodNode methodNode1 : selectedClassNode.methods) {
-                            for (MethodNode methodNode2 : classNode.methods) {
-                                if (!methodNode1.desc.replaceAll("L.*?;", "L?;").equals(methodNode2.desc.replaceAll("L.*?;", "L?;"))) {
-                                    continue;
-                                }
-
-                                if (controller.areMethodsBehaviorallyEquivalent(selectedClassNodes, methodNode1, compareClassNodes, methodNode2)) {
-                                    stringBuilder.append(String.format("\n  - Methods are behaviorally equivalent %s -> %s", methodNode1.name + methodNode1.desc, methodNode2.name + methodNode2.desc));
-                                }
-                            }
-                        }
-
-                        controller.log(stringBuilder.toString());
-                    }
-                }
-
-                if (!foundMatch) {
-                    controller.log(String.format("Unable to find matching class node for %s", selectedClassNode.name));
-                }
+                findAndLogMatchingClassNodes(classMutableTreeNode);
             }
         });
 
@@ -355,5 +327,124 @@ public class TreePopupMenu extends JPopupMenu {
                 }
             }
         });
+    }
+
+    private void findAndLogMatchingClassNodes(ClassMutableTreeNode selectedNode) {
+        String sourceJarName = selectedNode.getJarName();
+        ClassNode sourceClassNode = selectedNode.getClassNode();
+
+        findMatchingClassNodes.setEnabled(false);
+        controller.log("Finding class nodes similar to " + sourceClassNode.name + "...");
+
+        new SwingWorker<MatchSearchReport, Void>() {
+            @Override
+            protected MatchSearchReport doInBackground() {
+                return buildMatchSearchReport(sourceJarName, sourceClassNode);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    MatchSearchReport report = get();
+                    if (report.messages().isEmpty()) {
+                        controller.log("Unable to find matching class nodes for " + sourceClassNode.name);
+                    } else {
+                        report.messages().forEach(controller::log);
+                    }
+
+                    if (report.skippedBehaviorComparisons() > 0) {
+                        controller.log(String.format(
+                            "Skipped %d behavioral method comparisons that could not be simulated.",
+                            report.skippedBehaviorComparisons()
+                        ));
+                    }
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    controller.log("Class node matching was interrupted for " + sourceClassNode.name);
+                } catch (ExecutionException exception) {
+                    Throwable cause = exception.getCause();
+                    String detail = cause == null ? exception.getMessage() : cause.getMessage();
+                    controller.log("Unable to find matching class nodes for " + sourceClassNode.name + ": " + detail);
+                } finally {
+                    findMatchingClassNodes.setEnabled(true);
+                }
+            }
+        }.execute();
+    }
+
+    private MatchSearchReport buildMatchSearchReport(String sourceJarName, ClassNode sourceClassNode) {
+        Map<String, List<ClassNode>> jarClasses = controller.getJarClassesMap();
+        List<ClassNode> sourceClasses = jarClasses.getOrDefault(sourceJarName, List.of());
+        Map<String, List<ClassMatch>> jarMatches = controller.findSimilarClassNodes(sourceJarName, sourceClassNode);
+        List<String> messages = new ArrayList<>();
+        int skippedBehaviorComparisons = 0;
+
+        for (Map.Entry<String, List<ClassMatch>> entry : jarMatches.entrySet()) {
+            String jarName = entry.getKey();
+            List<ClassNode> candidateClasses = jarClasses.getOrDefault(jarName, List.of());
+
+            for (ClassMatch match : entry.getValue()) {
+                StringBuilder message = new StringBuilder();
+                message.append(String.format(
+                    "Found %d%% structural match %s in jar %s",
+                    match.similarityPercent(),
+                    match.classNode().name,
+                    jarName
+                ));
+                skippedBehaviorComparisons += appendEquivalentMethods(
+                    message,
+                    sourceClasses,
+                    sourceClassNode,
+                    candidateClasses,
+                    match.classNode()
+                );
+                messages.add(message.toString());
+            }
+        }
+
+        return new MatchSearchReport(List.copyOf(messages), skippedBehaviorComparisons);
+    }
+
+    private int appendEquivalentMethods(
+        StringBuilder message,
+        List<ClassNode> sourceClasses,
+        ClassNode sourceClassNode,
+        List<ClassNode> candidateClasses,
+        ClassNode candidateClassNode
+    ) {
+        int skippedComparisons = 0;
+
+        for (MethodNode sourceMethod : sourceClassNode.methods) {
+            String sourceDescriptor = controller.normalizeClassDescriptor(sourceMethod.desc);
+            for (MethodNode candidateMethod : candidateClassNode.methods) {
+                if (!sourceDescriptor.equals(controller.normalizeClassDescriptor(candidateMethod.desc))) {
+                    continue;
+                }
+
+                try {
+                    if (controller.areMethodsBehaviorallyEquivalent(
+                        sourceClasses,
+                        sourceMethod,
+                        candidateClasses,
+                        candidateMethod
+                    )) {
+                        message.append(String.format(
+                            "\n  - Behaviorally equivalent methods %s%s -> %s%s",
+                            sourceMethod.name,
+                            sourceMethod.desc,
+                            candidateMethod.name,
+                            candidateMethod.desc
+                        ));
+                    }
+                } catch (RuntimeException exception) {
+                    skippedComparisons++;
+                }
+            }
+        }
+
+        return skippedComparisons;
+    }
+
+    private record MatchSearchReport(List<String> messages, int skippedBehaviorComparisons) {
     }
 }

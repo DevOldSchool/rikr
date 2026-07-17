@@ -4,6 +4,7 @@ import com.formdev.flatlaf.util.SystemInfo;
 import org.de.rikr.resources.Fonts;
 import org.de.rikr.resources.Images;
 import org.de.rikr.service.DecompileResult;
+import org.de.rikr.service.ClassMatch;
 import org.de.rikr.service.RenameResult;
 import org.de.rikr.service.RenameService;
 import org.de.rikr.service.SearchQuery;
@@ -106,6 +107,14 @@ public class Rikr {
 
     public Map<String, List<ClassNode>> findMatchingClassNodes(String jarToExclude, ClassNode classNodeToMatch) {
         return processor.findMatchingClassNodes(jarToExclude, classNodeToMatch);
+    }
+
+    public Map<String, List<ClassMatch>> findSimilarClassNodes(String jarToExclude, ClassNode classNodeToMatch) {
+        return processor.findSimilarClassNodes(jarToExclude, classNodeToMatch);
+    }
+
+    public String normalizeClassDescriptor(String descriptor) {
+        return processor.normalizeClassDescriptor(descriptor);
     }
 
     public boolean areMethodsBehaviorallyEquivalent(

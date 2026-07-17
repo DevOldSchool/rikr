@@ -30,6 +30,10 @@ public class MethodComparator {
             boolean step1 = simulator1.step(methodNode1);
             boolean step2 = simulator2.step(methodNode2);
 
+            if (step1 != step2) {
+                return false;
+            }
+
             Stack<Object> stack1 = simulator1.getStack();
             Stack<Object> stack2 = simulator2.getStack();
 
@@ -38,7 +42,7 @@ public class MethodComparator {
 
             areEquivalent = stack1.equals(stack2) && locals1.equals(locals2);
 
-            if (!areEquivalent || (!step1 && !step2)) {
+            if (!areEquivalent || !step1) {
                 comparing = false;
             }
         }
