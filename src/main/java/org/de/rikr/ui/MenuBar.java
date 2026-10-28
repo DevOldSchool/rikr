@@ -19,11 +19,16 @@ public class MenuBar extends JMenuBar {
     public MenuBar(
         Rikr controller,
         ActionListener openFileAction,
+        ActionListener openProjectAction,
+        ActionListener saveProjectAction,
+        ActionListener saveProjectAsAction,
         ActionListener showSearchAction,
+        ActionListener undoRenameAction,
         ActionListener showProjectAction,
         ActionListener showGlobalSearchAction,
         ActionListener showMappingAction,
         ActionListener showReferencesAction,
+        ActionListener showBookmarksAction,
         ActionListener toggleLogAction,
         ActionListener saveSelectedClassAction,
         ActionListener saveSelectedJarAction,
@@ -38,6 +43,27 @@ public class MenuBar extends JMenuBar {
         openFileItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()));
         openFileItem.addActionListener(openFileAction);
         fileMenu.add(openFileItem);
+        fileMenu.addSeparator();
+
+        JMenuItem openProjectItem = new JMenuItem("Open Project...");
+        openProjectItem.setAccelerator(KeyStroke.getKeyStroke(
+            KeyEvent.VK_O,
+            Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx() | KeyEvent.SHIFT_DOWN_MASK
+        ));
+        openProjectItem.addActionListener(openProjectAction);
+        fileMenu.add(openProjectItem);
+
+        JMenuItem saveProjectItem = new JMenuItem("Save Project");
+        saveProjectItem.setAccelerator(KeyStroke.getKeyStroke(
+            KeyEvent.VK_S,
+            Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx() | KeyEvent.SHIFT_DOWN_MASK
+        ));
+        saveProjectItem.addActionListener(saveProjectAction);
+        fileMenu.add(saveProjectItem);
+
+        JMenuItem saveProjectAsItem = new JMenuItem("Save Project As...");
+        saveProjectAsItem.addActionListener(saveProjectAsAction);
+        fileMenu.add(saveProjectAsItem);
         fileMenu.addSeparator();
 
         JMenuItem saveSelectedClassItem = new JMenuItem("Save Selected Class");
@@ -59,6 +85,14 @@ public class MenuBar extends JMenuBar {
 
         // Edit menu
         JMenu editMenu = new JMenu("Edit");
+        JMenuItem undoRenameItem = new JMenuItem("Undo Rename");
+        undoRenameItem.setAccelerator(KeyStroke.getKeyStroke(
+            KeyEvent.VK_Z,
+            Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()
+        ));
+        undoRenameItem.addActionListener(undoRenameAction);
+        editMenu.add(undoRenameItem);
+        editMenu.addSeparator();
         JMenuItem searchItem = new JMenuItem("Search");
         searchItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()));
         searchItem.addActionListener(showSearchAction);
@@ -105,6 +139,14 @@ public class MenuBar extends JMenuBar {
         ));
         referencesItem.addActionListener(showReferencesAction);
         viewMenu.add(referencesItem);
+
+        JMenuItem bookmarksItem = new JMenuItem("Bookmarks");
+        bookmarksItem.setAccelerator(KeyStroke.getKeyStroke(
+            KeyEvent.VK_B,
+            Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx() | KeyEvent.SHIFT_DOWN_MASK
+        ));
+        bookmarksItem.addActionListener(showBookmarksAction);
+        viewMenu.add(bookmarksItem);
 
         viewMenu.addSeparator();
 

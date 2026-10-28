@@ -6,6 +6,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 public class ProjectRepository {
@@ -52,5 +53,13 @@ public class ProjectRepository {
 
     public synchronized File getOriginalJarFile(String jarName) {
         return originalJarPaths.get(jarName);
+    }
+
+    public synchronized Map<String, File> getOriginalJarFiles() {
+        Map<String, File> copy = new LinkedHashMap<>();
+        originalJarPaths.entrySet().stream()
+            .sorted(Map.Entry.comparingByKey())
+            .forEach(entry -> copy.put(entry.getKey(), entry.getValue()));
+        return Map.copyOf(copy);
     }
 }

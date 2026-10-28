@@ -128,6 +128,37 @@ public class ClassMappingService {
             .toList();
     }
 
+    public synchronized List<ClassMappingDecision> getAllAcceptedMappings() {
+        return acceptedMappings.values().stream()
+            .sorted(Comparator.comparing(ClassMappingDecision::sourceJar)
+                .thenComparing(ClassMappingDecision::targetJar)
+                .thenComparing(ClassMappingDecision::sourceClassName))
+            .toList();
+    }
+
+    public synchronized void restore(ClassMappingDecision decision) {
+        Objects.requireNonNull(decision, "decision");
+        SourceKey sourceKey = sourceKey(
+            decision.sourceJar(),
+            decision.targetJar(),
+            decision.sourceClassName()
+        );
+        boolean targetInUse = acceptedMappings.values().stream()
+            .anyMatch(mapping -> mapping.sourceJar().equals(decision.sourceJar())
+                && mapping.targetJar().equals(decision.targetJar())
+                && mapping.targetClassName().equals(decision.targetClassName())
+                && !mapping.sourceClassName().equals(decision.sourceClassName()));
+        if (targetInUse) {
+            throw new IllegalArgumentException("Target class is already mapped: " + decision.targetClassName());
+        }
+        acceptedMappings.put(sourceKey, decision);
+    }
+
+    public synchronized void clear() {
+        acceptedMappings.clear();
+        rejectedMappings.clear();
+    }
+
     public synchronized void clearJar(String jarName) {
         Objects.requireNonNull(jarName, "jarName");
         acceptedMappings.entrySet().removeIf(entry ->

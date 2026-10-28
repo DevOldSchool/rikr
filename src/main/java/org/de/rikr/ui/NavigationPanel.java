@@ -15,6 +15,7 @@ public class NavigationPanel extends JPanel {
     private final JButton searchButton;
     private final JButton mappingButton;
     private final JButton referencesButton;
+    private final JButton bookmarksButton;
     private SelectedTab selectedTab = SelectedTab.PROJECT;
 
     public NavigationPanel(
@@ -22,7 +23,8 @@ public class NavigationPanel extends JPanel {
         ActionListener projectAction,
         ActionListener searchAction,
         ActionListener mappingAction,
-        ActionListener referencesAction
+        ActionListener referencesAction,
+        ActionListener bookmarksAction
     ) {
         this.controller = controller;
 
@@ -54,6 +56,12 @@ public class NavigationPanel extends JPanel {
         referencesButton.setBorderPainted(false);
         referencesButton.addActionListener(referencesAction);
 
+        bookmarksButton = new JButton("B");
+        bookmarksButton.setToolTipText("Bookmarks");
+        bookmarksButton.setAlignmentX(Component.CENTER_ALIGNMENT);
+        bookmarksButton.setBorderPainted(false);
+        bookmarksButton.addActionListener(bookmarksAction);
+
         add(Box.createRigidArea(new Dimension(36, 5)));
         add(projectButton);
         add(Box.createRigidArea(new Dimension(36, 5)));
@@ -62,6 +70,8 @@ public class NavigationPanel extends JPanel {
         add(mappingButton);
         add(Box.createRigidArea(new Dimension(36, 5)));
         add(referencesButton);
+        add(Box.createRigidArea(new Dimension(36, 5)));
+        add(bookmarksButton);
         add(Box.createRigidArea(new Dimension(36, 5)));
 
         applyTheme();
@@ -92,6 +102,11 @@ public class NavigationPanel extends JPanel {
             selectedTab = SelectedTab.REFERENCES;
             applyTheme();
         });
+
+        bookmarksButton.addActionListener(e -> {
+            selectedTab = SelectedTab.BOOKMARKS;
+            applyTheme();
+        });
     }
 
     public void selectProjectTab() {
@@ -110,6 +125,29 @@ public class NavigationPanel extends JPanel {
         referencesButton.doClick();
     }
 
+    public void selectBookmarksTab() {
+        bookmarksButton.doClick();
+    }
+
+    public String getSelectedTabId() {
+        return selectedTab.name();
+    }
+
+    public void selectTab(String tabId) {
+        try {
+            switch (SelectedTab.valueOf(tabId)) {
+                case PROJECT -> selectProjectTab();
+                case SEARCH -> selectSearchTab();
+                case MAPPING -> selectMappingTab();
+                case REFERENCES -> selectReferencesTab();
+                case BOOKMARKS -> selectBookmarksTab();
+                default -> selectProjectTab();
+            }
+        } catch (IllegalArgumentException exception) {
+            selectProjectTab();
+        }
+    }
+
     private void applyTheme() {
         setBackground(Theme.BACKGROUND_COLOR);
         projectButton.setBackground(
@@ -124,6 +162,9 @@ public class NavigationPanel extends JPanel {
         referencesButton.setBackground(
             selectedTab == SelectedTab.REFERENCES ? Theme.NAVBAR_BUTTON_SELECTED_COLOR : Theme.BACKGROUND_COLOR
         );
+        bookmarksButton.setBackground(
+            selectedTab == SelectedTab.BOOKMARKS ? Theme.NAVBAR_BUTTON_SELECTED_COLOR : Theme.BACKGROUND_COLOR
+        );
 
         revalidate();
         repaint();
@@ -133,6 +174,7 @@ public class NavigationPanel extends JPanel {
         PROJECT,
         SEARCH,
         MAPPING,
-        REFERENCES
+        REFERENCES,
+        BOOKMARKS
     }
 }

@@ -8,6 +8,7 @@ import java.util.List;
 public class JarMutableTreeNode extends DefaultMutableTreeNode {
     private final String jarName;
     private final List<ClassNode> classes;
+    private boolean dirty;
 
     public JarMutableTreeNode(String jarName, List<ClassNode> classes, Object userObject) {
         super(userObject);
@@ -21,5 +22,14 @@ public class JarMutableTreeNode extends DefaultMutableTreeNode {
 
     public List<ClassNode> getClasses() {
         return classes;
+    }
+
+    public void setDirty(boolean dirty) {
+        this.dirty = dirty;
+    }
+
+    @Override
+    public String toString() {
+        return jarName + (dirty ? " *" : "");
     }
 }

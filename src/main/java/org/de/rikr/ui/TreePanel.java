@@ -22,6 +22,7 @@ import java.awt.event.MouseEvent;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class TreePanel extends JPanel {
     private final Rikr controller;
@@ -250,6 +251,19 @@ public class TreePanel extends JPanel {
         // Ensure the full path is used to select the node
         TreePath path = new TreePath(node.getPath());
         selectNode(path);
+    }
+
+    public void updateDirtyJars(Set<String> dirtyJars) {
+        DefaultMutableTreeNode root = (DefaultMutableTreeNode) treeModel.getRoot();
+        if (root == null) {
+            return;
+        }
+        for (int index = 0; index < root.getChildCount(); index++) {
+            if (root.getChildAt(index) instanceof JarMutableTreeNode jarNode) {
+                jarNode.setDirty(dirtyJars.contains(jarNode.getJarName()));
+                treeModel.nodeChanged(jarNode);
+            }
+        }
     }
 
     public void selectNode(TreePath path) {

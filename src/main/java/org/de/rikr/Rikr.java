@@ -5,9 +5,18 @@ import org.de.rikr.resources.Fonts;
 import org.de.rikr.resources.Images;
 import org.de.rikr.service.ClassMatch;
 import org.de.rikr.service.ClassMappingDecision;
+import org.de.rikr.service.BookmarkService;
 import org.de.rikr.service.DecompileResult;
 import org.de.rikr.service.RenameResult;
 import org.de.rikr.service.RenameService;
+import org.de.rikr.service.RenameOperation;
+import org.de.rikr.service.RenamePreview;
+import org.de.rikr.service.RenameUndoResult;
+import org.de.rikr.service.RenameType;
+import org.de.rikr.service.ProjectBookmark;
+import org.de.rikr.service.ProjectLayout;
+import org.de.rikr.service.ProjectSession;
+import org.de.rikr.service.ProjectSessionService;
 import org.de.rikr.service.ReferenceResult;
 import org.de.rikr.service.SearchQuery;
 import org.de.rikr.service.SearchResult;
@@ -24,15 +33,21 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 public class Rikr {
     private final ClassViewer userInterface;
-    private final RenameService renameService;
+    private RenameService renameService;
+    private final BookmarkService bookmarkService;
+    private final ProjectSessionService projectSessionService;
+    private File currentProjectFile;
     private ClassProcessor processor;
 
     public Rikr() {
         renameService = new RenameService();
+        bookmarkService = new BookmarkService();
+        projectSessionService = new ProjectSessionService();
         userInterface = new ClassViewer(this);
     }
 
@@ -70,6 +85,9 @@ public class Rikr {
 
     public void removeJar(String jarName) {
         processor.removeJar(jarName);
+        renameService.removeJar(jarName);
+        bookmarkService.removeJar(jarName);
+        refreshProjectState();
     }
 
     public void removeClass(String jarName, ClassNode classNode) {
@@ -254,24 +272,195 @@ public class Rikr {
     }
 
     public RenameResult renameClassReferences(String jarName, ClassNode classNode, String newName) {
-        processor.invalidateClassMappings(jarName, classNode);
-        RenameResult result = renameService.renameClassReferences(getClasses(jarName), classNode.name, newName);
+        String oldName = classNode.name;
+        RenameResult result = renameService.applyClassRename(jarName, getClasses(jarName), classNode, newName);
+        processor.invalidateClassMappings(jarName, oldName);
+        bookmarkService.applyRename(new RenameOperation(
+            RenameType.CLASS, jarName, oldName, null, oldName, newName
+        ), false);
         processor.refreshReferenceIndex(jarName);
+        refreshProjectState();
         return result;
     }
 
     public RenameResult renameFieldReferences(String jarName, ClassNode owner, FieldNode fieldNode, String newName) {
+        String oldName = fieldNode.name;
+        RenameResult result = renameService.applyFieldRename(jarName, getClasses(jarName), owner, fieldNode, newName);
         processor.invalidateClassMappings(jarName, owner);
-        RenameResult result = renameService.renameFieldReferences(getClasses(jarName), owner, fieldNode.name, newName);
+        bookmarkService.applyRename(new RenameOperation(
+            RenameType.FIELD, jarName, owner.name, fieldNode.desc, oldName, newName
+        ), false);
         processor.refreshReferenceIndex(jarName);
+        refreshProjectState();
         return result;
     }
 
     public RenameResult renameMethodReferences(String jarName, ClassNode owner, MethodNode methodNode, String newName) {
+        String oldName = methodNode.name;
+        RenameResult result = renameService.applyMethodRename(jarName, getClasses(jarName), owner, methodNode, newName);
         processor.invalidateClassMappings(jarName, owner);
-        RenameResult result = renameService.renameMethodReferences(getClasses(jarName), owner, methodNode.name, newName);
+        bookmarkService.applyRename(new RenameOperation(
+            RenameType.METHOD, jarName, owner.name, methodNode.desc, oldName, newName
+        ), false);
         processor.refreshReferenceIndex(jarName);
+        refreshProjectState();
         return result;
+    }
+
+    public RenamePreview previewClassRename(String jarName, ClassNode owner, String newName) {
+        return renameService.previewClassRename(getClasses(jarName), owner, newName);
+    }
+
+    public RenamePreview previewFieldRename(String jarName, ClassNode owner, FieldNode field, String newName) {
+        return renameService.previewFieldRename(getClasses(jarName), owner, field, newName);
+    }
+
+    public RenamePreview previewMethodRename(String jarName, ClassNode owner, MethodNode method, String newName) {
+        return renameService.previewMethodRename(getClasses(jarName), owner, method, newName);
+    }
+
+    public void undoLastRename() {
+        Optional<RenameUndoResult> undo = renameService.undoLast(this::getClasses);
+        if (undo.isEmpty()) {
+            log("No rename to undo.");
+            return;
+        }
+        RenameUndoResult value = undo.get();
+        bookmarkService.applyRename(value.operation(), true);
+        processor.refreshReferenceIndex(value.operation().jarName());
+        if (value.operation().type() == RenameType.CLASS) {
+            processor.invalidateClassMappings(value.operation().jarName(), value.operation().newName());
+            processor.invalidateClassMappings(value.operation().jarName(), value.operation().oldName());
+        } else {
+            processor.invalidateClassMappings(value.operation().jarName(), value.affectedClass());
+        }
+        userInterface.updateTree(processor.getJarClassesView());
+        refreshProjectState();
+        userInterface.displayBytecode(value.affectedClass());
+        log("Undid rename " + value.operation().newName() + " -> " + value.operation().oldName() + ".");
+    }
+
+    public Set<String> getDirtyJars() {
+        return renameService.getDirtyJars();
+    }
+
+    public void markJarExported(String jarName) {
+        renameService.markExported(jarName);
+        refreshProjectState();
+    }
+
+    public void commitOverwrittenJar(String jarName) {
+        renameService.commitOverwrittenJar(jarName);
+        refreshProjectState();
+    }
+
+    public boolean toggleBookmark(ProjectBookmark bookmark) {
+        boolean added = bookmarkService.toggle(bookmark);
+        userInterface.refreshBookmarks();
+        log((added ? "Bookmarked " : "Removed bookmark ") + bookmark);
+        return added;
+    }
+
+    public void removeBookmark(ProjectBookmark bookmark) {
+        bookmarkService.remove(bookmark);
+        userInterface.refreshBookmarks();
+    }
+
+    public List<ProjectBookmark> getBookmarks() {
+        return bookmarkService.getBookmarks();
+    }
+
+    public boolean openBookmark(ProjectBookmark bookmark) {
+        List<ClassNode> classes = getClasses(bookmark.jarName());
+        if (classes == null) {
+            return false;
+        }
+        ClassNode owner = classes.stream()
+            .filter(classNode -> classNode.name.equals(bookmark.className()))
+            .findFirst()
+            .orElse(null);
+        if (owner == null) {
+            return false;
+        }
+        return userInterface.openBookmark(bookmark, owner);
+    }
+
+    public void saveProject(File destination) throws IOException {
+        List<String> jarPaths = processor.getOriginalJarFiles().values().stream()
+            .map(File::getAbsolutePath)
+            .sorted()
+            .toList();
+        ProjectSession session = new ProjectSession(
+            jarPaths,
+            processor.getAllAcceptedClassMappings(),
+            renameService.getHistory(),
+            bookmarkService.getBookmarks(),
+            userInterface.captureProjectLayout()
+        );
+        projectSessionService.save(destination, session);
+        currentProjectFile = destination.getAbsoluteFile();
+        userInterface.updateProjectTitle(currentProjectFile);
+        log("Saved project to " + currentProjectFile.getAbsolutePath());
+    }
+
+    public void openProject(File source) throws IOException {
+        ProjectSession session = projectSessionService.load(source);
+        File[] jars = session.jarPaths().stream().map(File::new).toArray(File[]::new);
+        Set<String> jarNames = new java.util.HashSet<>();
+        for (File jar : jars) {
+            if (!jar.isFile()) {
+                throw new IOException("Project JAR does not exist: " + jar.getAbsolutePath());
+            }
+            if (!jarNames.add(jar.getName())) {
+                throw new IOException("Project contains duplicate JAR names: " + jar.getName());
+            }
+        }
+
+        ClassProcessor stagedProcessor = new ClassProcessor(userInterface.getLogPanel());
+        RenameService stagedRenames = new RenameService();
+        try {
+            stagedProcessor.processJarFiles(jars);
+            for (File jar : jars) {
+                if (stagedProcessor.getOriginalJarFile(jar.getName()) == null) {
+                    throw new IOException("Unable to load project JAR: " + jar.getAbsolutePath());
+                }
+            }
+            stagedRenames.replay(session.renames(), stagedProcessor::getClasses);
+            for (String jarName : stagedRenames.getDirtyJars()) {
+                stagedProcessor.refreshReferenceIndex(jarName);
+            }
+            stagedProcessor.restoreClassMappings(session.mappings());
+        } catch (IOException exception) {
+            stagedProcessor.close();
+            throw exception;
+        } catch (RuntimeException exception) {
+            stagedProcessor.close();
+            throw new IOException("Unable to restore project: " + exception.getMessage(), exception);
+        }
+
+        ClassProcessor previous = processor;
+        processor = stagedProcessor;
+        renameService = stagedRenames;
+        bookmarkService.replaceAll(session.bookmarks());
+        currentProjectFile = source.getAbsoluteFile();
+        if (previous != null) {
+            previous.close();
+        }
+        userInterface.updateTree(processor.getJarClassesView());
+        userInterface.refreshBookmarks();
+        userInterface.applyProjectLayout(session.layout());
+        userInterface.updateProjectTitle(currentProjectFile);
+        refreshProjectState();
+        log("Opened project " + currentProjectFile.getAbsolutePath());
+    }
+
+    public File getCurrentProjectFile() {
+        return currentProjectFile;
+    }
+
+    private void refreshProjectState() {
+        userInterface.updateDirtyJars(renameService.getDirtyJars());
+        userInterface.refreshBookmarks();
     }
 
     public void shutdown() {

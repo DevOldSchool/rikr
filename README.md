@@ -77,3 +77,22 @@ references; fields separate reads from writes; methods separate callers from
 callees. Double-click a result, or select it and press Enter, to open and
 highlight the relevant member. The reference index is rebuilt when JAR content
 changes, so queries do not repeatedly scan every instruction.
+
+## Project sessions
+
+Use **File > Save Project** to create a `.rikr` session. A project records the
+absolute paths of loaded JARs, accepted cross-JAR mappings, rename history,
+bookmarks, window bounds, split positions, visible tools, and the selected
+workspace. Opening a project validates its JAR paths and restores into a staged
+workspace, so a failed load does not replace the project already open.
+
+Right-click a class, field, or method and choose **Toggle Bookmark**, then open
+**View > Bookmarks** (`Ctrl/Cmd+Shift+B`) to navigate saved locations.
+
+## Safe renaming
+
+Renames are previewed before they change bytecode. The preview validates JVM
+names and member/class collisions and shows the number of affected references
+and classes. Use **Edit > Undo Rename** (`Ctrl/Cmd+Z`) to reverse the latest
+rename. A `*` beside a JAR marks bytecode with changes that have not been
+exported; saving or overwriting that JAR clears the marker.

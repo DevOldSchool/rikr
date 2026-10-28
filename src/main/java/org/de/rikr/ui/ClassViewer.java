@@ -3,10 +3,15 @@ package org.de.rikr.ui;
 import com.formdev.flatlaf.util.SystemInfo;
 import org.de.rikr.Rikr;
 import org.de.rikr.service.ReferenceResult;
+import org.de.rikr.service.ProjectBookmark;
+import org.de.rikr.service.ProjectBookmarkType;
+import org.de.rikr.service.ProjectLayout;
 import org.de.rikr.settings.Settings;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;
 import org.de.rikr.ui.action.ClassFileActions;
+import org.de.rikr.ui.action.ProjectSessionActions;
+import org.de.rikr.utilities.ClassNodeUtil;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.MethodNode;
@@ -45,10 +50,12 @@ public class ClassViewer {
     private final SearchPanel searchPanel;
     private final MappingWorkspacePanel mappingWorkspacePanel;
     private final ReferenceWorkspacePanel referenceWorkspacePanel;
+    private final BookmarkWorkspacePanel bookmarkWorkspacePanel;
     private final MethodSimulatorPanel methodSimulatorPanel;
     private final JPanel rightPanel;
     private final SimulatorBar simulatorBar;
     private final ClassFileActions classFileActions;
+    private final ProjectSessionActions projectSessionActions;
 
     public ClassViewer(Rikr controller) {
         this.controller = controller;
@@ -91,9 +98,11 @@ public class ClassViewer {
         searchPanel = new SearchPanel(controller);
         mappingWorkspacePanel = new MappingWorkspacePanel(controller);
         referenceWorkspacePanel = new ReferenceWorkspacePanel(controller);
+        bookmarkWorkspacePanel = new BookmarkWorkspacePanel(controller);
         methodSimulatorPanel = new MethodSimulatorPanel(controller);
         simulatorBar = new SimulatorBar(controller, e -> toggleMethodSimulatorVisibility(methodSimulatorPanel.isVisible()));
         classFileActions = new ClassFileActions(controller, frame, treePanel);
+        projectSessionActions = new ProjectSessionActions(controller, frame);
 
         // Create a panel to hold both the search panel and content panel
         rightPanel = new JPanel(new BorderLayout());
@@ -111,7 +120,8 @@ public class ClassViewer {
             e -> showProjectPanel(),
             e -> showSearchPanel(),
             e -> showMappingPanel(),
-            e -> showReferencePanel()
+            e -> showReferencePanel(),
+            e -> showBookmarkPanel()
         );
 
         // Create a split pane for the navigation panel and tree panel
@@ -156,11 +166,16 @@ public class ClassViewer {
         menuBar = new MenuBar(
             controller,
             e -> openFileDialog(),
+            e -> projectSessionActions.openProject(),
+            e -> projectSessionActions.saveProject(),
+            e -> projectSessionActions.saveProjectAs(),
             e -> toggleSearchBarVisibility(false),
+            e -> controller.undoLastRename(),
             e -> showProjectTab(),
             e -> showGlobalSearchTab(),
             e -> showMappingTab(),
             e -> showReferencesTab(),
+            e -> showBookmarksTab(),
             e -> toggleLogVisibility(logPanel.isVisible()),
             e -> classFileActions.saveSelectedClass(),
             e -> classFileActions.saveSelectedJar(),
@@ -270,6 +285,7 @@ public class ClassViewer {
     public void updateTree(Map<String, List<ClassNode>> jarClassesMap) {
         SwingUtilities.invokeLater(() -> {
             treePanel.updateTree(jarClassesMap);
+            treePanel.updateDirtyJars(controller.getDirtyJars());
             mappingWorkspacePanel.refreshJars(jarClassesMap);
         });
     }
@@ -305,6 +321,45 @@ public class ClassViewer {
             result.navigationPattern(),
             result.highlightText()
         ));
+    }
+
+    public boolean openBookmark(ProjectBookmark bookmark, ClassNode owner) {
+        displayBytecode(owner);
+        if (bookmark.type() == ProjectBookmarkType.CLASS) {
+            SwingUtilities.invokeLater(() -> contentPanelLeft.selectTextAfterPattern(
+                ClassNodeUtil.getPattern(owner, null, null),
+                owner.name
+            ));
+            return true;
+        }
+        if (bookmark.type() == ProjectBookmarkType.FIELD) {
+            FieldNode field = owner.fields.stream()
+                .filter(candidate -> candidate.name.equals(bookmark.memberName()))
+                .filter(candidate -> candidate.desc.equals(bookmark.descriptor()))
+                .findFirst()
+                .orElse(null);
+            if (field == null) {
+                return false;
+            }
+            SwingUtilities.invokeLater(() -> contentPanelLeft.selectTextAfterPattern(
+                ClassNodeUtil.getFieldNodePattern(field),
+                field.name
+            ));
+            return true;
+        }
+        MethodNode method = owner.methods.stream()
+            .filter(candidate -> candidate.name.equals(bookmark.memberName()))
+            .filter(candidate -> candidate.desc.equals(bookmark.descriptor()))
+            .findFirst()
+            .orElse(null);
+        if (method == null) {
+            return false;
+        }
+        SwingUtilities.invokeLater(() -> contentPanelLeft.selectTextAfterPattern(
+            ClassNodeUtil.getMethodNodePattern(method),
+            method.name
+        ));
+        return true;
     }
 
     public void clearContent() {
@@ -345,6 +400,16 @@ public class ClassViewer {
         mainSplitPane.setRightComponent(referenceWorkspacePanel);
         mainSplitPane.setDividerLocation(300);
         SettingsManager.refreshThemeFor(referenceWorkspacePanel);
+        frame.revalidate();
+        frame.repaint();
+    }
+
+    private void showBookmarkPanel() {
+        leftSplitPane.setRightComponent(bookmarkWorkspacePanel);
+        mainSplitPane.setRightComponent(rightPanel);
+        mainSplitPane.setDividerLocation(300);
+        bookmarkWorkspacePanel.refresh();
+        SettingsManager.refreshThemeFor(bookmarkWorkspacePanel);
         frame.revalidate();
         frame.repaint();
     }
@@ -424,6 +489,65 @@ public class ClassViewer {
 
     private void showReferencesTab() {
         navigationPanel.selectReferencesTab();
+    }
+
+    private void showBookmarksTab() {
+        navigationPanel.selectBookmarksTab();
+    }
+
+    public void refreshBookmarks() {
+        SwingUtilities.invokeLater(bookmarkWorkspacePanel::refresh);
+    }
+
+    public void updateDirtyJars(java.util.Set<String> dirtyJars) {
+        SwingUtilities.invokeLater(() -> treePanel.updateDirtyJars(dirtyJars));
+    }
+
+    public ProjectLayout captureProjectLayout() {
+        Rectangle bounds = frame.getBounds();
+        return new ProjectLayout(
+            bounds.x,
+            bounds.y,
+            bounds.width,
+            bounds.height,
+            mainSplitPane.getDividerLocation(),
+            verticalSplitPane.getDividerLocation(),
+            contentSplitPane.getDividerLocation(),
+            logPanel.isVisible(),
+            methodSimulatorPanel.isVisible(),
+            asmJavaSplitEnabled,
+            navigationPanel.getSelectedTabId()
+        );
+    }
+
+    public void applyProjectLayout(ProjectLayout layout) {
+        SwingUtilities.invokeLater(() -> {
+            if (layout.windowWidth() > 0 && layout.windowHeight() > 0) {
+                frame.setBounds(
+                    layout.windowX(),
+                    layout.windowY(),
+                    layout.windowWidth(),
+                    layout.windowHeight()
+                );
+            }
+            if (logPanel.isVisible() != layout.logVisible()) {
+                toggleLogVisibility(logPanel.isVisible());
+            }
+            if (methodSimulatorPanel.isVisible() != layout.simulatorVisible()) {
+                toggleMethodSimulatorVisibility(methodSimulatorPanel.isVisible());
+            }
+            if (asmJavaSplitEnabled != layout.splitJavaVisible()) {
+                menuBar.getSplitAsmJavaItem().doClick();
+            }
+            navigationPanel.selectTab(layout.selectedWorkspace());
+            mainSplitPane.setDividerLocation(layout.mainDivider());
+            verticalSplitPane.setDividerLocation(layout.verticalDivider());
+            contentSplitPane.setDividerLocation(layout.contentDivider());
+        });
+    }
+
+    public void updateProjectTitle(File projectFile) {
+        frame.setTitle(projectFile == null ? "Rikr" : "Rikr - " + projectFile.getName());
     }
 
     public void setStackAreaText(Stack<Object> stack) {

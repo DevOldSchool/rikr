@@ -36,7 +36,7 @@ public class Renamer {
             }
 
             // Update extended class name reference
-            if (classNode.superName.equals(oldName)) {
+            if (oldName.equals(classNode.superName)) {
                 classNode.superName = newName;
                 renamedClassReferenceCounter++;
             }

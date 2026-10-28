@@ -2,6 +2,8 @@ package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
 import org.de.rikr.service.ClassMatch;
+import org.de.rikr.service.ProjectBookmark;
+import org.de.rikr.service.ProjectBookmarkType;
 import org.de.rikr.ui.model.*;
 import org.objectweb.asm.tree.*;
 
@@ -31,6 +33,7 @@ public class TreePopupMenu extends JPopupMenu {
     private final JMenuItem getClassNodeSignature;
     private final JMenuItem simulateMethod;
     private final JMenuItem showReferences;
+    private final JMenuItem toggleBookmark;
 
     public TreePopupMenu(Rikr controller, JTree tree) {
         this.controller = controller;
@@ -47,6 +50,7 @@ public class TreePopupMenu extends JPopupMenu {
         getClassNodeSignature = new JMenuItem("Get Class Node Signature");
         simulateMethod = new JMenuItem("Simulate Method");
         showReferences = new JMenuItem("Show References");
+        toggleBookmark = new JMenuItem("Toggle Bookmark");
 
         add(renameItem);
         add(removeItem);
@@ -91,6 +95,9 @@ public class TreePopupMenu extends JPopupMenu {
                     } else if (selectedNode instanceof FieldNodeMutableTreeNode) {
                         add(showReferences);
                     }
+                    if (isBookmarkable(selectedNode)) {
+                        add(toggleBookmark);
+                    }
                 }
             }
 
@@ -119,11 +126,20 @@ public class TreePopupMenu extends JPopupMenu {
                     model.removeNodeFromParent(selectedNode);
                     controller.removeClass(classMutableTreeNode.getJarName(), classMutableTreeNode.getClassNode());
                     controller.getUserInterface().clearContent();
-                } else {
+                } else if (selectedNode instanceof JarMutableTreeNode jarMutableTreeNode) {
                     model.removeNodeFromParent(selectedNode);
-                    controller.removeJar(selectedNode.toString());
+                    controller.removeJar(jarMutableTreeNode.getJarName());
                     controller.getUserInterface().clearContent();
                 }
+            }
+        });
+
+        toggleBookmark.addActionListener(event -> {
+            DefaultMutableTreeNode selectedNode =
+                (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
+            ProjectBookmark bookmark = createBookmark(selectedNode);
+            if (bookmark != null) {
+                controller.toggleBookmark(bookmark);
             }
         });
 
@@ -310,6 +326,61 @@ public class TreePopupMenu extends JPopupMenu {
                 );
             }
         });
+    }
+
+    private boolean isBookmarkable(DefaultMutableTreeNode node) {
+        return node instanceof ClassMutableTreeNode
+            || node instanceof ClassNodeMutableTreeNode
+            || node instanceof InterfaceNodeMutableTreeNode
+            || node instanceof FieldNodeMutableTreeNode
+            || node instanceof MethodNodeMutableTreeNode;
+    }
+
+    private ProjectBookmark createBookmark(DefaultMutableTreeNode node) {
+        if (node instanceof ClassMutableTreeNode classNode) {
+            return classBookmark(classNode.getJarName(), classNode.getClassNode());
+        }
+        if (node instanceof ClassNodeMutableTreeNode classNode) {
+            return classBookmark(classNode.getJarName(), classNode.getClassNode());
+        }
+        if (node instanceof InterfaceNodeMutableTreeNode interfaceNode) {
+            return classBookmark(interfaceNode.getJarName(), interfaceNode.getClassNode());
+        }
+        String jarName = findJarName(node);
+        if (node instanceof FieldNodeMutableTreeNode fieldNode && jarName != null) {
+            return new ProjectBookmark(
+                ProjectBookmarkType.FIELD,
+                jarName,
+                fieldNode.getOwner().name,
+                fieldNode.getFieldNode().name,
+                fieldNode.getFieldNode().desc
+            );
+        }
+        if (node instanceof MethodNodeMutableTreeNode methodNode && jarName != null) {
+            return new ProjectBookmark(
+                ProjectBookmarkType.METHOD,
+                jarName,
+                methodNode.getOwner().name,
+                methodNode.getMethodNode().name,
+                methodNode.getMethodNode().desc
+            );
+        }
+        return null;
+    }
+
+    private ProjectBookmark classBookmark(String jarName, ClassNode classNode) {
+        return new ProjectBookmark(ProjectBookmarkType.CLASS, jarName, classNode.name, null, null);
+    }
+
+    private String findJarName(DefaultMutableTreeNode node) {
+        DefaultMutableTreeNode current = node;
+        while (current != null) {
+            if (current instanceof JarMutableTreeNode jarNode) {
+                return jarNode.getJarName();
+            }
+            current = (DefaultMutableTreeNode) current.getParent();
+        }
+        return null;
     }
 
     private String getOwnerJarName(DefaultMutableTreeNode ownerNode) {

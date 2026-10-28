@@ -87,6 +87,7 @@ public class ClassFileActions {
 
             try {
                 controller.exportJarGroupToJar(jarName, file);
+                controller.markJarExported(jarName);
                 controller.log("Saved JAR to " + file.getAbsolutePath());
             } catch (Exception ex) {
                 controller.log("Save JAR failed: " + ex.getMessage());
@@ -122,6 +123,7 @@ public class ClassFileActions {
             boolean ok = controller.overwriteOriginalJar(jarName);
 
             if (ok) {
+                controller.commitOverwrittenJar(jarName);
                 controller.log("Overwrote original JAR: " + original.getAbsolutePath());
             } else {
                 JOptionPane.showMessageDialog(

@@ -258,6 +258,10 @@ public class ClassProcessor implements AutoCloseable {
         classMappingService.clearClass(jarName, classNode.name);
     }
 
+    public void invalidateClassMappings(String jarName, String className) {
+        classMappingService.clearClass(jarName, className);
+    }
+
     public Optional<ClassMappingDecision> getAcceptedClassMapping(
         String sourceJar,
         String targetJar,
@@ -277,6 +281,19 @@ public class ClassProcessor implements AutoCloseable {
 
     public List<ClassMappingDecision> getAcceptedClassMappings(String sourceJar, String targetJar) {
         return classMappingService.getAcceptedMappings(sourceJar, targetJar);
+    }
+
+    public List<ClassMappingDecision> getAllAcceptedClassMappings() {
+        return classMappingService.getAllAcceptedMappings();
+    }
+
+    public void restoreClassMappings(List<ClassMappingDecision> mappings) {
+        classMappingService.clear();
+        for (ClassMappingDecision mapping : mappings) {
+            requireClass(mapping.sourceJar(), mapping.sourceClassName());
+            requireClass(mapping.targetJar(), mapping.targetClassName());
+            classMappingService.restore(mapping);
+        }
     }
 
     public List<ReferenceResult> findFieldReads(String jarName, ClassNode owner, FieldNode field) {
@@ -380,6 +397,10 @@ public class ClassProcessor implements AutoCloseable {
         return projectRepository.getOriginalJarFile(jarName);
     }
 
+    public Map<String, File> getOriginalJarFiles() {
+        return projectRepository.getOriginalJarFiles();
+    }
+
     public String getDecompiledSourceByClass(String internalName) {
         return decompilerCacheService.getDecompiledSourceByClass(internalName);
     }
@@ -401,5 +422,18 @@ public class ClassProcessor implements AutoCloseable {
         return projectRepository.getJarClassesView().entrySet().stream()
             .sorted(Map.Entry.comparingByKey())
             .toList();
+    }
+
+    private ClassNode requireClass(String jarName, String className) {
+        List<ClassNode> classes = projectRepository.getClasses(jarName);
+        if (classes == null) {
+            throw new IllegalArgumentException("Project references an unloaded JAR: " + jarName);
+        }
+        return classes.stream()
+            .filter(classNode -> classNode.name.equals(className))
+            .findFirst()
+            .orElseThrow(() -> new IllegalArgumentException(
+                "Project references a missing class: " + jarName + " -> " + className
+            ));
     }
 }

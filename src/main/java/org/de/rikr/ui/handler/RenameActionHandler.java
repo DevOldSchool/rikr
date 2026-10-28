@@ -2,6 +2,7 @@ package org.de.rikr.ui.handler;
 
 import org.de.rikr.Rikr;
 import org.de.rikr.service.RenameResult;
+import org.de.rikr.service.RenamePreview;
 import org.de.rikr.ui.model.*;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldNode;
@@ -43,8 +44,82 @@ public class RenameActionHandler implements ActionListener {
             }
 
             DefaultMutableTreeNode selectedNode = getNodeToRename(e, selectedText);
-            rename(selectedNode, newName);
+            RenamePreview preview = preview(selectedNode, newName.trim());
+            if (preview == null) {
+                return;
+            }
+            if (!preview.valid()) {
+                JOptionPane.showMessageDialog(
+                    controller.getUserInterface().getFrame(),
+                    preview.validationMessage(),
+                    "Rename Not Available",
+                    JOptionPane.WARNING_MESSAGE
+                );
+                return;
+            }
+            String affectedClasses = preview.affectedClasses().isEmpty()
+                ? "None"
+                : String.join("\n  ", preview.affectedClasses());
+            String message = String.format(
+                "Rename %s to %s?%n%nAffected references: %d%nAffected classes: %d%n  %s",
+                preview.oldName(),
+                preview.newName(),
+                preview.referenceCount(),
+                preview.fileCount(),
+                affectedClasses
+            );
+            int confirmation = JOptionPane.showConfirmDialog(
+                controller.getUserInterface().getFrame(),
+                message,
+                "Preview Rename",
+                JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.QUESTION_MESSAGE
+            );
+            if (confirmation == JOptionPane.OK_OPTION) {
+                rename(selectedNode, newName.trim());
+            }
         });
+    }
+
+    private RenamePreview preview(DefaultMutableTreeNode node, String newName) {
+        if (node instanceof ClassMutableTreeNode classNode) {
+            return controller.previewClassRename(classNode.getJarName(), classNode.getClassNode(), newName);
+        }
+        if (node instanceof ClassNodeMutableTreeNode classNode) {
+            return controller.previewClassRename(classNode.getJarName(), classNode.getClassNode(), newName);
+        }
+        if (node instanceof InterfaceNodeMutableTreeNode interfaceNode) {
+            return controller.previewClassRename(interfaceNode.getJarName(), interfaceNode.getClassNode(), newName);
+        }
+        String jarName = findJarName(node);
+        if (node instanceof FieldNodeMutableTreeNode fieldNode && jarName != null) {
+            return controller.previewFieldRename(
+                jarName,
+                fieldNode.getOwner(),
+                fieldNode.getFieldNode(),
+                newName
+            );
+        }
+        if (node instanceof MethodNodeMutableTreeNode methodNode && jarName != null) {
+            return controller.previewMethodRename(
+                jarName,
+                methodNode.getOwner(),
+                methodNode.getMethodNode(),
+                newName
+            );
+        }
+        return null;
+    }
+
+    private String findJarName(DefaultMutableTreeNode node) {
+        DefaultMutableTreeNode current = node;
+        while (current != null) {
+            if (current instanceof JarMutableTreeNode jarNode) {
+                return jarNode.getJarName();
+            }
+            current = (DefaultMutableTreeNode) current.getParent();
+        }
+        return null;
     }
 
     private String getSelectedText(ActionEvent e) {
