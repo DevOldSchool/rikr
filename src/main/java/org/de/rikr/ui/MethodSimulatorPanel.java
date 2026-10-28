@@ -83,7 +83,7 @@ public class MethodSimulatorPanel extends JPanel {
 
     public void initSimulate(ClassNodeMutableTreeNode parentNode, MethodNode methodNode) {
         this.methodNode = methodNode;
-        List<ClassNode> classes = controller.getClasses(parentNode.getJarName());
+        List<ClassNode> classes = controller.jars().classes(parentNode.getJarName());
 
         stackArea.setText("");
         localVariableArea.setText("");

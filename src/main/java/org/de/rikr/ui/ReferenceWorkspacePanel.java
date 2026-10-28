@@ -48,23 +48,23 @@ public class ReferenceWorkspacePanel extends JPanel {
     public void showClassReferences(String jarName, ClassNode targetClass) {
         targetLabel.setText("Type: " + targetClass.name + " in " + jarName);
         resetTabs();
-        addResultsTab("Type references", controller.findTypeReferences(jarName, targetClass));
+        addResultsTab("Type references", controller.references().findTypeReferences(jarName, targetClass));
         selectFirstResult();
     }
 
     public void showFieldReferences(String jarName, ClassNode owner, FieldNode field) {
         targetLabel.setText("Field: " + owner.name + "." + field.name + " " + field.desc + " in " + jarName);
         resetTabs();
-        addResultsTab("Reads", controller.findFieldReads(jarName, owner, field));
-        addResultsTab("Writes", controller.findFieldWrites(jarName, owner, field));
+        addResultsTab("Reads", controller.references().findFieldReads(jarName, owner, field));
+        addResultsTab("Writes", controller.references().findFieldWrites(jarName, owner, field));
         selectFirstResult();
     }
 
     public void showMethodReferences(String jarName, ClassNode owner, MethodNode method) {
         targetLabel.setText("Method: " + owner.name + "." + method.name + method.desc + " in " + jarName);
         resetTabs();
-        addResultsTab("Callers", controller.findMethodCallers(jarName, owner, method));
-        addResultsTab("Callees", controller.findMethodCallees(jarName, owner, method));
+        addResultsTab("Callers", controller.references().findMethodCallers(jarName, owner, method));
+        addResultsTab("Callees", controller.references().findMethodCallees(jarName, owner, method));
         selectFirstResult();
     }
 

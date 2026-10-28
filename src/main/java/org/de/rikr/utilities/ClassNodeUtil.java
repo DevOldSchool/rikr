@@ -9,8 +9,11 @@ import org.objectweb.asm.tree.MethodNode;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Modifier;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class ClassNodeUtil {
@@ -195,5 +198,47 @@ public class ClassNodeUtil {
         }
 
         return null;
+    }
+
+    public static List<ClassNode> findClassesExtending(List<ClassNode> classes, ClassNode baseClassNode) {
+        List<ClassNode> extendedClasses = new ArrayList<>();
+        for (ClassNode classNode : classes) {
+            if (baseClassNode.name.equals(classNode.superName)) {
+                extendedClasses.add(classNode);
+            }
+        }
+        return extendedClasses;
+    }
+
+    public static List<ClassNode> findClassesImplementing(List<ClassNode> classes, ClassNode baseClassNode) {
+        List<ClassNode> implementingClasses = new ArrayList<>();
+        for (ClassNode classNode : classes) {
+            if (classNode.interfaces.contains(baseClassNode.name)) {
+                implementingClasses.add(classNode);
+            }
+        }
+        return implementingClasses;
+    }
+
+    public static Map<String, List<ClassNode>> groupBySuperclass(List<ClassNode> classes) {
+        Map<String, List<ClassNode>> superclassGroups = new HashMap<>();
+        for (ClassNode classNode : classes) {
+            if (classNode.superName != null) {
+                superclassGroups.computeIfAbsent(classNode.superName, k -> new ArrayList<>()).add(classNode);
+            }
+        }
+        return superclassGroups;
+    }
+
+    public static Map<String, List<ClassNode>> groupByInterface(List<ClassNode> classes) {
+        Map<String, List<ClassNode>> interfaceGroups = new HashMap<>();
+        for (ClassNode classNode : classes) {
+            if (classNode.interfaces != null) {
+                for (String interfaceName : classNode.interfaces) {
+                    interfaceGroups.computeIfAbsent(interfaceName, k -> new ArrayList<>()).add(classNode);
+                }
+            }
+        }
+        return interfaceGroups;
     }
 }

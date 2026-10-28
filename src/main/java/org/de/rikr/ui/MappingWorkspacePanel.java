@@ -236,7 +236,7 @@ public class MappingWorkspacePanel extends JPanel {
             return;
         }
 
-        List<ClassNode> classes = controller.getClasses(sourceJar);
+        List<ClassNode> classes = controller.jars().classes(sourceJar);
         if (classes != null) {
             classes.stream()
                 .sorted(Comparator.comparing(classNode -> classNode.name))
@@ -271,7 +271,7 @@ public class MappingWorkspacePanel extends JPanel {
         new SwingWorker<List<ClassMatch>, Void>() {
             @Override
             protected List<ClassMatch> doInBackground() {
-                return controller.findMappingCandidates(
+                return controller.mappings().findCandidates(
                     targetJar,
                     sourceClass,
                     minimumSimilarity,
@@ -323,7 +323,7 @@ public class MappingWorkspacePanel extends JPanel {
         }
 
         try {
-            controller.acceptClassMapping(selectedSourceJar(), selectedTargetJar(), sourceClass, candidate);
+            controller.mappings().accept(selectedSourceJar(), selectedTargetJar(), sourceClass, candidate);
             statusLabel.setText("Accepted " + sourceClass.name + " -> " + candidate.classNode().name);
             repaintLists();
             updateDetailsAndControls();
@@ -343,7 +343,7 @@ public class MappingWorkspacePanel extends JPanel {
         if (sourceClass == null || candidate == null || !hasJarPair()) {
             return;
         }
-        controller.rejectClassMapping(
+        controller.mappings().reject(
             selectedSourceJar(),
             selectedTargetJar(),
             sourceClass,
@@ -359,7 +359,7 @@ public class MappingWorkspacePanel extends JPanel {
         if (sourceClass == null || !hasJarPair()) {
             return;
         }
-        controller.clearClassMappingDecisions(selectedSourceJar(), selectedTargetJar(), sourceClass);
+        controller.mappings().clearDecisions(selectedSourceJar(), selectedTargetJar(), sourceClass);
         statusLabel.setText("Cleared decisions for " + sourceClass.name);
         repaintLists();
         updateDetailsAndControls();
@@ -378,7 +378,7 @@ public class MappingWorkspacePanel extends JPanel {
         new SwingWorker<List<ClassMappingDecision>, Void>() {
             @Override
             protected List<ClassMappingDecision> doInBackground() {
-                return controller.autoAcceptUniqueClassMappings(sourceJar, targetJar, minimumSimilarity);
+                return controller.mappings().autoAcceptUnique(sourceJar, targetJar, minimumSimilarity);
             }
 
             @Override
@@ -405,7 +405,7 @@ public class MappingWorkspacePanel extends JPanel {
         }
         String sourceJar = selectedSourceJar();
         String targetJar = selectedTargetJar();
-        List<ClassMappingDecision> mappings = controller.getAcceptedClassMappings(sourceJar, targetJar);
+        List<ClassMappingDecision> mappings = controller.mappings().accepted(sourceJar, targetJar);
         if (mappings.isEmpty()) {
             JOptionPane.showMessageDialog(
                 this,
@@ -439,7 +439,7 @@ public class MappingWorkspacePanel extends JPanel {
             }
         }
         try {
-            controller.exportAcceptedClassMappings(destination, sourceJar, targetJar);
+            controller.mappings().export(destination, sourceJar, targetJar);
             statusLabel.setText("Exported " + mappings.size() + " mappings to " + destination.getName());
         } catch (IOException exception) {
             showError("Export failed", exception);
@@ -487,7 +487,7 @@ public class MappingWorkspacePanel extends JPanel {
         if (sourceClass == null || !hasJarPair()) {
             return Optional.empty();
         }
-        return controller.getAcceptedClassMapping(selectedSourceJar(), selectedTargetJar(), sourceClass);
+        return controller.mappings().accepted(selectedSourceJar(), selectedTargetJar(), sourceClass);
     }
 
     private String candidateState(ClassMatch candidate) {
@@ -499,7 +499,7 @@ public class MappingWorkspacePanel extends JPanel {
         if (accepted.isPresent() && accepted.get().targetClassName().equals(candidate.classNode().name)) {
             return "  [Accepted]";
         }
-        if (controller.isClassMappingRejected(
+        if (controller.mappings().isRejected(
             selectedSourceJar(),
             selectedTargetJar(),
             sourceClass,

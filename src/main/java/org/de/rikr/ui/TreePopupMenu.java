@@ -5,6 +5,7 @@ import org.de.rikr.service.ClassMatch;
 import org.de.rikr.service.ProjectBookmark;
 import org.de.rikr.service.ProjectBookmarkType;
 import org.de.rikr.ui.model.*;
+import org.de.rikr.utilities.ClassNodeUtil;
 import org.objectweb.asm.tree.*;
 
 import javax.swing.*;
@@ -124,11 +125,11 @@ public class TreePopupMenu extends JPopupMenu {
                     controller.log("Unable to remove child node.");
                 } else if (selectedNode instanceof ClassMutableTreeNode classMutableTreeNode) {
                     model.removeNodeFromParent(selectedNode);
-                    controller.removeClass(classMutableTreeNode.getJarName(), classMutableTreeNode.getClassNode());
+                    controller.jars().removeClass(classMutableTreeNode.getJarName(), classMutableTreeNode.getClassNode());
                     controller.getUserInterface().clearContent();
                 } else if (selectedNode instanceof JarMutableTreeNode jarMutableTreeNode) {
                     model.removeNodeFromParent(selectedNode);
-                    controller.removeJar(jarMutableTreeNode.getJarName());
+                    controller.jars().removeJar(jarMutableTreeNode.getJarName());
                     controller.getUserInterface().clearContent();
                 }
             }
@@ -152,7 +153,7 @@ public class TreePopupMenu extends JPopupMenu {
             if (selectedNode instanceof ClassNodeMutableTreeNode classNodeMutableTreeNode) {
                 String jarName = classNodeMutableTreeNode.getJarName();
                 ClassNode selectedClassNode = classNodeMutableTreeNode.getClassNode();
-                List<ClassNode> classes = controller.findClassesExtending(controller.getClasses(jarName), selectedClassNode);
+                List<ClassNode> classes = ClassNodeUtil.findClassesExtending(controller.jars().classes(jarName), selectedClassNode);
 
                 boolean foundMatch = false;
                 for (ClassNode classNode : classes) {
@@ -175,7 +176,7 @@ public class TreePopupMenu extends JPopupMenu {
             if (selectedNode instanceof InterfaceNodeMutableTreeNode interfaceNodeMutableTreeNode) {
                 String jarName = interfaceNodeMutableTreeNode.getJarName();
                 ClassNode selectedClassNode = interfaceNodeMutableTreeNode.getClassNode();
-                List<ClassNode> classes = controller.findClassesImplementing(controller.getClasses(jarName), selectedClassNode);
+                List<ClassNode> classes = ClassNodeUtil.findClassesImplementing(controller.jars().classes(jarName), selectedClassNode);
 
                 boolean foundMatch = false;
                 for (ClassNode classNode : classes) {
@@ -198,7 +199,7 @@ public class TreePopupMenu extends JPopupMenu {
             if (selectedNode instanceof JarMutableTreeNode jarMutableTreeNode) {
                 String jarName = jarMutableTreeNode.getJarName();
                 List<ClassNode> classes = jarMutableTreeNode.getClasses();
-                Map<String, List<ClassNode>> superclassGroups = controller.groupBySuperclass(classes);
+                Map<String, List<ClassNode>> superclassGroups = ClassNodeUtil.groupBySuperclass(classes);
 
                 controller.getUserInterface().getTreePanel().addTreeNodes(selectedNode, jarName, classes, superclassGroups);
             }
@@ -213,7 +214,7 @@ public class TreePopupMenu extends JPopupMenu {
             if (selectedNode instanceof JarMutableTreeNode jarMutableTreeNode) {
                 String jarName = jarMutableTreeNode.getJarName();
                 List<ClassNode> classes = jarMutableTreeNode.getClasses();
-                Map<String, List<ClassNode>> interfaceGroups = controller.groupByInterface(classes);
+                Map<String, List<ClassNode>> interfaceGroups = ClassNodeUtil.groupByInterface(classes);
 
                 controller.getUserInterface().getTreePanel().addTreeNodes(selectedNode, jarName, classes, interfaceGroups);
             }
@@ -255,8 +256,8 @@ public class TreePopupMenu extends JPopupMenu {
                     && !"java/lang/Object".equals(selectedClassNode.superName);
                 int interfaceCount = selectedClassNode.interfaces.size();
 
-                List<String> fields = controller.getNonStaticFieldDescriptions(selectedClassNode);
-                List<String> methods = controller.getNonStaticMethodDescriptions(selectedClassNode);
+                List<String> fields = controller.mappings().nonStaticFieldDescriptions(selectedClassNode);
+                List<String> methods = controller.mappings().nonStaticMethodDescriptions(selectedClassNode);
 
                 informationMap.put("ClassNode", selectedClassNode.name);
                 informationMap.put("Is Interface", String.valueOf(isInterface));
@@ -437,9 +438,9 @@ public class TreePopupMenu extends JPopupMenu {
     }
 
     private MatchSearchReport buildMatchSearchReport(String sourceJarName, ClassNode sourceClassNode) {
-        Map<String, List<ClassNode>> jarClasses = controller.getJarClassesMap();
+        Map<String, List<ClassNode>> jarClasses = controller.jars().classesByJar();
         List<ClassNode> sourceClasses = jarClasses.getOrDefault(sourceJarName, List.of());
-        Map<String, List<ClassMatch>> jarMatches = controller.findSimilarClassNodes(sourceJarName, sourceClassNode);
+        Map<String, List<ClassMatch>> jarMatches = controller.mappings().findSimilarClasses(sourceJarName, sourceClassNode);
         List<String> messages = new ArrayList<>();
         int skippedBehaviorComparisons = 0;
 
@@ -479,14 +480,14 @@ public class TreePopupMenu extends JPopupMenu {
         int skippedComparisons = 0;
 
         for (MethodNode sourceMethod : sourceClassNode.methods) {
-            String sourceDescriptor = controller.normalizeClassDescriptor(sourceMethod.desc);
+            String sourceDescriptor = controller.mappings().normalizeDescriptor(sourceMethod.desc);
             for (MethodNode candidateMethod : candidateClassNode.methods) {
-                if (!sourceDescriptor.equals(controller.normalizeClassDescriptor(candidateMethod.desc))) {
+                if (!sourceDescriptor.equals(controller.mappings().normalizeDescriptor(candidateMethod.desc))) {
                     continue;
                 }
 
                 try {
-                    if (controller.areMethodsBehaviorallyEquivalent(
+                    if (controller.mappings().areMethodsBehaviorallyEquivalent(
                         sourceClasses,
                         sourceMethod,
                         candidateClasses,

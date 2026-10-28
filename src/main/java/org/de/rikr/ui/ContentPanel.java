@@ -153,7 +153,7 @@ public class ContentPanel extends JScrollPane {
                 contentPane.selectAll();
 
                 // Try cache first
-                String cached = controller.getDecompiledSource(classNode);
+                String cached = controller.decompiler().getDecompiledSource(classNode);
                 if (cached != null && !cached.isEmpty()) {
                     javaSyntaxHighlighter.highlight(document, cached);
                     contentPane.setCaretPosition(0);
@@ -182,7 +182,7 @@ public class ContentPanel extends JScrollPane {
 
     private void decompileInBackgroundJavaOnly(ClassNode classNode) {
         // Try cache first (pre-decompiled on jar load)
-        String cached = controller.getDecompiledSource(classNode);
+        String cached = controller.decompiler().getDecompiledSource(classNode);
         if (cached != null && !cached.isEmpty()) {
             SwingUtilities.invokeLater(() -> {
                 javaSyntaxHighlighter.highlight(document, cached);
@@ -191,7 +191,7 @@ public class ContentPanel extends JScrollPane {
             return;
         }
 
-        controller.decompileClassAsync(classNode).thenAccept(result -> {
+        controller.decompiler().decompileClassAsync(classNode).thenAccept(result -> {
             SwingUtilities.invokeLater(() -> {
                 if (!result.success() || result.source().isEmpty()) {
                     contentPane.setText("// " + result.message() + "\n");
@@ -249,9 +249,9 @@ public class ContentPanel extends JScrollPane {
 
     private void processDroppedFile(File file) {
         if (file.getName().endsWith(".jar")) {
-            controller.loadJarFiles(new File[]{file});
+            controller.jars().loadJars(new File[]{file});
         } else if (file.getName().endsWith(".class")) {
-            controller.loadClassFiles(new File[]{file});
+            controller.jars().loadClassFiles(new File[]{file});
         }
     }
 

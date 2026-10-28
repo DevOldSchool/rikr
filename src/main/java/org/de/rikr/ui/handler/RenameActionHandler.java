@@ -83,17 +83,17 @@ public class RenameActionHandler implements ActionListener {
 
     private RenamePreview preview(DefaultMutableTreeNode node, String newName) {
         if (node instanceof ClassMutableTreeNode classNode) {
-            return controller.previewClassRename(classNode.getJarName(), classNode.getClassNode(), newName);
+            return controller.renames().previewClass(classNode.getJarName(), classNode.getClassNode(), newName);
         }
         if (node instanceof ClassNodeMutableTreeNode classNode) {
-            return controller.previewClassRename(classNode.getJarName(), classNode.getClassNode(), newName);
+            return controller.renames().previewClass(classNode.getJarName(), classNode.getClassNode(), newName);
         }
         if (node instanceof InterfaceNodeMutableTreeNode interfaceNode) {
-            return controller.previewClassRename(interfaceNode.getJarName(), interfaceNode.getClassNode(), newName);
+            return controller.renames().previewClass(interfaceNode.getJarName(), interfaceNode.getClassNode(), newName);
         }
         String jarName = findJarName(node);
         if (node instanceof FieldNodeMutableTreeNode fieldNode && jarName != null) {
-            return controller.previewFieldRename(
+            return controller.renames().previewField(
                 jarName,
                 fieldNode.getOwner(),
                 fieldNode.getFieldNode(),
@@ -101,7 +101,7 @@ public class RenameActionHandler implements ActionListener {
             );
         }
         if (node instanceof MethodNodeMutableTreeNode methodNode && jarName != null) {
-            return controller.previewMethodRename(
+            return controller.renames().previewMethod(
                 jarName,
                 methodNode.getOwner(),
                 methodNode.getMethodNode(),
@@ -272,7 +272,7 @@ public class RenameActionHandler implements ActionListener {
         ClassNode classNode = node.getClassNode();
 
         if (classNode != null) {
-            logRenameResults(controller.renameClassReferences(jarName, classNode, newName));
+            logRenameResults(controller.renames().renameClass(jarName, classNode, newName));
             node.setUserObject(newName + ".class");
             DefaultMutableTreeNode childNode = (DefaultMutableTreeNode) node.getChildAt(0);
 
@@ -291,7 +291,7 @@ public class RenameActionHandler implements ActionListener {
         ClassNode classNode = node.getClassNode();
 
         if (classNode != null) {
-            logRenameResults(controller.renameClassReferences(jarName, classNode, newName));
+            logRenameResults(controller.renames().renameClass(jarName, classNode, newName));
             node.setUserObject(newName);
             parentNode.setUserObject(newName + ".class");
             controller.getUserInterface().getTreePanel().updateNode(parentNode);
@@ -306,7 +306,7 @@ public class RenameActionHandler implements ActionListener {
         ClassNode classNode = node.getClassNode();
 
         if (classNode != null) {
-            RenameResult result = controller.renameClassReferences(jarName, classNode, newName);
+            RenameResult result = controller.renames().renameClass(jarName, classNode, newName);
             logRenameResults(result.withType("interface"));
             node.setUserObject(newName);
             parentNode.setUserObject(newName + ".class");
@@ -323,7 +323,7 @@ public class RenameActionHandler implements ActionListener {
         FieldNode fieldNode = node.getFieldNode();
 
         if (classNode != null && fieldNode != null) {
-            logRenameResults(controller.renameFieldReferences(jarName, classNode, fieldNode, newName));
+            logRenameResults(controller.renames().renameField(jarName, classNode, fieldNode, newName));
             node.setUserObject(newName + " " + fieldNode.desc);
         }
 
@@ -337,7 +337,7 @@ public class RenameActionHandler implements ActionListener {
         MethodNode methodNode = node.getMethodNode();
 
         if (classNode != null && methodNode != null) {
-            logRenameResults(controller.renameMethodReferences(jarName, classNode, methodNode, newName));
+            logRenameResults(controller.renames().renameMethod(jarName, classNode, methodNode, newName));
             node.setUserObject(newName + " " + methodNode.desc);
         }
 

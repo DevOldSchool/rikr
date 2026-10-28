@@ -7,6 +7,7 @@ import org.de.rikr.theme.Theme;
 import org.de.rikr.ui.handler.TreeSelectionHandler;
 import org.de.rikr.ui.model.ClassMutableTreeNode;
 import org.de.rikr.ui.model.JarMutableTreeNode;
+import org.de.rikr.utilities.ClassNodeUtil;
 import org.objectweb.asm.tree.ClassNode;
 
 import javax.swing.*;
@@ -221,9 +222,9 @@ public class TreePanel extends JPanel {
             Map<String, List<ClassNode>> classGroups = Map.of();
 
             if (groupBySuperclass) {
-                classGroups = controller.groupBySuperclass(classes);
+                classGroups = ClassNodeUtil.groupBySuperclass(classes);
             } else if (groupByInterfaces) {
-                classGroups = controller.groupByInterface(classes);
+                classGroups = ClassNodeUtil.groupByInterface(classes);
             } else {
                 // Remove grouping
                 jarNode.removeAllChildren();

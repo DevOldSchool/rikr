@@ -52,7 +52,7 @@ public class ClassFileActions {
             File file = chooser.getSelectedFile();
 
             try {
-                controller.saveClassToFile(classNode, file);
+                controller.jars().saveClass(classNode, file);
                 controller.log("Saved class to " + file.getAbsolutePath());
             } catch (Exception ex) {
                 controller.log("Save class failed: " + ex.getMessage());
@@ -86,8 +86,8 @@ public class ClassFileActions {
             }
 
             try {
-                controller.exportJarGroupToJar(jarName, file);
-                controller.markJarExported(jarName);
+                controller.jars().exportJar(jarName, file);
+                controller.renames().markExported(jarName);
                 controller.log("Saved JAR to " + file.getAbsolutePath());
             } catch (Exception ex) {
                 controller.log("Save JAR failed: " + ex.getMessage());
@@ -108,7 +108,7 @@ public class ClassFileActions {
             return;
         }
 
-        File original = controller.getOriginalJarFile(jarName);
+        File original = controller.jars().sourceFile(jarName);
         if (original == null) {
             JOptionPane.showMessageDialog(
                 frame,
@@ -120,10 +120,10 @@ public class ClassFileActions {
         }
 
         try {
-            boolean ok = controller.overwriteOriginalJar(jarName);
+            boolean ok = controller.jars().overwriteOriginalJar(jarName);
 
             if (ok) {
-                controller.commitOverwrittenJar(jarName);
+                controller.renames().commitOverwrittenJar(jarName);
                 controller.log("Overwrote original JAR: " + original.getAbsolutePath());
             } else {
                 JOptionPane.showMessageDialog(

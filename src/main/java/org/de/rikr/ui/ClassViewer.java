@@ -285,7 +285,7 @@ public class ClassViewer {
     public void updateTree(Map<String, List<ClassNode>> jarClassesMap) {
         SwingUtilities.invokeLater(() -> {
             treePanel.updateTree(jarClassesMap);
-            treePanel.updateDirtyJars(controller.getDirtyJars());
+            treePanel.updateDirtyJars(controller.renames().dirtyJars());
             mappingWorkspacePanel.refreshJars(jarClassesMap);
         });
     }
@@ -389,7 +389,7 @@ public class ClassViewer {
         leftSplitPane.setRightComponent(projectPanel);
         mainSplitPane.setRightComponent(mappingWorkspacePanel);
         mainSplitPane.setDividerLocation(300);
-        mappingWorkspacePanel.refreshJars(controller.getJarClassesMap());
+        mappingWorkspacePanel.refreshJars(controller.jars().classesByJar());
         SettingsManager.refreshThemeFor(mappingWorkspacePanel);
         frame.revalidate();
         frame.repaint();
@@ -424,9 +424,9 @@ public class ClassViewer {
             File[] selectedFiles = fileChooser.getSelectedFiles();
             for (File file : selectedFiles) {
                 if (file.getName().endsWith(".jar")) {
-                    controller.loadJarFiles(new File[]{file});
+                    controller.jars().loadJars(new File[]{file});
                 } else if (file.getName().endsWith(".class")) {
-                    controller.loadClassFiles(new File[]{file});
+                    controller.jars().loadClassFiles(new File[]{file});
                 }
             }
         }

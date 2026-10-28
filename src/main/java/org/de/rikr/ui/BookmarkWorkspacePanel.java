@@ -56,7 +56,7 @@ public class BookmarkWorkspacePanel extends JPanel {
     public void refresh() {
         ProjectBookmark selected = list.getSelectedValue();
         model.clear();
-        controller.getBookmarks().forEach(model::addElement);
+        controller.bookmarks().all().forEach(model::addElement);
         if (selected != null) {
             list.setSelectedValue(selected, true);
         }
@@ -77,7 +77,7 @@ public class BookmarkWorkspacePanel extends JPanel {
     private void removeSelected() {
         ProjectBookmark bookmark = list.getSelectedValue();
         if (bookmark != null) {
-            controller.removeBookmark(bookmark);
+            controller.bookmarks().remove(bookmark);
         }
     }
 
