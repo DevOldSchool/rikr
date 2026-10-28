@@ -22,7 +22,9 @@ import java.util.function.Supplier;
  */
 public class DecompilerCacheService implements AutoCloseable {
     private final Logger logger;
-    private final ExecutorService executor;
+    // Whole-JAR warm-up can take minutes, so classes opened by the user decompile on their own thread.
+    private final ExecutorService warmUpExecutor;
+    private final ExecutorService classExecutor;
     // ClassNode does not override equals/hashCode, so entries are keyed by instance.
     private final Map<ClassNode, String> sources = new WeakHashMap<>();
     private final Map<String, Long> jarGenerations = new HashMap<>();
@@ -30,8 +32,13 @@ public class DecompilerCacheService implements AutoCloseable {
 
     public DecompilerCacheService(Logger logger) {
         this.logger = logger;
-        this.executor = Executors.newSingleThreadExecutor(runnable -> {
-            Thread thread = new Thread(runnable, "rikr-decompiler");
+        this.warmUpExecutor = daemonExecutor("rikr-decompiler-warm-up");
+        this.classExecutor = daemonExecutor("rikr-decompiler");
+    }
+
+    private static ExecutorService daemonExecutor(String name) {
+        return Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, name);
             thread.setDaemon(true);
             return thread;
         });
@@ -43,7 +50,7 @@ public class DecompilerCacheService implements AutoCloseable {
      */
     public void warmUpJar(String jarName, File jarFile, Supplier<List<ClassNode>> classes) {
         long startGeneration = jarGeneration(jarName);
-        executor.submit(() -> {
+        warmUpExecutor.submit(() -> {
             try {
                 logger.log("[Decompiler] Warming up sources for JAR: " + jarName);
                 JetBrainsDecompilerService service = new JetBrainsDecompilerService(logger);
@@ -78,7 +85,7 @@ public class DecompilerCacheService implements AutoCloseable {
             }
             cacheSource(classNode, source, startGeneration);
             return DecompileResult.success(source);
-        }, executor);
+        }, classExecutor);
     }
 
     public synchronized String getDecompiledSource(ClassNode classNode) {
@@ -142,6 +149,7 @@ public class DecompilerCacheService implements AutoCloseable {
 
     @Override
     public void close() {
-        executor.shutdownNow();
+        warmUpExecutor.shutdownNow();
+        classExecutor.shutdownNow();
     }
 }

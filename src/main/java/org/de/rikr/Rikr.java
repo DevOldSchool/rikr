@@ -120,6 +120,8 @@ public class Rikr {
             previous.close();
         }
         currentProjectFile = source.getAbsoluteFile();
+        // The code view shows a class of the closed project.
+        userInterface.clearContent();
         userInterface.updateTree(project.jars().classesByJar());
         userInterface.applyProjectLayout(session.layout());
         userInterface.updateProjectTitle(currentProjectFile);

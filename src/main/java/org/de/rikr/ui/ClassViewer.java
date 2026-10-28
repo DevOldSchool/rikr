@@ -363,6 +363,7 @@ public class ClassViewer {
     }
 
     public void clearContent() {
+        lastDisplayedClassNode = null;
         contentPanelLeft.clear();
         contentPanelRight.clear();
     }
