@@ -1,5 +1,7 @@
 package org.de.rikr.service;
 
+import org.de.rikr.model.ClassMappingDecision;
+
 import java.util.List;
 import java.util.Objects;
 

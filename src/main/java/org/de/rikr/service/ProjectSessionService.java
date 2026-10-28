@@ -1,5 +1,7 @@
 package org.de.rikr.service;
 
+import org.de.rikr.model.ClassMappingDecision;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;

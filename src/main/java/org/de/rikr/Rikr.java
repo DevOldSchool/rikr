@@ -4,7 +4,8 @@ import com.formdev.flatlaf.util.SystemInfo;
 import org.de.rikr.resources.Fonts;
 import org.de.rikr.resources.Images;
 import org.de.rikr.service.ClassMatch;
-import org.de.rikr.service.ClassMappingDecision;
+import org.de.rikr.model.ClassMappingDecision;
+import org.de.rikr.model.ClassRef;
 import org.de.rikr.service.BookmarkService;
 import org.de.rikr.service.DecompileResult;
 import org.de.rikr.service.RenameResult;
@@ -274,7 +275,7 @@ public class Rikr {
     public RenameResult renameClassReferences(String jarName, ClassNode classNode, String newName) {
         String oldName = classNode.name;
         RenameResult result = renameService.applyClassRename(jarName, getClasses(jarName), classNode, newName);
-        processor.invalidateClassMappings(jarName, oldName);
+        processor.renameClassInMappings(jarName, oldName, newName);
         bookmarkService.applyRename(new RenameOperation(
             RenameType.CLASS, jarName, oldName, null, oldName, newName
         ), false, result.declarationOwners());
@@ -286,7 +287,6 @@ public class Rikr {
     public RenameResult renameFieldReferences(String jarName, ClassNode owner, FieldNode fieldNode, String newName) {
         String oldName = fieldNode.name;
         RenameResult result = renameService.applyFieldRename(jarName, getClasses(jarName), owner, fieldNode, newName);
-        processor.invalidateClassMappings(jarName, owner);
         bookmarkService.applyRename(new RenameOperation(
             RenameType.FIELD, jarName, owner.name, fieldNode.desc, oldName, newName
         ), false, result.declarationOwners());
@@ -298,9 +298,6 @@ public class Rikr {
     public RenameResult renameMethodReferences(String jarName, ClassNode owner, MethodNode methodNode, String newName) {
         String oldName = methodNode.name;
         RenameResult result = renameService.applyMethodRename(jarName, getClasses(jarName), owner, methodNode, newName);
-        for (String renamedOwner : result.declarationOwners()) {
-            processor.invalidateClassMappings(jarName, renamedOwner);
-        }
         bookmarkService.applyRename(new RenameOperation(
             RenameType.METHOD, jarName, owner.name, methodNode.desc, oldName, newName
         ), false, result.declarationOwners());
@@ -331,12 +328,9 @@ public class Rikr {
         bookmarkService.applyRename(value.operation(), true, value.result().declarationOwners());
         processor.refreshAfterRename(value.operation().jarName());
         if (value.operation().type() == RenameType.CLASS) {
-            processor.invalidateClassMappings(value.operation().jarName(), value.operation().newName());
-            processor.invalidateClassMappings(value.operation().jarName(), value.operation().oldName());
-        } else {
-            for (String renamedOwner : value.result().declarationOwners()) {
-                processor.invalidateClassMappings(value.operation().jarName(), renamedOwner);
-            }
+            processor.renameClassInMappings(
+                value.operation().jarName(), value.operation().newName(), value.operation().oldName()
+            );
         }
         userInterface.updateTree(processor.getJarClassesView());
         refreshProjectState();
@@ -375,18 +369,9 @@ public class Rikr {
     }
 
     public boolean openBookmark(ProjectBookmark bookmark) {
-        List<ClassNode> classes = getClasses(bookmark.jarName());
-        if (classes == null) {
-            return false;
-        }
-        ClassNode owner = classes.stream()
-            .filter(classNode -> classNode.name.equals(bookmark.className()))
-            .findFirst()
-            .orElse(null);
-        if (owner == null) {
-            return false;
-        }
-        return userInterface.openBookmark(bookmark, owner);
+        return processor.findClass(new ClassRef(bookmark.jarName(), bookmark.className()))
+            .map(owner -> userInterface.openBookmark(bookmark, owner))
+            .orElse(false);
     }
 
     public void saveProject(File destination) throws IOException {

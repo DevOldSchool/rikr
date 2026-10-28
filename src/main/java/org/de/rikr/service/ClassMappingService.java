@@ -1,6 +1,9 @@
 package org.de.rikr.service;
 
 import org.de.rikr.behavioral.ClassComparator;
+import org.de.rikr.model.ClassMappingDecision;
+import org.de.rikr.model.ClassRef;
+import org.de.rikr.model.MappingSet;
 import org.objectweb.asm.tree.ClassNode;
 
 import java.io.File;
@@ -10,18 +13,14 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
 public class ClassMappingService {
     private final ClassComparator classComparator;
-    private final Map<SourceKey, ClassMappingDecision> acceptedMappings = new LinkedHashMap<>();
-    private final Set<CandidateKey> rejectedMappings = new LinkedHashSet<>();
+    private final MappingSet mappings = new MappingSet();
 
     public ClassMappingService(ClassComparator classComparator) {
         this.classComparator = Objects.requireNonNull(classComparator, "classComparator");
@@ -46,7 +45,7 @@ public class ClassMappingService {
             .toList();
     }
 
-    public synchronized void accept(
+    public void accept(
         String sourceJar,
         String targetJar,
         ClassNode sourceClass,
@@ -54,32 +53,16 @@ public class ClassMappingService {
     ) {
         Objects.requireNonNull(sourceClass, "sourceClass");
         Objects.requireNonNull(candidate, "candidate");
-        SourceKey sourceKey = sourceKey(sourceJar, targetJar, sourceClass.name);
-        CandidateKey candidateKey = candidateKey(sourceKey, candidate.classNode().name);
-
-        Optional<ClassMappingDecision> conflictingMapping = acceptedMappings.values().stream()
-            .filter(mapping -> mapping.sourceJar().equals(sourceJar))
-            .filter(mapping -> mapping.targetJar().equals(targetJar))
-            .filter(mapping -> mapping.targetClassName().equals(candidate.classNode().name))
-            .filter(mapping -> !mapping.sourceClassName().equals(sourceClass.name))
-            .findFirst();
-        if (conflictingMapping.isPresent()) {
-            throw new IllegalArgumentException(
-                candidate.classNode().name + " is already mapped from " + conflictingMapping.get().sourceClassName()
-            );
-        }
-
-        acceptedMappings.put(sourceKey, new ClassMappingDecision(
+        mappings.accept(new ClassMappingDecision(
             sourceJar,
             targetJar,
             sourceClass.name,
             candidate.classNode().name,
             candidate.similarityPercent()
         ));
-        rejectedMappings.remove(candidateKey);
     }
 
-    public synchronized void reject(
+    public void reject(
         String sourceJar,
         String targetJar,
         ClassNode sourceClass,
@@ -87,101 +70,62 @@ public class ClassMappingService {
     ) {
         Objects.requireNonNull(sourceClass, "sourceClass");
         Objects.requireNonNull(targetClass, "targetClass");
-        SourceKey sourceKey = sourceKey(sourceJar, targetJar, sourceClass.name);
-        CandidateKey candidateKey = candidateKey(sourceKey, targetClass.name);
-        ClassMappingDecision accepted = acceptedMappings.get(sourceKey);
-        if (accepted != null && accepted.targetClassName().equals(targetClass.name)) {
-            acceptedMappings.remove(sourceKey);
-        }
-        rejectedMappings.add(candidateKey);
+        mappings.reject(new ClassRef(sourceJar, sourceClass.name), new ClassRef(targetJar, targetClass.name));
     }
 
-    public synchronized void clearSourceDecisions(String sourceJar, String targetJar, ClassNode sourceClass) {
-        SourceKey sourceKey = sourceKey(sourceJar, targetJar, sourceClass.name);
-        acceptedMappings.remove(sourceKey);
-        rejectedMappings.removeIf(key -> key.sourceKey().equals(sourceKey));
+    public void clearSourceDecisions(String sourceJar, String targetJar, ClassNode sourceClass) {
+        mappings.clearSource(new ClassRef(sourceJar, sourceClass.name), targetJar);
     }
 
-    public synchronized Optional<ClassMappingDecision> getAcceptedMapping(
+    public Optional<ClassMappingDecision> getAcceptedMapping(
         String sourceJar,
         String targetJar,
         ClassNode sourceClass
     ) {
-        return Optional.ofNullable(acceptedMappings.get(sourceKey(sourceJar, targetJar, sourceClass.name)));
+        return mappings.accepted(new ClassRef(sourceJar, sourceClass.name), targetJar);
     }
 
-    public synchronized boolean isRejected(
+    public boolean isRejected(
         String sourceJar,
         String targetJar,
         ClassNode sourceClass,
         ClassNode targetClass
     ) {
-        SourceKey sourceKey = sourceKey(sourceJar, targetJar, sourceClass.name);
-        return rejectedMappings.contains(candidateKey(sourceKey, targetClass.name));
-    }
-
-    public synchronized List<ClassMappingDecision> getAcceptedMappings(String sourceJar, String targetJar) {
-        return acceptedMappings.values().stream()
-            .filter(mapping -> mapping.sourceJar().equals(sourceJar))
-            .filter(mapping -> mapping.targetJar().equals(targetJar))
-            .sorted(Comparator.comparing(ClassMappingDecision::sourceClassName))
-            .toList();
-    }
-
-    public synchronized List<ClassMappingDecision> getAllAcceptedMappings() {
-        return acceptedMappings.values().stream()
-            .sorted(Comparator.comparing(ClassMappingDecision::sourceJar)
-                .thenComparing(ClassMappingDecision::targetJar)
-                .thenComparing(ClassMappingDecision::sourceClassName))
-            .toList();
-    }
-
-    public synchronized void restore(ClassMappingDecision decision) {
-        Objects.requireNonNull(decision, "decision");
-        SourceKey sourceKey = sourceKey(
-            decision.sourceJar(),
-            decision.targetJar(),
-            decision.sourceClassName()
-        );
-        boolean targetInUse = acceptedMappings.values().stream()
-            .anyMatch(mapping -> mapping.sourceJar().equals(decision.sourceJar())
-                && mapping.targetJar().equals(decision.targetJar())
-                && mapping.targetClassName().equals(decision.targetClassName())
-                && !mapping.sourceClassName().equals(decision.sourceClassName()));
-        if (targetInUse) {
-            throw new IllegalArgumentException("Target class is already mapped: " + decision.targetClassName());
-        }
-        acceptedMappings.put(sourceKey, decision);
-    }
-
-    public synchronized void clear() {
-        acceptedMappings.clear();
-        rejectedMappings.clear();
-    }
-
-    public synchronized void clearJar(String jarName) {
-        Objects.requireNonNull(jarName, "jarName");
-        acceptedMappings.entrySet().removeIf(entry ->
-            entry.getKey().sourceJar().equals(jarName) || entry.getKey().targetJar().equals(jarName)
-        );
-        rejectedMappings.removeIf(entry ->
-            entry.sourceKey().sourceJar().equals(jarName) || entry.sourceKey().targetJar().equals(jarName)
+        return mappings.isRejected(
+            new ClassRef(sourceJar, sourceClass.name),
+            new ClassRef(targetJar, targetClass.name)
         );
     }
 
-    public synchronized void clearClass(String jarName, String className) {
-        Objects.requireNonNull(jarName, "jarName");
-        Objects.requireNonNull(className, "className");
-        acceptedMappings.entrySet().removeIf(entry -> {
-            ClassMappingDecision mapping = entry.getValue();
-            return mapping.sourceJar().equals(jarName) && mapping.sourceClassName().equals(className)
-                || mapping.targetJar().equals(jarName) && mapping.targetClassName().equals(className);
-        });
-        rejectedMappings.removeIf(entry -> {
-            SourceKey sourceKey = entry.sourceKey();
-            return sourceKey.sourceJar().equals(jarName) && sourceKey.sourceClassName().equals(className)
-                || sourceKey.targetJar().equals(jarName) && entry.targetClassName().equals(className);
-        });
+    public List<ClassMappingDecision> getAcceptedMappings(String sourceJar, String targetJar) {
+        return mappings.accepted(sourceJar, targetJar);
+    }
+
+    public List<ClassMappingDecision> getAllAcceptedMappings() {
+        return mappings.allAccepted();
+    }
+
+    public void restore(ClassMappingDecision decision) {
+        mappings.accept(decision);
+    }
+
+    public void clear() {
+        mappings.clear();
+    }
+
+    public void clearJar(String jarName) {
+        mappings.removeJar(jarName);
+    }
+
+    public void clearClass(String jarName, String className) {
+        mappings.removeClass(new ClassRef(jarName, className));
+    }
+
+    /**
+     * Keep the decisions of a class that was renamed.
+     */
+    public void renameClass(String jarName, String oldName, String newName) {
+        mappings.renameClass(new ClassRef(jarName, oldName), newName);
     }
 
     public List<ClassMappingDecision> autoAcceptUniqueMatches(
@@ -238,7 +182,7 @@ public class ClassMappingService {
         return List.copyOf(added);
     }
 
-    public synchronized void exportAcceptedMappings(File destination, String sourceJar, String targetJar)
+    public void exportAcceptedMappings(File destination, String sourceJar, String targetJar)
         throws IOException {
         Objects.requireNonNull(destination, "destination");
         Objects.requireNonNull(sourceJar, "sourceJar");
@@ -295,20 +239,6 @@ public class ClassMappingService {
         return Optional.of(best);
     }
 
-    private SourceKey sourceKey(String sourceJar, String targetJar, String sourceClassName) {
-        Objects.requireNonNull(sourceJar, "sourceJar");
-        Objects.requireNonNull(targetJar, "targetJar");
-        Objects.requireNonNull(sourceClassName, "sourceClassName");
-        if (sourceJar.equals(targetJar)) {
-            throw new IllegalArgumentException("Source and target JARs must be different");
-        }
-        return new SourceKey(sourceJar, targetJar, sourceClassName);
-    }
-
-    private CandidateKey candidateKey(SourceKey sourceKey, String targetClassName) {
-        return new CandidateKey(sourceKey, Objects.requireNonNull(targetClassName, "targetClassName"));
-    }
-
     private void validatePercent(int percent) {
         if (percent < 0 || percent > 100) {
             throw new IllegalArgumentException("minimumSimilarityPercent must be between 0 and 100");
@@ -324,12 +254,6 @@ public class ClassMappingService {
             .replace("\n", "\\n")
             .replace("\r", "\\r")
             .replace("\t", "\\t");
-    }
-
-    private record SourceKey(String sourceJar, String targetJar, String sourceClassName) {
-    }
-
-    private record CandidateKey(SourceKey sourceKey, String targetClassName) {
     }
 
     private record AutoMatch(ClassNode sourceClass, ClassMatch candidate) {

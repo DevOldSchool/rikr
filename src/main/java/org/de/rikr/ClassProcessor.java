@@ -4,13 +4,14 @@ import org.de.rikr.behavioral.ClassComparator;
 import org.de.rikr.behavioral.MethodComparator;
 import org.de.rikr.service.ClassLoadingService;
 import org.de.rikr.service.ClassMatch;
-import org.de.rikr.service.ClassMappingDecision;
+import org.de.rikr.model.ClassMappingDecision;
+import org.de.rikr.model.ClassRef;
+import org.de.rikr.model.Workspace;
 import org.de.rikr.service.ClassMappingService;
 import org.de.rikr.service.DecompileResult;
 import org.de.rikr.service.DecompilerCacheService;
 import org.de.rikr.service.JarExportService;
 import org.de.rikr.service.LoadedJar;
-import org.de.rikr.service.ProjectRepository;
 import org.de.rikr.service.ReferenceIndexService;
 import org.de.rikr.service.ReferenceResult;
 import org.de.rikr.service.SearchQuery;
@@ -31,12 +32,11 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 public class ClassProcessor implements AutoCloseable {
-    private static final String LOOSE_CLASS_GROUP = "Classes";
     private static final int MIN_CLASS_MATCH_PERCENT = 50;
     private static final int MAX_CLASS_MATCHES_PER_JAR = 10;
 
     private final Logger logger;
-    private final ProjectRepository projectRepository;
+    private final Workspace workspace;
     private final ClassLoadingService classLoadingService;
     private final JarExportService jarExportService;
     private final DecompilerCacheService decompilerCacheService;
@@ -49,7 +49,7 @@ public class ClassProcessor implements AutoCloseable {
 
     public ClassProcessor(Logger logger) {
         this.logger = logger;
-        this.projectRepository = new ProjectRepository();
+        this.workspace = new Workspace();
         this.classLoadingService = new ClassLoadingService();
         this.jarExportService = new JarExportService(logger);
         this.decompilerCacheService = new DecompilerCacheService(logger);
@@ -65,8 +65,8 @@ public class ClassProcessor implements AutoCloseable {
         for (File file : jarFiles) {
             // JARs are identified by file name, so a second JAR with the same name would silently replace
             // the first one while its renames, bookmarks and mappings stayed behind.
-            if (projectRepository.getClasses(file.getName()) != null) {
-                File loaded = projectRepository.getOriginalJarFile(file.getName());
+            if (workspace.contains(file.getName())) {
+                File loaded = workspace.sourceFile(file.getName());
                 logger.log("Skipped " + file.getAbsolutePath() + ": a JAR named " + file.getName()
                     + " is already loaded" + (loaded == null ? "" : " from " + loaded.getAbsolutePath())
                     + ". Remove it first.");
@@ -76,10 +76,10 @@ public class ClassProcessor implements AutoCloseable {
                 LoadedJar loadedJar = classLoadingService.readJar(file, stripAnnotations);
                 String jarName = loadedJar.jarName();
                 classMappingService.clearJar(jarName);
-                projectRepository.putJarClasses(jarName, loadedJar.classes(), loadedJar.originalFile());
+                workspace.addJar(jarName, loadedJar.classes(), loadedJar.originalFile());
                 referenceIndexService.indexJar(jarName, loadedJar.classes());
                 logger.log("Loaded " + loadedJar.classes().size() + " classes from " + jarName);
-                decompilerCacheService.warmUpJar(jarName, file, () -> projectRepository.getClassesSnapshot(jarName));
+                decompilerCacheService.warmUpJar(jarName, file, () -> workspace.classesSnapshot(jarName));
             } catch (IOException e) {
                 logger.log("Error processing jar file: " + file.getName() + ": " + e.getMessage());
             }
@@ -90,8 +90,8 @@ public class ClassProcessor implements AutoCloseable {
         for (File file : classFiles) {
             try {
                 ClassNode classNode = classLoadingService.readClass(file, stripAnnotations);
-                projectRepository.addClass(LOOSE_CLASS_GROUP, classNode);
-                refreshReferenceIndex(LOOSE_CLASS_GROUP);
+                workspace.addLooseClass(classNode);
+                refreshReferenceIndex(Workspace.LOOSE_CLASSES);
             } catch (IOException e) {
                 logger.log("Error processing class file: " + file.getName() + ": " + e.getMessage());
             }
@@ -190,19 +190,19 @@ public class ClassProcessor implements AutoCloseable {
     }
 
     public Map<String, List<ClassNode>> getJarClassesView() {
-        return projectRepository.getJarClassesView();
+        return workspace.classesByJar();
     }
 
     public boolean removeJar(String jarName) {
-        decompilerCacheService.invalidateJar(jarName, projectRepository.getClassesSnapshot(jarName));
+        decompilerCacheService.invalidateJar(jarName, workspace.classesSnapshot(jarName));
         classMappingService.clearJar(jarName);
         referenceIndexService.removeJar(jarName);
-        return projectRepository.removeJar(jarName);
+        return workspace.removeJar(jarName);
     }
 
     public boolean removeClass(String jarName, ClassNode classNode) {
         classMappingService.clearClass(jarName, classNode.name);
-        boolean removed = projectRepository.removeClass(jarName, classNode);
+        boolean removed = workspace.removeClass(jarName, classNode);
         if (removed) {
             refreshReferenceIndex(jarName);
         }
@@ -210,7 +210,11 @@ public class ClassProcessor implements AutoCloseable {
     }
 
     public List<ClassNode> getClasses(String jarName) {
-        return projectRepository.getClasses(jarName);
+        return workspace.classes(jarName);
+    }
+
+    public Optional<ClassNode> findClass(ClassRef ref) {
+        return workspace.findClass(ref);
     }
 
     public List<String> getNonStaticFieldDescriptions(ClassNode classNode) {
@@ -231,12 +235,12 @@ public class ClassProcessor implements AutoCloseable {
         int minimumSimilarityPercent,
         int maximumResults
     ) {
-        List<ClassNode> targetClasses = projectRepository.getClasses(targetJar);
+        List<ClassNode> targetClasses = workspace.classesSnapshot(targetJar);
         if (targetClasses == null) {
             return List.of();
         }
         return classMappingService.findCandidates(
-            List.copyOf(targetClasses),
+            targetClasses,
             sourceClass,
             minimumSimilarityPercent,
             maximumResults
@@ -265,12 +269,11 @@ public class ClassProcessor implements AutoCloseable {
         classMappingService.clearSourceDecisions(sourceJar, targetJar, sourceClass);
     }
 
-    public void invalidateClassMappings(String jarName, ClassNode classNode) {
-        classMappingService.clearClass(jarName, classNode.name);
-    }
-
-    public void invalidateClassMappings(String jarName, String className) {
-        classMappingService.clearClass(jarName, className);
+    /**
+     * Keep the mapping decisions of a class that was renamed.
+     */
+    public void renameClassInMappings(String jarName, String oldName, String newName) {
+        classMappingService.renameClass(jarName, oldName, newName);
     }
 
     public Optional<ClassMappingDecision> getAcceptedClassMapping(
@@ -335,16 +338,17 @@ public class ClassProcessor implements AutoCloseable {
      * Rebuild everything derived from a JAR's bytecode after its classes were renamed in place.
      */
     public void refreshAfterRename(String jarName) {
-        decompilerCacheService.invalidateJar(jarName, projectRepository.getClassesSnapshot(jarName));
+        workspace.classesChanged(jarName);
+        decompilerCacheService.invalidateJar(jarName, workspace.classesSnapshot(jarName));
         refreshReferenceIndex(jarName);
     }
 
     public void refreshReferenceIndex(String jarName) {
-        List<ClassNode> classes = projectRepository.getClasses(jarName);
+        List<ClassNode> classes = workspace.classesSnapshot(jarName);
         if (classes == null) {
             referenceIndexService.removeJar(jarName);
         } else {
-            referenceIndexService.indexJar(jarName, List.copyOf(classes));
+            referenceIndexService.indexJar(jarName, classes);
         }
     }
 
@@ -353,16 +357,16 @@ public class ClassProcessor implements AutoCloseable {
         String targetJar,
         int minimumSimilarityPercent
     ) {
-        List<ClassNode> sourceClasses = projectRepository.getClasses(sourceJar);
-        List<ClassNode> targetClasses = projectRepository.getClasses(targetJar);
+        List<ClassNode> sourceClasses = workspace.classesSnapshot(sourceJar);
+        List<ClassNode> targetClasses = workspace.classesSnapshot(targetJar);
         if (sourceClasses == null || targetClasses == null) {
             return List.of();
         }
         return classMappingService.autoAcceptUniqueMatches(
             sourceJar,
             targetJar,
-            List.copyOf(sourceClasses),
-            List.copyOf(targetClasses),
+            sourceClasses,
+            targetClasses,
             minimumSimilarityPercent
         );
     }
@@ -397,7 +401,7 @@ public class ClassProcessor implements AutoCloseable {
     }
 
     public void exportJarGroupToJar(String jarName, File destJar) throws IOException {
-        List<ClassNode> list = projectRepository.getClasses(jarName);
+        List<ClassNode> list = workspace.classesSnapshot(jarName);
         if (list == null) {
             throw new IOException("Unknown jar group: " + jarName);
         }
@@ -406,18 +410,18 @@ public class ClassProcessor implements AutoCloseable {
     }
 
     public boolean overwriteOriginalJar(String jarName) throws IOException {
-        File original = projectRepository.getOriginalJarFile(jarName);
-        List<ClassNode> list = projectRepository.getClasses(jarName);
+        File original = workspace.sourceFile(jarName);
+        List<ClassNode> list = workspace.classesSnapshot(jarName);
 
         return jarExportService.overwriteOriginalJar(original, list);
     }
 
     public File getOriginalJarFile(String jarName) {
-        return projectRepository.getOriginalJarFile(jarName);
+        return workspace.sourceFile(jarName);
     }
 
     public Map<String, File> getOriginalJarFiles() {
-        return projectRepository.getOriginalJarFiles();
+        return workspace.sourceFiles();
     }
 
     public String getDecompiledSource(ClassNode classNode) {
@@ -438,19 +442,16 @@ public class ClassProcessor implements AutoCloseable {
     }
 
     private List<Map.Entry<String, List<ClassNode>>> getSortedJarEntries() {
-        return projectRepository.getJarClassesView().entrySet().stream()
+        return workspace.classesByJar().entrySet().stream()
             .sorted(Map.Entry.comparingByKey())
             .toList();
     }
 
     private ClassNode requireClass(String jarName, String className) {
-        List<ClassNode> classes = projectRepository.getClasses(jarName);
-        if (classes == null) {
+        if (!workspace.contains(jarName)) {
             throw new IllegalArgumentException("Project references an unloaded JAR: " + jarName);
         }
-        return classes.stream()
-            .filter(classNode -> classNode.name.equals(className))
-            .findFirst()
+        return workspace.findClass(new ClassRef(jarName, className))
             .orElseThrow(() -> new IllegalArgumentException(
                 "Project references a missing class: " + jarName + " -> " + className
             ));

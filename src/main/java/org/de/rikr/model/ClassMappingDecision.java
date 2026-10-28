@@ -1,4 +1,4 @@
-package org.de.rikr.service;
+package org.de.rikr.model;
 
 import java.util.Objects;
 
