@@ -153,7 +153,7 @@ public class ContentPanel extends JScrollPane {
                 contentPane.selectAll();
 
                 // Try cache first
-                String cached = controller.getDecompiledSourceByClass(classNode.name);
+                String cached = controller.getDecompiledSource(classNode);
                 if (cached != null && !cached.isEmpty()) {
                     javaSyntaxHighlighter.highlight(document, cached);
                     contentPane.setCaretPosition(0);
@@ -182,7 +182,7 @@ public class ContentPanel extends JScrollPane {
 
     private void decompileInBackgroundJavaOnly(ClassNode classNode) {
         // Try cache first (pre-decompiled on jar load)
-        String cached = controller.getDecompiledSourceByClass(classNode.name);
+        String cached = controller.getDecompiledSource(classNode);
         if (cached != null && !cached.isEmpty()) {
             SwingUtilities.invokeLater(() -> {
                 javaSyntaxHighlighter.highlight(document, cached);

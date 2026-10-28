@@ -247,12 +247,12 @@ public class Rikr {
         return processor.getOriginalJarFile(jarName);
     }
 
-    public String getDecompiledSourceByClass(String internalName) {
+    public String getDecompiledSource(ClassNode classNode) {
         if (processor == null) {
             return null;
         }
 
-        return processor.getDecompiledSourceByClass(internalName);
+        return processor.getDecompiledSource(classNode);
     }
 
     public CompletableFuture<DecompileResult> decompileClassAsync(ClassNode classNode) {
@@ -277,8 +277,8 @@ public class Rikr {
         processor.invalidateClassMappings(jarName, oldName);
         bookmarkService.applyRename(new RenameOperation(
             RenameType.CLASS, jarName, oldName, null, oldName, newName
-        ), false);
-        processor.refreshReferenceIndex(jarName);
+        ), false, result.declarationOwners());
+        processor.refreshAfterRename(jarName);
         refreshProjectState();
         return result;
     }
@@ -289,8 +289,8 @@ public class Rikr {
         processor.invalidateClassMappings(jarName, owner);
         bookmarkService.applyRename(new RenameOperation(
             RenameType.FIELD, jarName, owner.name, fieldNode.desc, oldName, newName
-        ), false);
-        processor.refreshReferenceIndex(jarName);
+        ), false, result.declarationOwners());
+        processor.refreshAfterRename(jarName);
         refreshProjectState();
         return result;
     }
@@ -298,11 +298,13 @@ public class Rikr {
     public RenameResult renameMethodReferences(String jarName, ClassNode owner, MethodNode methodNode, String newName) {
         String oldName = methodNode.name;
         RenameResult result = renameService.applyMethodRename(jarName, getClasses(jarName), owner, methodNode, newName);
-        processor.invalidateClassMappings(jarName, owner);
+        for (String renamedOwner : result.declarationOwners()) {
+            processor.invalidateClassMappings(jarName, renamedOwner);
+        }
         bookmarkService.applyRename(new RenameOperation(
             RenameType.METHOD, jarName, owner.name, methodNode.desc, oldName, newName
-        ), false);
-        processor.refreshReferenceIndex(jarName);
+        ), false, result.declarationOwners());
+        processor.refreshAfterRename(jarName);
         refreshProjectState();
         return result;
     }
@@ -326,13 +328,15 @@ public class Rikr {
             return;
         }
         RenameUndoResult value = undo.get();
-        bookmarkService.applyRename(value.operation(), true);
-        processor.refreshReferenceIndex(value.operation().jarName());
+        bookmarkService.applyRename(value.operation(), true, value.result().declarationOwners());
+        processor.refreshAfterRename(value.operation().jarName());
         if (value.operation().type() == RenameType.CLASS) {
             processor.invalidateClassMappings(value.operation().jarName(), value.operation().newName());
             processor.invalidateClassMappings(value.operation().jarName(), value.operation().oldName());
         } else {
-            processor.invalidateClassMappings(value.operation().jarName(), value.affectedClass());
+            for (String renamedOwner : value.result().declarationOwners()) {
+                processor.invalidateClassMappings(value.operation().jarName(), renamedOwner);
+            }
         }
         userInterface.updateTree(processor.getJarClassesView());
         refreshProjectState();
@@ -386,15 +390,33 @@ public class Rikr {
     }
 
     public void saveProject(File destination) throws IOException {
-        List<String> jarPaths = processor.getOriginalJarFiles().values().stream()
+        Map<String, File> savedJars = processor.getOriginalJarFiles();
+        List<String> jarPaths = savedJars.values().stream()
             .map(File::getAbsolutePath)
             .sorted()
             .toList();
+        // Loose class files have no file to reopen, so state that refers to them cannot be restored.
+        List<ClassMappingDecision> mappings = processor.getAllAcceptedClassMappings().stream()
+            .filter(mapping -> savedJars.containsKey(mapping.sourceJar()) && savedJars.containsKey(mapping.targetJar()))
+            .toList();
+        List<RenameOperation> renames = renameService.getHistory().stream()
+            .filter(operation -> savedJars.containsKey(operation.jarName()))
+            .toList();
+        List<ProjectBookmark> bookmarks = bookmarkService.getBookmarks().stream()
+            .filter(bookmark -> savedJars.containsKey(bookmark.jarName()))
+            .toList();
+        int skipped = processor.getAllAcceptedClassMappings().size() - mappings.size()
+            + renameService.getHistory().size() - renames.size()
+            + bookmarkService.getBookmarks().size() - bookmarks.size();
+        if (skipped > 0) {
+            log("Project does not include " + skipped
+                + " renames, mappings or bookmarks of loose class files; only JARs can be reopened.");
+        }
         ProjectSession session = new ProjectSession(
             jarPaths,
-            processor.getAllAcceptedClassMappings(),
-            renameService.getHistory(),
-            bookmarkService.getBookmarks(),
+            mappings,
+            renames,
+            bookmarks,
             userInterface.captureProjectLayout()
         );
         projectSessionService.save(destination, session);
@@ -427,7 +449,7 @@ public class Rikr {
             }
             stagedRenames.replay(session.renames(), stagedProcessor::getClasses);
             for (String jarName : stagedRenames.getDirtyJars()) {
-                stagedProcessor.refreshReferenceIndex(jarName);
+                stagedProcessor.refreshAfterRename(jarName);
             }
             stagedProcessor.restoreClassMappings(session.mappings());
         } catch (IOException exception) {

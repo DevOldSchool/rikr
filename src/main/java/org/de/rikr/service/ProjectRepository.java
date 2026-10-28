@@ -37,6 +37,14 @@ public class ProjectRepository {
         return jarClassesMap.get(jarName);
     }
 
+    /**
+     * A copy of the JAR's class list that is safe to iterate on another thread.
+     */
+    public synchronized List<ClassNode> getClassesSnapshot(String jarName) {
+        List<ClassNode> classes = jarClassesMap.get(jarName);
+        return classes == null ? null : List.copyOf(classes);
+    }
+
     public synchronized boolean removeJar(String jarName) {
         originalJarPaths.remove(jarName);
         return jarClassesMap.remove(jarName) != null;

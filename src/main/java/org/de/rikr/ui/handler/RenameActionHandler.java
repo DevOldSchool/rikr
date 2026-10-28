@@ -307,7 +307,7 @@ public class RenameActionHandler implements ActionListener {
 
         if (classNode != null) {
             RenameResult result = controller.renameClassReferences(jarName, classNode, newName);
-            logRenameResults(new RenameResult("interface", result.referenceCount(), result.fileCount()));
+            logRenameResults(result.withType("interface"));
             node.setUserObject(newName);
             parentNode.setUserObject(newName + ".class");
             controller.getUserInterface().getTreePanel().updateNode(parentNode);

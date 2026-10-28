@@ -1,15 +1,12 @@
 package org.de.rikr.service;
 
-import org.de.rikr.Renamer;
-import org.objectweb.asm.ClassReader;
-import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.MethodNode;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -17,30 +14,9 @@ import java.util.Set;
 import java.util.function.Function;
 
 public class RenameService {
+    private final RenameEngine engine = new RenameEngine();
     private final List<RenameOperation> history = new ArrayList<>();
     private final Set<String> dirtyJars = new HashSet<>();
-
-    public RenameResult renameClassReferences(List<ClassNode> classes, String oldName, String newName) {
-        return Renamer.updateClassReferences(classes, oldName, newName);
-    }
-
-    public RenameResult renameMethodReferences(
-        List<ClassNode> classes,
-        ClassNode owner,
-        String oldName,
-        String newName
-    ) {
-        return Renamer.updateMethodReferences(classes, owner, oldName, newName);
-    }
-
-    public RenameResult renameFieldReferences(
-        List<ClassNode> classes,
-        ClassNode owner,
-        String oldName,
-        String newName
-    ) {
-        return Renamer.updateFieldReferences(classes, owner, oldName, newName);
-    }
 
     public RenamePreview previewClassRename(List<ClassNode> classes, ClassNode owner, String newName) {
         Objects.requireNonNull(owner, "owner");
@@ -48,17 +24,8 @@ public class RenameService {
         if (validation != null) {
             return RenamePreview.invalid(RenameType.CLASS, owner.name, newName, validation);
         }
-        List<ClassNode> copies = copyClasses(classes);
-        List<String> classNames = copies.stream().map(classNode -> classNode.name).toList();
-        List<byte[]> before = classBytes(copies);
-        RenameResult result = Renamer.updateClassReferences(copies, owner.name, newName);
-        return RenamePreview.valid(
-            RenameType.CLASS,
-            owner.name,
-            newName,
-            result,
-            affectedClasses(copies, classNames, before)
-        );
+        RenameEngine.Changes changes = engine.renameClass(classes, owner.name, newName, false);
+        return RenamePreview.valid(RenameType.CLASS, owner.name, newName, result("class", changes), changes.affectedClasses());
     }
 
     public RenamePreview previewFieldRename(
@@ -69,22 +36,12 @@ public class RenameService {
     ) {
         Objects.requireNonNull(owner, "owner");
         Objects.requireNonNull(field, "field");
-        String validation = validateFieldRename(owner, field, newName);
+        String validation = validateFieldRename(classes, owner, field, newName);
         if (validation != null) {
             return RenamePreview.invalid(RenameType.FIELD, field.name, newName, validation);
         }
-        List<ClassNode> copies = copyClasses(classes);
-        List<String> classNames = copies.stream().map(classNode -> classNode.name).toList();
-        List<byte[]> before = classBytes(copies);
-        ClassNode ownerCopy = findClass(copies, owner.name);
-        RenameResult result = Renamer.updateFieldReferences(copies, ownerCopy, field.name, newName);
-        return RenamePreview.valid(
-            RenameType.FIELD,
-            field.name,
-            newName,
-            result,
-            affectedClasses(copies, classNames, before)
-        );
+        RenameEngine.Changes changes = engine.renameField(classes, owner.name, field.name, field.desc, newName, false);
+        return RenamePreview.valid(RenameType.FIELD, field.name, newName, result("field", changes), changes.affectedClasses());
     }
 
     public RenamePreview previewMethodRename(
@@ -95,22 +52,12 @@ public class RenameService {
     ) {
         Objects.requireNonNull(owner, "owner");
         Objects.requireNonNull(method, "method");
-        String validation = validateMethodRename(owner, method, newName);
+        String validation = validateMethodRename(classes, owner, method, newName);
         if (validation != null) {
             return RenamePreview.invalid(RenameType.METHOD, method.name, newName, validation);
         }
-        List<ClassNode> copies = copyClasses(classes);
-        List<String> classNames = copies.stream().map(classNode -> classNode.name).toList();
-        List<byte[]> before = classBytes(copies);
-        ClassNode ownerCopy = findClass(copies, owner.name);
-        RenameResult result = Renamer.updateMethodReferences(copies, ownerCopy, method.name, newName);
-        return RenamePreview.valid(
-            RenameType.METHOD,
-            method.name,
-            newName,
-            result,
-            affectedClasses(copies, classNames, before)
-        );
+        RenameEngine.Changes changes = engine.renameMethod(classes, owner.name, method.name, method.desc, newName, false);
+        return RenamePreview.valid(RenameType.METHOD, method.name, newName, result("method", changes), changes.affectedClasses());
     }
 
     public synchronized RenameResult applyClassRename(
@@ -119,10 +66,10 @@ public class RenameService {
         ClassNode owner,
         String newName
     ) {
-        RenamePreview preview = previewClassRename(classes, owner, newName);
-        requireValid(preview);
+        Objects.requireNonNull(owner, "owner");
+        requireValid(validateClassRename(classes, owner, newName));
         String oldName = owner.name;
-        RenameResult result = Renamer.updateClassReferences(classes, oldName, newName);
+        RenameResult result = result("class", engine.renameClass(classes, oldName, newName, true));
         record(new RenameOperation(RenameType.CLASS, jarName, oldName, null, oldName, newName));
         return result;
     }
@@ -134,11 +81,11 @@ public class RenameService {
         FieldNode field,
         String newName
     ) {
-        RenamePreview preview = previewFieldRename(classes, owner, field, newName);
-        requireValid(preview);
+        requireValid(validateFieldRename(classes, owner, field, newName));
         String oldName = field.name;
-        RenameResult result = Renamer.updateFieldReferences(classes, owner, oldName, newName);
-        record(new RenameOperation(RenameType.FIELD, jarName, owner.name, field.desc, oldName, newName));
+        String descriptor = field.desc;
+        RenameResult result = result("field", engine.renameField(classes, owner.name, oldName, descriptor, newName, true));
+        record(new RenameOperation(RenameType.FIELD, jarName, owner.name, descriptor, oldName, newName));
         return result;
     }
 
@@ -149,11 +96,11 @@ public class RenameService {
         MethodNode method,
         String newName
     ) {
-        RenamePreview preview = previewMethodRename(classes, owner, method, newName);
-        requireValid(preview);
+        requireValid(validateMethodRename(classes, owner, method, newName));
         String oldName = method.name;
-        RenameResult result = Renamer.updateMethodReferences(classes, owner, oldName, newName);
-        record(new RenameOperation(RenameType.METHOD, jarName, owner.name, method.desc, oldName, newName));
+        String descriptor = method.desc;
+        RenameResult result = result("method", engine.renameMethod(classes, owner.name, oldName, descriptor, newName, true));
+        record(new RenameOperation(RenameType.METHOD, jarName, owner.name, descriptor, oldName, newName));
         return result;
     }
 
@@ -172,13 +119,19 @@ public class RenameService {
         RenameResult result;
         if (operation.type() == RenameType.CLASS) {
             affectedClass = requireClass(classes, operation.newName());
-            result = Renamer.updateClassReferences(classes, operation.newName(), operation.oldName());
+            result = result("class", engine.renameClass(classes, operation.newName(), operation.oldName(), true));
         } else if (operation.type() == RenameType.FIELD) {
             affectedClass = requireClass(classes, operation.ownerName());
-            result = Renamer.updateFieldReferences(classes, affectedClass, operation.newName(), operation.oldName());
+            requireField(affectedClass, operation.newName(), operation.descriptor());
+            result = result("field", engine.renameField(
+                classes, operation.ownerName(), operation.newName(), operation.descriptor(), operation.oldName(), true
+            ));
         } else {
             affectedClass = requireClass(classes, operation.ownerName());
-            result = Renamer.updateMethodReferences(classes, affectedClass, operation.newName(), operation.oldName());
+            requireMethod(affectedClass, operation.newName(), operation.descriptor());
+            result = result("method", engine.renameMethod(
+                classes, operation.ownerName(), operation.newName(), operation.descriptor(), operation.oldName(), true
+            ));
         }
 
         history.remove(history.size() - 1);
@@ -235,16 +188,18 @@ public class RenameService {
 
     private void applyPersistedOperation(RenameOperation operation, List<ClassNode> classes) {
         if (operation.type() == RenameType.CLASS) {
-            ClassNode owner = requireClass(classes, operation.oldName());
-            Renamer.updateClassReferences(classes, owner.name, operation.newName());
+            requireValid(validateClassRename(classes, requireClass(classes, operation.oldName()), operation.newName()));
+            engine.renameClass(classes, operation.oldName(), operation.newName(), true);
         } else if (operation.type() == RenameType.FIELD) {
             ClassNode owner = requireClass(classes, operation.ownerName());
-            requireField(owner, operation.oldName(), operation.descriptor());
-            Renamer.updateFieldReferences(classes, owner, operation.oldName(), operation.newName());
+            FieldNode field = requireField(owner, operation.oldName(), operation.descriptor());
+            requireValid(validateFieldRename(classes, owner, field, operation.newName()));
+            engine.renameField(classes, owner.name, field.name, field.desc, operation.newName(), true);
         } else {
             ClassNode owner = requireClass(classes, operation.ownerName());
-            requireMethod(owner, operation.oldName(), operation.descriptor());
-            Renamer.updateMethodReferences(classes, owner, operation.oldName(), operation.newName());
+            MethodNode method = requireMethod(owner, operation.oldName(), operation.descriptor());
+            requireValid(validateMethodRename(classes, owner, method, operation.newName()));
+            engine.renameMethod(classes, owner.name, method.name, method.desc, operation.newName(), true);
         }
     }
 
@@ -258,17 +213,30 @@ public class RenameService {
         return collision ? "A class named " + newName + " already exists in this JAR." : null;
     }
 
-    private String validateFieldRename(ClassNode owner, FieldNode field, String newName) {
+    private String validateFieldRename(List<ClassNode> classes, ClassNode owner, FieldNode field, String newName) {
         String common = validateName(field.name, newName, false);
         if (common != null) {
             return common;
         }
         boolean collision = owner.fields.stream()
             .anyMatch(candidate -> candidate != field && candidate.name.equals(newName));
-        return collision ? "A field named " + newName + " already exists in " + owner.name + "." : null;
+        if (collision) {
+            return "A field named " + newName + " already exists in " + owner.name + ".";
+        }
+        // A same-typed field in a related class would capture references that now resolve to this field.
+        ClassHierarchy hierarchy = new ClassHierarchy(classes);
+        Set<String> related = new LinkedHashSet<>(hierarchy.selfAndAncestors(owner.name));
+        related.addAll(hierarchy.selfAndDescendants(owner.name));
+        for (String name : related) {
+            ClassNode classNode = hierarchy.get(name);
+            if (classNode != null && classNode != owner && ClassHierarchy.findField(classNode, newName, field.desc) != null) {
+                return "A field named " + newName + " with the same type already exists in related class " + name + ".";
+            }
+        }
+        return null;
     }
 
-    private String validateMethodRename(ClassNode owner, MethodNode method, String newName) {
+    private String validateMethodRename(List<ClassNode> classes, ClassNode owner, MethodNode method, String newName) {
         if (method.name.startsWith("<")) {
             return "Constructors and class initializers cannot be renamed.";
         }
@@ -276,16 +244,40 @@ public class RenameService {
         if (common != null) {
             return common;
         }
-        Set<String> renamedDescriptors = owner.methods.stream()
-            .filter(candidate -> candidate.name.equals(method.name))
-            .map(candidate -> candidate.desc)
-            .collect(java.util.stream.Collectors.toSet());
-        boolean collision = owner.methods.stream()
-            .anyMatch(candidate -> candidate.name.equals(newName)
-                && renamedDescriptors.contains(candidate.desc));
-        return collision
-            ? "Renaming this method family would collide with " + newName + " in " + owner.name + "."
-            : null;
+        if (newName.startsWith("<")) {
+            return "Invalid JVM name: " + newName;
+        }
+
+        ClassHierarchy hierarchy = new ClassHierarchy(classes);
+        Set<String> family = engine.methodFamily(hierarchy, owner.name, method.name, method.desc);
+        if (ClassHierarchy.isOverridable(method)) {
+            for (String member : family) {
+                for (String ancestor : hierarchy.selfAndAncestors(member)) {
+                    if (!hierarchy.contains(ancestor)
+                        && ExternalTypes.declaresOverridableMethod(ancestor, method.name, method.desc)) {
+                        return method.name + " overrides a method of " + ancestor + ", which is outside this JAR.";
+                    }
+                }
+            }
+        }
+
+        // The new name must not exist anywhere a renamed declaration is visible, or dispatch would change.
+        Set<String> visibleFrom = new LinkedHashSet<>();
+        for (String member : family) {
+            visibleFrom.addAll(hierarchy.selfAndDescendants(member));
+        }
+        for (String className : visibleFrom) {
+            for (String ancestor : hierarchy.selfAndAncestors(className)) {
+                ClassNode classNode = hierarchy.get(ancestor);
+                boolean declared = classNode == null
+                    ? ExternalTypes.declaresOverridableMethod(ancestor, newName, method.desc)
+                    : ClassHierarchy.findMethod(classNode, newName, method.desc) != null;
+                if (declared) {
+                    return "Renaming would collide with " + ancestor + "." + newName + method.desc + ".";
+                }
+            }
+        }
+        return null;
     }
 
     private String validateName(String oldName, String newName, boolean allowInternalClassName) {
@@ -319,52 +311,20 @@ public class RenameService {
         return true;
     }
 
-    private List<ClassNode> copyClasses(List<ClassNode> classes) {
-        List<ClassNode> copies = new ArrayList<>(classes.size());
-        for (ClassNode classNode : classes) {
-            ClassWriter writer = new ClassWriter(0);
-            classNode.accept(writer);
-            ClassNode copy = new ClassNode();
-            new ClassReader(writer.toByteArray()).accept(copy, 0);
-            copies.add(copy);
-        }
-        return copies;
-    }
-
-    private List<byte[]> classBytes(List<ClassNode> classes) {
-        return classes.stream().map(this::classBytes).toList();
-    }
-
-    private byte[] classBytes(ClassNode classNode) {
-        ClassWriter writer = new ClassWriter(0);
-        classNode.accept(writer);
-        return writer.toByteArray();
-    }
-
-    private List<String> affectedClasses(
-        List<ClassNode> classes,
-        List<String> originalNames,
-        List<byte[]> before
-    ) {
-        List<String> affected = new ArrayList<>();
-        for (int index = 0; index < classes.size(); index++) {
-            if (!Arrays.equals(before.get(index), classBytes(classes.get(index)))) {
-                affected.add(originalNames.get(index));
-            }
-        }
-        return List.copyOf(affected);
-    }
-
-    private ClassNode findClass(List<ClassNode> classes, String name) {
-        return classes.stream().filter(classNode -> classNode.name.equals(name)).findFirst().orElse(null);
+    private RenameResult result(String type, RenameEngine.Changes changes) {
+        return new RenameResult(
+            type,
+            changes.referenceCount(),
+            changes.affectedClasses().size(),
+            changes.declarationOwners()
+        );
     }
 
     private ClassNode requireClass(List<ClassNode> classes, String name) {
-        ClassNode classNode = findClass(classes, name);
-        if (classNode == null) {
-            throw new IllegalStateException("Unable to find class " + name);
-        }
-        return classNode;
+        return classes.stream()
+            .filter(classNode -> classNode.name.equals(name))
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException("Unable to find class " + name));
     }
 
     private FieldNode requireField(ClassNode owner, String name, String descriptor) {
@@ -381,9 +341,9 @@ public class RenameService {
             .orElseThrow(() -> new IllegalStateException("Unable to find method " + owner.name + "." + name));
     }
 
-    private void requireValid(RenamePreview preview) {
-        if (!preview.valid()) {
-            throw new IllegalArgumentException(preview.validationMessage());
+    private void requireValid(String validationMessage) {
+        if (validationMessage != null) {
+            throw new IllegalArgumentException(validationMessage);
         }
     }
 

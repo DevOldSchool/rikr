@@ -1,5 +1,8 @@
 package org.de.rikr.service;
 
+import org.objectweb.asm.commons.Remapper;
+import org.objectweb.asm.commons.SimpleRemapper;
+
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -34,22 +37,29 @@ public class BookmarkService {
         bookmarks.addAll(restoredBookmarks);
     }
 
-    public synchronized void applyRename(RenameOperation operation, boolean reverse) {
+    /**
+     * @param memberOwners for member renames, every class whose declaration was renamed (a method rename also
+     *                     renames overriding declarations in other classes)
+     */
+    public synchronized void applyRename(RenameOperation operation, boolean reverse, Set<String> memberOwners) {
         String from = reverse ? operation.newName() : operation.oldName();
         String to = reverse ? operation.oldName() : operation.newName();
         Set<ProjectBookmark> updated = new LinkedHashSet<>();
         for (ProjectBookmark bookmark : bookmarks) {
             if (!bookmark.jarName().equals(operation.jarName())) {
                 updated.add(bookmark);
-            } else if (operation.type() == RenameType.CLASS && bookmark.className().equals(from)) {
+            } else if (operation.type() == RenameType.CLASS) {
+                Remapper remapper = new SimpleRemapper(from, to);
                 updated.add(new ProjectBookmark(
-                    bookmark.type(), bookmark.jarName(), to, bookmark.memberName(), bookmark.descriptor()
+                    bookmark.type(),
+                    bookmark.jarName(),
+                    remapper.mapType(bookmark.className()),
+                    bookmark.memberName(),
+                    remapDescriptor(remapper, bookmark)
                 ));
-            } else if (operation.type() != RenameType.CLASS
-                && bookmark.className().equals(operation.ownerName())
+            } else if (memberOwners.contains(bookmark.className())
                 && Objects.equals(bookmark.memberName(), from)
-                && (operation.type() == RenameType.METHOD
-                    || Objects.equals(bookmark.descriptor(), operation.descriptor()))) {
+                && Objects.equals(bookmark.descriptor(), operation.descriptor())) {
                 updated.add(new ProjectBookmark(
                     bookmark.type(), bookmark.jarName(), bookmark.className(), to, bookmark.descriptor()
                 ));
@@ -59,6 +69,15 @@ public class BookmarkService {
         }
         bookmarks.clear();
         bookmarks.addAll(updated);
+    }
+
+    private String remapDescriptor(Remapper remapper, ProjectBookmark bookmark) {
+        if (bookmark.descriptor() == null) {
+            return null;
+        }
+        return bookmark.type() == ProjectBookmarkType.METHOD
+            ? remapper.mapMethodDesc(bookmark.descriptor())
+            : remapper.mapDesc(bookmark.descriptor());
     }
 
     public synchronized void clear() {

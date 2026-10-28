@@ -63,13 +63,23 @@ public class ClassProcessor implements AutoCloseable {
 
     public void processJarFiles(File[] jarFiles) {
         for (File file : jarFiles) {
+            // JARs are identified by file name, so a second JAR with the same name would silently replace
+            // the first one while its renames, bookmarks and mappings stayed behind.
+            if (projectRepository.getClasses(file.getName()) != null) {
+                File loaded = projectRepository.getOriginalJarFile(file.getName());
+                logger.log("Skipped " + file.getAbsolutePath() + ": a JAR named " + file.getName()
+                    + " is already loaded" + (loaded == null ? "" : " from " + loaded.getAbsolutePath())
+                    + ". Remove it first.");
+                continue;
+            }
             try {
                 LoadedJar loadedJar = classLoadingService.readJar(file, stripAnnotations);
-                classMappingService.clearJar(loadedJar.jarName());
-                projectRepository.putJarClasses(loadedJar.jarName(), loadedJar.classes(), loadedJar.originalFile());
-                referenceIndexService.indexJar(loadedJar.jarName(), loadedJar.classes());
-                logger.log("Loaded " + loadedJar.classes().size() + " classes from " + loadedJar.jarName());
-                decompilerCacheService.warmUpJar(file);
+                String jarName = loadedJar.jarName();
+                classMappingService.clearJar(jarName);
+                projectRepository.putJarClasses(jarName, loadedJar.classes(), loadedJar.originalFile());
+                referenceIndexService.indexJar(jarName, loadedJar.classes());
+                logger.log("Loaded " + loadedJar.classes().size() + " classes from " + jarName);
+                decompilerCacheService.warmUpJar(jarName, file, () -> projectRepository.getClassesSnapshot(jarName));
             } catch (IOException e) {
                 logger.log("Error processing jar file: " + file.getName() + ": " + e.getMessage());
             }
@@ -184,6 +194,7 @@ public class ClassProcessor implements AutoCloseable {
     }
 
     public boolean removeJar(String jarName) {
+        decompilerCacheService.invalidateJar(jarName, projectRepository.getClassesSnapshot(jarName));
         classMappingService.clearJar(jarName);
         referenceIndexService.removeJar(jarName);
         return projectRepository.removeJar(jarName);
@@ -320,6 +331,14 @@ public class ClassProcessor implements AutoCloseable {
         return referenceIndexService.findTypeReferences(jarName, targetClass);
     }
 
+    /**
+     * Rebuild everything derived from a JAR's bytecode after its classes were renamed in place.
+     */
+    public void refreshAfterRename(String jarName) {
+        decompilerCacheService.invalidateJar(jarName, projectRepository.getClassesSnapshot(jarName));
+        refreshReferenceIndex(jarName);
+    }
+
     public void refreshReferenceIndex(String jarName) {
         List<ClassNode> classes = projectRepository.getClasses(jarName);
         if (classes == null) {
@@ -401,8 +420,8 @@ public class ClassProcessor implements AutoCloseable {
         return projectRepository.getOriginalJarFiles();
     }
 
-    public String getDecompiledSourceByClass(String internalName) {
-        return decompilerCacheService.getDecompiledSourceByClass(internalName);
+    public String getDecompiledSource(ClassNode classNode) {
+        return decompilerCacheService.getDecompiledSource(classNode);
     }
 
     public CompletableFuture<DecompileResult> decompileClassAsync(ClassNode classNode) {

@@ -75,6 +75,13 @@ public class JetBrainsDecompilerService {
             return null;
         }
 
+        return decompile(internalName, classBytes);
+    }
+
+    /**
+     * Decompile the bytes of a single class. Returns null on failure.
+     */
+    public String decompile(String internalName, byte[] classBytes) {
         Path tempRoot;
         try {
             tempRoot = Files.createTempDirectory("rikr_decompile");
