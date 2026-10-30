@@ -7,6 +7,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 /**
@@ -18,6 +19,9 @@ import java.util.function.Consumer;
  */
 public class TaskRunner implements AutoCloseable {
     private final Logger logger;
+    private final AtomicInteger running = new AtomicInteger();
+    private volatile Consumer<Boolean> busyListener = busy -> {
+    };
     private final Executor eventThread;
     private final ExecutorService worker = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "rikr-task");
@@ -46,15 +50,20 @@ public class TaskRunner implements AutoCloseable {
      * @param onFailure called on the event thread if the task or {@code onSuccess} throws
      */
     public <T> void run(String name, Callable<T> work, Consumer<T> onSuccess, Consumer<Exception> onFailure) {
+        changeRunning(1);
         worker.execute(() -> {
             T result;
             try {
                 result = work.call();
             } catch (Exception exception) {
-                eventThread.execute(() -> onFailure.accept(exception));
+                eventThread.execute(() -> {
+                    changeRunning(-1);
+                    onFailure.accept(exception);
+                });
                 return;
             }
             eventThread.execute(() -> {
+                changeRunning(-1);
                 try {
                     onSuccess.accept(result);
                 } catch (RuntimeException exception) {
@@ -62,6 +71,20 @@ public class TaskRunner implements AutoCloseable {
                 }
             });
         });
+    }
+
+    /**
+     * Be told on the event thread whenever work starts or the last task finishes.
+     */
+    public void setBusyListener(Consumer<Boolean> listener) {
+        busyListener = listener;
+    }
+
+    private void changeRunning(int change) {
+        int now = running.addAndGet(change);
+        if ((change > 0 && now == 1) || now == 0) {
+            eventThread.execute(() -> busyListener.accept(running.get() > 0));
+        }
     }
 
     @Override

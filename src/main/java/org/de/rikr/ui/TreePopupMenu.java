@@ -2,6 +2,7 @@ package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
 import org.de.rikr.mapping.SimilarClassReport;
+import org.de.rikr.reference.ReferenceKind;
 import org.de.rikr.symbol.Declaration;
 import org.de.rikr.ui.action.RenameMappingExport;
 import org.de.rikr.ui.action.RenameMappingImport;
@@ -132,10 +133,35 @@ public class TreePopupMenu extends JPopupMenu {
         }
         DefaultTreeModel model = (DefaultTreeModel) tree.getModel();
         if (node instanceof ClassMutableTreeNode classNode) {
+            String jar = classNode.getJarName();
+            String name = classNode.getClassNode().name;
+            long mappings = controller.mappings().allAccepted().stream()
+                .filter(mapping -> mapping.sourceJar().equals(jar) && mapping.sourceClassName().equals(name)
+                    || mapping.targetJar().equals(jar) && mapping.targetClassName().equals(name))
+                .count();
+            if (!confirmRemove("Remove " + name + " from " + jar + "?",
+                "Its " + plural(mappings, "accepted class mapping") + " " + (mappings == 1 ? "is" : "are")
+                    + " discarded. The file on disk is not changed.")) {
+                return;
+            }
             model.removeNodeFromParent(node);
             controller.jars().removeClass(classNode.getJarName(), classNode.getClassNode());
             controller.getUserInterface().clearContent();
         } else if (node instanceof JarMutableTreeNode jarNode) {
+            String jar = jarNode.getJarName();
+            long renames = controller.renames().history().stream().filter(step -> step.jarName().equals(jar)).count();
+            long mappings = controller.mappings().allAccepted().stream()
+                .filter(mapping -> mapping.sourceJar().equals(jar) || mapping.targetJar().equals(jar))
+                .count();
+            long bookmarks = controller.bookmarks().all().stream()
+                .filter(bookmark -> bookmark.jarName().equals(jar))
+                .count();
+            if (!confirmRemove("Remove " + jar + " from the project?",
+                "Its " + plural(renames, "rename") + ", " + plural(mappings, "accepted class mapping") + " and "
+                    + plural(bookmarks, "bookmark") + " are discarded, and its renames can no longer be undone. "
+                    + "The file on disk is not changed.")) {
+                return;
+            }
             model.removeNodeFromParent(node);
             controller.jars().removeJar(jarNode.getJarName());
             controller.getUserInterface().clearContent();
@@ -144,15 +170,26 @@ public class TreePopupMenu extends JPopupMenu {
         }
     }
 
+    private boolean confirmRemove(String question, String consequence) {
+        Object[] options = {"Remove", "Cancel"};
+        int choice = JOptionPane.showOptionDialog(SwingUtilities.getWindowAncestor(tree),
+            "<html><b>" + question + "</b><br><br>" + consequence + "</html>", "Remove",
+            JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE, null, options, options[1]);
+        return choice == 0;
+    }
+
+    private static String plural(long count, String noun) {
+        return count + " " + noun + (count == 1 ? "" : "s");
+    }
+
     private void findExtenders(DefaultMutableTreeNode node) {
         if (node instanceof ClassNodeMutableTreeNode classNode) {
             ClassNode selected = classNode.getClassNode();
             List<ClassNode> classes = ClassNodeUtil.findClassesExtending(
                 controller.jars().classes(classNode.getJarName()), selected);
-            classes.forEach(found -> controller.log(String.format("Found class %s extends %s", found.name, selected.name)));
-            if (classes.isEmpty()) {
-                controller.log(String.format("Unable to find extender class for %s", selected.name));
-            }
+            controller.log("Found " + classes.size() + " classes extending " + selected.name + ".");
+            controller.getUserInterface().showClasses("Classes extending " + selected.name, classNode.getJarName(),
+                classes, ReferenceKind.EXTENDS, "extends " + selected.name);
         }
     }
 
@@ -161,10 +198,9 @@ public class TreePopupMenu extends JPopupMenu {
             ClassNode selected = interfaceNode.getClassNode();
             List<ClassNode> classes = ClassNodeUtil.findClassesImplementing(
                 controller.jars().classes(interfaceNode.getJarName()), selected);
-            classes.forEach(found -> controller.log(String.format("Found class %s implementing %s", found.name, selected.name)));
-            if (classes.isEmpty()) {
-                controller.log(String.format("Unable to find implementor class for %s", selected.name));
-            }
+            controller.log("Found " + classes.size() + " classes implementing " + selected.name + ".");
+            controller.getUserInterface().showClasses("Classes implementing " + selected.name,
+                interfaceNode.getJarName(), classes, ReferenceKind.IMPLEMENTS, "implements " + selected.name);
         }
     }
 
@@ -178,11 +214,7 @@ public class TreePopupMenu extends JPopupMenu {
 
     private void removeGrouping(DefaultMutableTreeNode node) {
         if (node instanceof JarMutableTreeNode jarNode) {
-            node.removeAllChildren();
-            for (ClassNode classNode : jarNode.getClasses()) {
-                node.add(new ClassMutableTreeNode(jarNode.getJarName(), classNode, classNode.name + ".class"));
-            }
-            controller.getUserInterface().getTreePanel().updateNode(node);
+            controller.getUserInterface().getTreePanel().updateTree(controller.jars().classesByJar(), false, false);
         }
     }
 
@@ -274,7 +306,9 @@ public class TreePopupMenu extends JPopupMenu {
             @Override
             protected void done() {
                 try {
-                    logReport(sourceClass, get());
+                    SimilarClassReport report = get();
+                    logReport(sourceClass, report);
+                    controller.getUserInterface().showSimilarClasses(sourceJar, sourceClass, report);
                 } catch (InterruptedException exception) {
                     Thread.currentThread().interrupt();
                     controller.log("Class node matching was interrupted for " + sourceClass.name);

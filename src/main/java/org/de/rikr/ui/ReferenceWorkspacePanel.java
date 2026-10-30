@@ -1,9 +1,13 @@
 package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
+import org.de.rikr.mapping.SimilarClassReport;
+import org.de.rikr.reference.ReferenceKind;
 import org.de.rikr.reference.ReferenceResult;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;
+import org.de.rikr.utilities.ClassNodeUtil;
+import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.MethodNode;
@@ -14,7 +18,9 @@ import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public class ReferenceWorkspacePanel extends JPanel {
     private final Rikr controller;
@@ -23,7 +29,13 @@ public class ReferenceWorkspacePanel extends JPanel {
     private final JLabel statusLabel = new JLabel("Double-click a result or press Enter to open it.");
     private final JPanel header = new JPanel(new BorderLayout());
     private final JPanel footer = new JPanel(new BorderLayout());
-    private final List<JList<ReferenceResult>> resultLists = new ArrayList<>();
+    private final List<JList<Object>> resultLists = new ArrayList<>();
+
+    /**
+     * A row naming the class the results below it are in. Opening it opens the class.
+     */
+    private record ClassHeader(String className, ClassNode classNode, int count) {
+    }
 
     public ReferenceWorkspacePanel(Rikr controller) {
         this.controller = controller;
@@ -68,6 +80,45 @@ public class ReferenceWorkspacePanel extends JPanel {
         selectFirstResult();
     }
 
+    /**
+     * List classes found by a search, such as the classes that extend one, so each can be opened.
+     */
+    public void showClasses(String description, String jarName, List<ClassNode> classes, ReferenceKind kind,
+                            String relation) {
+        targetLabel.setText(description + " in " + jarName);
+        resetTabs();
+        addResultsTab("Classes", classes.stream()
+            .map(classNode -> new ReferenceResult(kind, classNode.name + " " + relation, classNode,
+                ClassNodeUtil.getPattern(classNode, null, null), classNode.name))
+            .toList());
+        selectFirstResult();
+    }
+
+    /**
+     * List the classes in other JARs that look like {@code source}, best first, with the methods that behave the
+     * same in both.
+     */
+    public void showSimilarClasses(String jarName, ClassNode source, SimilarClassReport report) {
+        targetLabel.setText("Classes like " + source.name + " in " + jarName + ", in other JARs");
+        resetTabs();
+        List<ReferenceResult> results = new ArrayList<>();
+        for (SimilarClassReport.Match match : report.matches()) {
+            ClassNode target = match.match().classNode();
+            String methods = match.equivalentMethods().isEmpty() ? "no methods confirmed equivalent"
+                : match.equivalentMethods().size() + " equivalent methods: " + match.equivalentMethods().stream()
+                    .limit(4)
+                    .map(pair -> pair.source().name + " → " + pair.target().name)
+                    .reduce((left, right) -> left + ", " + right).orElse("");
+            results.add(new ReferenceResult(ReferenceKind.SIMILAR, match.jar() + "." + match.match().similarityPercent()
+                + "% similar, " + methods, target, ClassNodeUtil.getPattern(target, null, null), target.name));
+        }
+        addResultsTab("Similar classes", results);
+        if (report.skippedComparisons() > 0) {
+            statusLabel.setText(report.skippedComparisons() + " method comparisons could not be simulated.");
+        }
+        selectFirstResult();
+    }
+
     private void showEmptyState() {
         resetTabs();
         addResultsTab("Results", List.of());
@@ -79,10 +130,20 @@ public class ReferenceWorkspacePanel extends JPanel {
         statusLabel.setText("Double-click a result or press Enter to open it.");
     }
 
+    /**
+     * Add a tab of results, grouped under a header row per class.
+     */
     private void addResultsTab(String title, List<ReferenceResult> results) {
-        DefaultListModel<ReferenceResult> model = new DefaultListModel<>();
-        results.forEach(model::addElement);
-        JList<ReferenceResult> resultList = new JList<>(model);
+        DefaultListModel<Object> model = new DefaultListModel<>();
+        Map<String, List<ReferenceResult>> byClass = new LinkedHashMap<>();
+        for (ReferenceResult result : results) {
+            byClass.computeIfAbsent(ownerName(result), name -> new ArrayList<>()).add(result);
+        }
+        byClass.forEach((className, members) -> {
+            model.addElement(new ClassHeader(className, members.getFirst().navigationClass(), members.size()));
+            members.forEach(model::addElement);
+        });
+        JList<Object> resultList = new JList<>(model);
         resultList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         resultList.setCellRenderer(new ReferenceResultRenderer());
         resultList.setBackground(Theme.CONTENT_BACKGROUND_COLOR);
@@ -114,17 +175,27 @@ public class ReferenceWorkspacePanel extends JPanel {
     }
 
     private void selectFirstResult() {
-        for (JList<ReferenceResult> resultList : resultLists) {
-            if (resultList.getModel().getSize() > 0) {
-                resultList.setSelectedIndex(0);
-                return;
+        for (JList<Object> resultList : resultLists) {
+            for (int index = 0; index < resultList.getModel().getSize(); index++) {
+                if (resultList.getModel().getElementAt(index) instanceof ReferenceResult) {
+                    resultList.setSelectedIndex(index);
+                    return;
+                }
             }
         }
     }
 
-    private void openSelectedResult(JList<ReferenceResult> resultList) {
-        ReferenceResult result = resultList.getSelectedValue();
-        if (result == null) {
+    private void openSelectedResult(JList<Object> resultList) {
+        Object selected = resultList.getSelectedValue();
+        if (selected instanceof ClassHeader header) {
+            if (header.classNode() != null) {
+                controller.getUserInterface().openReferenceResult(new ReferenceResult(ReferenceKind.EXTENDS,
+                    header.className(), header.classNode(), ClassNodeUtil.getPattern(header.classNode(), null, null),
+                    header.classNode().name));
+            }
+            return;
+        }
+        if (!(selected instanceof ReferenceResult result)) {
             return;
         }
         if (!result.isNavigable()) {
@@ -135,16 +206,88 @@ public class ReferenceWorkspacePanel extends JPanel {
         controller.getUserInterface().openReferenceResult(result);
     }
 
+    /**
+     * The class a result is in: the class to open, or for a result outside the JAR the owner in its text.
+     */
+    private static String ownerName(ReferenceResult result) {
+        if (result.kind() == ReferenceKind.SIMILAR) {
+            return result.text().substring(0, result.text().indexOf('.')) + "  ·  " + result.navigationClass().name;
+        }
+        if (result.navigationClass() != null && result.kind() != ReferenceKind.CALLEE) {
+            return result.navigationClass().name;
+        }
+        int dot = result.text().indexOf('.');
+        return dot < 0 ? result.text() : result.text().substring(0, dot);
+    }
+
+    /**
+     * The member a result is in, readably: {@code a(Lwab;B)V -> uses dc} becomes {@code a(wab, byte) void}.
+     */
+    static String memberText(ReferenceResult result) {
+        String text = result.text();
+        int arrow = text.indexOf(" -> ");
+        if (arrow >= 0) {
+            text = text.substring(0, arrow);
+        }
+        if (result.kind() == ReferenceKind.SIMILAR) {
+            return text.substring(text.indexOf('.') + 1);
+        }
+        int dot = text.indexOf('.');
+        if (dot < 0 || result.kind() == ReferenceKind.EXTENDS || result.kind() == ReferenceKind.IMPLEMENTS) {
+            return text;
+        }
+        String member = text.substring(dot + 1);
+        int open = member.indexOf('(');
+        if (open < 0) {
+            return member;
+        }
+        try {
+            Type type = Type.getMethodType(member.substring(open));
+            List<String> arguments = new ArrayList<>();
+            for (Type argument : type.getArgumentTypes()) {
+                arguments.add(simpleType(argument));
+            }
+            return member.substring(0, open) + "(" + String.join(", ", arguments) + ") "
+                + simpleType(type.getReturnType());
+        } catch (RuntimeException exception) {
+            return member;
+        }
+    }
+
+    private static String simpleType(Type type) {
+        String name = type.getClassName();
+        return name.substring(name.lastIndexOf('.') + 1);
+    }
+
+    static String kindText(ReferenceKind kind) {
+        return switch (kind) {
+            case CALLER -> "calls it";
+            case CALLEE -> "called";
+            case FIELD_READ -> "reads";
+            case FIELD_WRITE -> "writes";
+            case EXTENDS -> "extends";
+            case IMPLEMENTS -> "implements";
+            case FIELD_TYPE -> "field type";
+            case METHOD_TYPE -> "in a signature";
+            case INSTRUCTION_TYPE -> "in code";
+            case SIMILAR -> "similar";
+        };
+    }
+
     private void applyTheme() {
         setBackground(Theme.BACKGROUND_COLOR);
         header.setBackground(Theme.BACKGROUND_COLOR);
         footer.setBackground(Theme.BACKGROUND_COLOR);
         resultTabs.setBackground(Theme.BACKGROUND_COLOR);
-        for (JList<ReferenceResult> resultList : resultLists) {
+        for (JList<Object> resultList : resultLists) {
             resultList.setBackground(Theme.CONTENT_BACKGROUND_COLOR);
         }
         revalidate();
         repaint();
+    }
+
+    private static String escape(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     private static class ReferenceResultRenderer extends DefaultListCellRenderer {
@@ -163,9 +306,16 @@ public class ReferenceWorkspacePanel extends JPanel {
                 isSelected,
                 cellHasFocus
             );
-            if (value instanceof ReferenceResult result) {
-                label.setText(result.text());
-                label.setToolTipText(result.isNavigable() ? "Open reference" : "Referenced class is not loaded");
+            if (value instanceof ClassHeader header) {
+                label.setText("<html><b>" + escape(header.className()) + "</b>&nbsp;&nbsp;" + header.count()
+                    + "</html>");
+                label.setToolTipText(header.classNode() == null ? null : "Open " + header.className());
+                label.setBorder(BorderFactory.createEmptyBorder(index == 0 ? 2 : 8, 6, 2, 6));
+            } else if (value instanceof ReferenceResult result) {
+                label.setText("<html>" + escape(memberText(result)) + "&nbsp;&nbsp;&nbsp;<span style='color:"
+                    + (isSelected ? "#d8dbe0" : "#9aa0a8") + "'>" + kindText(result.kind()) + "</span></html>");
+                label.setToolTipText(result.isNavigable() ? result.text() : result.text() + " (class not loaded)");
+                label.setBorder(BorderFactory.createEmptyBorder(1, 24, 1, 6));
                 if (!result.isNavigable() && !isSelected) {
                     label.setForeground(Color.GRAY);
                 }

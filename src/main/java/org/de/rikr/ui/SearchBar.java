@@ -41,17 +41,21 @@ public class SearchBar extends JPanel {
 
         // Initialize components
         searchField = new JTextField(20);
-        searchField.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        SearchFields.style(searchField, "Find in this class");
         matchCaseButton = new JButton(Images.getImage("match-case"));
         matchCaseButton.setToolTipText("Match Case");
+        matchCaseButton.getAccessibleContext().setAccessibleName("Match Case");
         matchCaseButton.setBorderPainted(false);
         matchWordButton = new JButton(Images.getImage("match-word"));
         matchWordButton.setToolTipText("Match Words");
+        matchWordButton.getAccessibleContext().setAccessibleName("Match Words");
         matchWordButton.setBorderPainted(false);
-        resultCounter = new JLabel("0/0");
-        upButton = new JButton("Up");
+        resultCounter = new JLabel(" ");
+        upButton = new JButton("Previous");
+        upButton.setToolTipText("Previous match (Shift+Cmd+G)");
         upButton.setBorderPainted(false);
-        downButton = new JButton("Down");
+        downButton = new JButton("Next");
+        downButton.setToolTipText("Next match (Cmd+G)");
         downButton.setBorderPainted(false);
         JButton closeButton = new JButton("Close");
         closeButton.setBorderPainted(false);
@@ -184,6 +188,13 @@ public class SearchBar extends JPanel {
         }
     }
 
+    /**
+     * Move to the next match (1) or the previous one (-1).
+     */
+    public void navigate(int direction) {
+        navigateResults(direction);
+    }
+
     private void navigateResults(int direction) {
         if (searchResults.isEmpty()) {
             return;
@@ -205,11 +216,20 @@ public class SearchBar extends JPanel {
 
     private void updateResultCounter() {
         int totalResults = searchResults.size();
-        int currentIndex = totalResults > 0 ? currentResultIndex + 1 : 0;
-        resultCounter.setText(currentIndex + "/" + totalResults);
+        if (searchField.getText().isEmpty()) {
+            resultCounter.setText(" ");
+        } else if (totalResults == 0) {
+            resultCounter.setText("No matches");
+        } else if (currentResultIndex < 0) {
+            resultCounter.setText(totalResults + (totalResults == 1 ? " match" : " matches"));
+        } else {
+            resultCounter.setText((currentResultIndex + 1) + " of " + totalResults);
+        }
     }
 
     private void toggleButton(JButton button, boolean toggle) {
+        // Screen readers hear the state the colour shows.
+        button.getAccessibleContext().setAccessibleDescription(toggle ? "On" : "Off");
         if (toggle) {
             button.setBackground(Theme.SEARCH_BUTTON_SELECTED_COLOR);
         } else {
@@ -221,6 +241,7 @@ public class SearchBar extends JPanel {
 
     private void applyTheme() {
         topPanel.setBackground(Theme.BACKGROUND_COLOR);
+        SearchFields.applyTheme(searchField);
         defaultBackgroundColor = matchCaseButton.getBackground();
         matchCaseButton.setBackground(matchCase ? Theme.SEARCH_BUTTON_SELECTED_COLOR : defaultBackgroundColor);
         matchWordButton.setBackground(matchWord ? Theme.SEARCH_BUTTON_SELECTED_COLOR : defaultBackgroundColor);

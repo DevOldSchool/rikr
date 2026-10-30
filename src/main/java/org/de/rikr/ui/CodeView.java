@@ -14,19 +14,30 @@ import javax.swing.*;
 import java.awt.*;
 
 /**
- * Shows the selected class as bytecode, optionally with its decompiled Java beside it.
+ * Shows the selected class as bytecode, optionally with its decompiled Java beside it. With no class open it shows
+ * an empty state that says how to start.
  */
 public class CodeView extends JPanel {
+    private static final String EMPTY = "empty";
+    private static final String CODE = "code";
+
     private final ContentPanel bytecodePanel;
     private final ContentPanel javaPanel;
+    private final JPanel code = new JPanel(new BorderLayout());
+    private final CardLayout cards = new CardLayout();
     private boolean javaShown;
+    // Where the user last put the divider between bytecode and Java, as a share of the width.
+    private double javaDivider = 0.5;
     private ClassNode displayedClass;
 
-    public CodeView(Rikr controller) {
-        super(new BorderLayout());
+    public CodeView(Rikr controller, EmptyStatePanel emptyState) {
+        setLayout(cards);
         bytecodePanel = new ContentPanel(controller);
         javaPanel = new ContentPanel(controller, true);
-        add(bytecodePanel, BorderLayout.CENTER);
+        code.add(bytecodePanel, BorderLayout.CENTER);
+        add(emptyState, EMPTY);
+        add(code, CODE);
+        cards.show(this, EMPTY);
     }
 
     public void init() {
@@ -47,26 +58,36 @@ public class CodeView extends JPanel {
             return;
         }
         javaShown = shown;
-        removeAll();
+        code.removeAll();
         if (shown) {
             JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, bytecodePanel, javaPanel);
             split.setResizeWeight(0.5);
             split.setDividerSize(5);
-            add(split, BorderLayout.CENTER);
+            // Without a location the split follows the panes' preferred widths, and long bytecode lines left the
+            // Java pane a sliver at the right edge.
+            split.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, event -> {
+                if (split.getWidth() > 0 && split.isShowing()) {
+                    javaDivider = Math.max(0.1, Math.min(0.9, (double) split.getDividerLocation() / split.getWidth()));
+                }
+            });
+            code.add(split, BorderLayout.CENTER);
+            double share = javaDivider;
+            SwingUtilities.invokeLater(() -> split.setDividerLocation(share));
             SettingsManager.refreshThemeFor(javaPanel);
             SettingsManager.updateComponentTree(split);
             if (displayedClass != null) {
                 javaPanel.displayBytecode(displayedClass);
             }
         } else {
-            add(bytecodePanel, BorderLayout.CENTER);
+            code.add(bytecodePanel, BorderLayout.CENTER);
         }
-        revalidate();
-        repaint();
+        code.revalidate();
+        code.repaint();
     }
 
     public void display(ClassNode classNode) {
         displayedClass = classNode;
+        cards.show(this, CODE);
         bytecodePanel.displayBytecode(classNode);
         if (javaShown) {
             javaPanel.displayBytecode(classNode);
@@ -86,6 +107,14 @@ public class CodeView extends JPanel {
         displayedClass = null;
         bytecodePanel.clear();
         javaPanel.clear();
+        cards.show(this, EMPTY);
+    }
+
+    /**
+     * The class on screen, or null when none is.
+     */
+    public ClassNode displayedClass() {
+        return displayedClass;
     }
 
     public void showReference(ReferenceResult result) {

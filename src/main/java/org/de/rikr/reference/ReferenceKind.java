@@ -9,5 +9,7 @@ public enum ReferenceKind {
     IMPLEMENTS,
     FIELD_TYPE,
     METHOD_TYPE,
-    INSTRUCTION_TYPE
+    INSTRUCTION_TYPE,
+    /** A class in another JAR that looks like the target. */
+    SIMILAR
 }

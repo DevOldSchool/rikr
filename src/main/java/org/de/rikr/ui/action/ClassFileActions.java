@@ -112,6 +112,17 @@ public class ClassFileActions {
             return;
         }
 
+        Object[] options = {"Overwrite", "Cancel"};
+        int choice = JOptionPane.showOptionDialog(frame,
+            "<html><b>Overwrite " + original.getName() + "?</b><br><br>"
+                + "The renamed classes replace the file at " + original.getAbsolutePath() + ".<br>"
+                + "A copy of the current file is kept as " + original.getName() + ".bak.<br>"
+                + "The renames written are then part of the JAR and leave the undo history.</html>",
+            "Overwrite Original JAR", JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE, null, options,
+            options[1]);
+        if (choice != 0) {
+            return;
+        }
         controller.overwriteOriginalJar(jarName, exception -> showFailure("Overwrite Original JAR", exception));
     }
 

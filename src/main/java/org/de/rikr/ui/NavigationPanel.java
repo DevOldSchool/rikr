@@ -36,36 +36,42 @@ public class NavigationPanel extends JPanel {
 
         projectButton = new JButton(Images.getImage("folder"));
         projectButton.setToolTipText("Project");
+        projectButton.getAccessibleContext().setAccessibleName("Project");
         projectButton.setAlignmentX(Component.CENTER_ALIGNMENT);
         projectButton.setBorderPainted(false);
         projectButton.addActionListener(projectAction);
 
         searchButton = new JButton(Images.getImage("search"));
         searchButton.setToolTipText("Search");
+        searchButton.getAccessibleContext().setAccessibleName("Search");
         searchButton.setAlignmentX(Component.CENTER_ALIGNMENT);
         searchButton.setBorderPainted(false);
         searchButton.addActionListener(searchAction);
 
-        mappingButton = new JButton("M");
+        mappingButton = new JButton(Images.getImage("mapping"));
         mappingButton.setToolTipText("Cross-JAR mappings");
+        mappingButton.getAccessibleContext().setAccessibleName("Cross-JAR mappings");
         mappingButton.setAlignmentX(Component.CENTER_ALIGNMENT);
         mappingButton.setBorderPainted(false);
         mappingButton.addActionListener(mappingAction);
 
-        referencesButton = new JButton("R");
+        referencesButton = new JButton(Images.getImage("references"));
         referencesButton.setToolTipText("References and call hierarchy");
+        referencesButton.getAccessibleContext().setAccessibleName("References and call hierarchy");
         referencesButton.setAlignmentX(Component.CENTER_ALIGNMENT);
         referencesButton.setBorderPainted(false);
         referencesButton.addActionListener(referencesAction);
 
-        bookmarksButton = new JButton("B");
+        bookmarksButton = new JButton(Images.getImage("bookmarks"));
         bookmarksButton.setToolTipText("Bookmarks");
+        bookmarksButton.getAccessibleContext().setAccessibleName("Bookmarks");
         bookmarksButton.setAlignmentX(Component.CENTER_ALIGNMENT);
         bookmarksButton.setBorderPainted(false);
         bookmarksButton.addActionListener(bookmarksAction);
 
-        controlFlowButton = new JButton("C");
+        controlFlowButton = new JButton(Images.getImage("flow"));
         controlFlowButton.setToolTipText("Entry points, call graphs and control flow");
+        controlFlowButton.getAccessibleContext().setAccessibleName("Entry points, call graphs and control flow");
         controlFlowButton.setAlignmentX(Component.CENTER_ALIGNMENT);
         controlFlowButton.setBorderPainted(false);
         controlFlowButton.addActionListener(controlFlowAction);

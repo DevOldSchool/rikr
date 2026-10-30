@@ -14,17 +14,30 @@ public class BookmarkWorkspacePanel extends JPanel {
     private final Rikr controller;
     private final DefaultListModel<ProjectBookmark> model = new DefaultListModel<>();
     private final JList<ProjectBookmark> list = new JList<>(model);
+    private final JButton remove = new JButton("Remove");
+    private final JButton open = new JButton("Open");
+    private final JLabel emptyLabel = new JLabel(
+        "<html><div style='text-align:center'>No bookmarks yet.<br><br>Right-click a class, field or method "
+            + "and choose Toggle Bookmark.</div></html>", SwingConstants.CENTER);
+    private final CardLayout cards = new CardLayout();
+    private final JPanel content = new JPanel(cards);
 
     public BookmarkWorkspacePanel(Rikr controller) {
         this.controller = controller;
         setLayout(new BorderLayout());
-        setBorder(BorderFactory.createTitledBorder("Bookmarks"));
+        JLabel title = new JLabel("Bookmarks");
+        title.setFont(title.getFont().deriveFont(Font.BOLD));
+        title.setBorder(BorderFactory.createEmptyBorder(8, 8, 6, 8));
+        add(title, BorderLayout.NORTH);
+
         list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        add(new JScrollPane(list), BorderLayout.CENTER);
+        list.addListSelectionListener(event -> updateButtons());
+        emptyLabel.setBorder(BorderFactory.createEmptyBorder(0, 16, 0, 16));
+        content.add(new JScrollPane(list), "list");
+        content.add(emptyLabel, "empty");
+        add(content, BorderLayout.CENTER);
 
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton remove = new JButton("Remove");
-        JButton open = new JButton("Open");
         remove.addActionListener(event -> removeSelected());
         open.addActionListener(event -> openSelected());
         actions.add(remove);
@@ -51,6 +64,7 @@ public class BookmarkWorkspacePanel extends JPanel {
         });
         SettingsManager.addListener(settings -> applyTheme());
         applyTheme();
+        showListOrEmptyState();
     }
 
     public void refresh() {
@@ -60,6 +74,19 @@ public class BookmarkWorkspacePanel extends JPanel {
         if (selected != null) {
             list.setSelectedValue(selected, true);
         }
+        showListOrEmptyState();
+    }
+
+    private void showListOrEmptyState() {
+        cards.show(content, model.isEmpty() ? "empty" : "list");
+        updateButtons();
+    }
+
+    // Remove and Open act on the selected bookmark, so they are only enabled while one is selected.
+    private void updateButtons() {
+        boolean selected = list.getSelectedValue() != null;
+        remove.setEnabled(selected);
+        open.setEnabled(selected);
     }
 
     private void openSelected() {
@@ -84,6 +111,7 @@ public class BookmarkWorkspacePanel extends JPanel {
     private void applyTheme() {
         setBackground(Theme.BACKGROUND_COLOR);
         list.setBackground(Theme.BACKGROUND_COLOR);
+        content.setBackground(Theme.BACKGROUND_COLOR);
         revalidate();
         repaint();
     }

@@ -42,7 +42,7 @@ Code is grouped by feature under `src/main/java/org/de/rikr`, with tests in the 
 | `reference`, `search`, `decompiler`, `bookmark` | The features their names say. The decompiler is JetBrains FernFlower. |
 | `task` | `TaskRunner`: background work with results delivered on the Swing event thread. |
 | `agent` | The MCP server. |
-| `ui` | Swing: `ClassViewer` (main window), `CodeView`, `TreePanel`, the workspace panels. `Rikr` is the GUI's application shell. |
+| `ui` | Swing: `ClassViewer` (main window), `CodeView` (with the `EmptyStatePanel` start screen), `TreePanel` (grouped by package), `StatusBar`, `GoToDialog` (Cmd+K), `NavigationHistory` (Back and Forward), `MenuBar` (every shortcut), the workspace panels. `Rikr` is the GUI's application shell. |
 
 ## Rules the design depends on
 
@@ -69,6 +69,9 @@ sets a new rule.
 
 ## Conventions
 
+- **Shortcuts follow macOS conventions** and live in `MenuBar`: Cmd+S saves the project, Cmd+G finds the next
+  match. Actions that change files outside the project, such as overwriting a JAR, have no shortcut and confirm
+  first, naming the file and what is lost.
 - Java 21: records, sealed interfaces and pattern-matching `switch` are used throughout.
 - Comments explain why, not what. Javadoc on public types and on methods whose contract is not obvious.
 - Tests: JUnit 5. Bytecode tests build classes with ASM's tree API; `RenameEngineTest` has a small program that is

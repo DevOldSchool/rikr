@@ -3,6 +3,7 @@ package org.de.rikr.ui.model;
 import org.objectweb.asm.tree.ClassNode;
 
 import javax.swing.tree.DefaultMutableTreeNode;
+import java.text.NumberFormat;
 import java.util.List;
 
 public class JarMutableTreeNode extends DefaultMutableTreeNode {
@@ -28,8 +29,12 @@ public class JarMutableTreeNode extends DefaultMutableTreeNode {
         this.dirty = dirty;
     }
 
+    /**
+     * The JAR's name, how many classes it has, and a * when it has renames that are not saved.
+     */
     @Override
     public String toString() {
-        return jarName + (dirty ? " *" : "");
+        String count = NumberFormat.getIntegerInstance().format(classes.size());
+        return jarName + (dirty ? " *" : "") + "   " + count + (classes.size() == 1 ? " class" : " classes");
     }
 }

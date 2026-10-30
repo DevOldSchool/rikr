@@ -38,12 +38,14 @@ public class SearchPanel extends JPanel {
         // Create the search bar
         searchBarPanel = new JPanel(new BorderLayout());
         searchField = new JTextField();
-        searchField.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        SearchFields.style(searchField, "Search names and instructions");
         matchCaseButton = new JButton(Images.getImage("match-case"));
         matchCaseButton.setToolTipText("Match Case");
+        matchCaseButton.getAccessibleContext().setAccessibleName("Match Case");
         matchCaseButton.setBorderPainted(false);
         matchWordButton = new JButton(Images.getImage("match-word"));
         matchWordButton.setToolTipText("Match Words");
+        matchWordButton.getAccessibleContext().setAccessibleName("Match Words");
         matchWordButton.setBorderPainted(false);
 
         // Create a panel for the buttons
@@ -78,6 +80,10 @@ public class SearchPanel extends JPanel {
     }
 
     private void applyTheme() {
+        if (searchField != null) {
+            SearchFields.applyTheme(searchField);
+        }
+
         if (buttonsPanel != null) {
             buttonsPanel.setBackground(Theme.BACKGROUND_COLOR);
         }
@@ -195,6 +201,8 @@ public class SearchPanel extends JPanel {
     }
 
     private void toggleButton(JButton button, boolean toggle) {
+        // Screen readers hear the state the colour shows.
+        button.getAccessibleContext().setAccessibleDescription(toggle ? "On" : "Off");
         if (toggle) {
             button.setBackground(Theme.SEARCH_BUTTON_SELECTED_COLOR);
         } else {

@@ -14,6 +14,10 @@ public class Images {
         String[] imageNames = {
             "folder",
             "search",
+            "mapping",
+            "references",
+            "bookmarks",
+            "flow",
             "match-case",
             "match-word",
             "instruction"

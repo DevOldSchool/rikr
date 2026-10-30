@@ -20,7 +20,14 @@ public class ProjectSessionActions {
         if (chooser.showOpenDialog(frame) != JFileChooser.APPROVE_OPTION) {
             return;
         }
-        controller.openProject(chooser.getSelectedFile(), exception -> showFailure("Open Project", exception));
+        open(chooser.getSelectedFile());
+    }
+
+    /**
+     * Open a project file without asking for it, for example from the recent projects list.
+     */
+    public void open(File project) {
+        controller.openProject(project, exception -> showFailure("Open Project", exception));
     }
 
     public void saveProject() {

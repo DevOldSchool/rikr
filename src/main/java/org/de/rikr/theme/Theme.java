@@ -19,7 +19,7 @@ public class Theme {
 
     public static Color SYNTAX_HIGHLIGHT_DEFAULT_COLOR = new Color(188, 190, 196);
     public static Color SYNTAX_HIGHLIGHT_KEYWORD_COLOR = new Color(207, 142, 109);
-    public static Color SYNTAX_HIGHLIGHT_COMMENT_COLOR = new Color(122, 126, 133);
+    public static Color SYNTAX_HIGHLIGHT_COMMENT_COLOR = new Color(139, 143, 150);
     public static Color SYNTAX_HIGHLIGHT_NUMBER_COLOR = new Color(42, 172, 184);
     public static Color SYNTAX_HIGHLIGHT_STRING_COLOR = new Color(106, 171, 115);
     public static Color SYNTAX_HIGHLIGHT_ANNOTATION_COLOR = new Color(198, 120, 221);
@@ -40,7 +40,7 @@ public class Theme {
 
     public static Color DARK_SYNTAX_HIGHLIGHT_DEFAULT_COLOR = new Color(188, 190, 196);
     public static Color DARK_SYNTAX_HIGHLIGHT_KEYWORD_COLOR = new Color(207, 142, 109);
-    public static Color DARK_SYNTAX_HIGHLIGHT_COMMENT_COLOR = new Color(122, 126, 133);
+    public static Color DARK_SYNTAX_HIGHLIGHT_COMMENT_COLOR = new Color(139, 143, 150);
     public static Color DARK_SYNTAX_HIGHLIGHT_NUMBER_COLOR = new Color(42, 172, 184);
     public static Color DARK_SYNTAX_HIGHLIGHT_STRING_COLOR = new Color(106, 171, 115);
     public static Color DARK_SYNTAX_HIGHLIGHT_ANNOTATION_COLOR = new Color(198, 120, 221);
@@ -61,7 +61,7 @@ public class Theme {
 
     public static Color LIGHT_SYNTAX_HIGHLIGHT_DEFAULT_COLOR = new Color(0, 0, 0);
     public static Color LIGHT_SYNTAX_HIGHLIGHT_KEYWORD_COLOR = new Color(52, 75, 182);
-    public static Color LIGHT_SYNTAX_HIGHLIGHT_COMMENT_COLOR = new Color(140, 140, 140);
+    public static Color LIGHT_SYNTAX_HIGHLIGHT_COMMENT_COLOR = new Color(112, 112, 112);
     public static Color LIGHT_SYNTAX_HIGHLIGHT_NUMBER_COLOR = new Color(55, 79, 228);
     public static Color LIGHT_SYNTAX_HIGHLIGHT_STRING_COLOR = new Color(63, 136, 58);
     public static Color LIGHT_SYNTAX_HIGHLIGHT_ANNOTATION_COLOR = new Color(161, 147, 54);

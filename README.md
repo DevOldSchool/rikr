@@ -97,6 +97,37 @@ The following items are listed in no particular order and are here as a todo lis
 - ~~Running.~~
 - User guides.
 
+## Finding your way
+
+Open a JAR with **File > Open JAR or Class...**, by dropping `.jar` and `.class`
+files on the window, or from the recent projects on the start screen. The
+project tree groups classes by package; each JAR shows how many classes it has.
+
+**Navigate > Go to Class or Member...** (`Cmd+K`, `Ctrl+K` elsewhere) finds a
+class, field or method by part of its name across every loaded JAR. With nothing
+typed it lists the classes opened most recently. **Navigate > Back** and
+**Forward** (`Cmd+[` and `Cmd+]`) move through the classes you opened.
+
+**Edit > Find in Class...** (`Cmd+F`) searches the open class; **Find Next**
+and **Find Previous** are `Cmd+G` and `Shift+Cmd+G`. The status bar shows the
+latest message and when background work is running; click it, or press `Cmd+L`,
+to show the full log.
+
+| Shortcut | Action |
+|---|---|
+| `Cmd+O` / `Shift+Cmd+O` | Open JAR or class / open project |
+| `Cmd+S` / `Shift+Cmd+S` | Save project / save project as |
+| `Ctrl+Cmd+S` / `Alt+Cmd+S` | Export class / export JAR |
+| `Cmd+Z` | Undo rename |
+| `Cmd+F`, `Cmd+G`, `Shift+Cmd+G` | Find in class, next and previous match |
+| `Cmd+K` | Go to class or member |
+| `Cmd+[` / `Cmd+]` | Back / forward |
+| `Shift+Cmd+E`, `F`, `M`, `R`, `B`, `C` | Project, Search, Cross-JAR Mappings, References, Bookmarks, Entry Points and Flow |
+| `Shift+Cmd+J` | Split bytecode and Java |
+| `Cmd+L` | Show or hide the log |
+
+On Windows and Linux, use `Ctrl` in place of `Cmd`.
+
 ## Cross-JAR mapping workspace
 
 Load at least two JARs, then open **View > Cross-JAR Mappings** or press
@@ -113,13 +144,16 @@ Accepted mappings can be exported as JSON.
 Right-click a class, field, or method in the project tree and choose
 **Show References**. Classes show inheritance, descriptor, and bytecode type
 references; fields separate reads from writes; methods separate callers from
-callees. Double-click a result, or select it and press Enter, to open and
-highlight the relevant member. The reference index is rebuilt when JAR content
+callees. Results are grouped by the class they are in, with each member's
+parameter and return types and how it uses the target. Double-click a result,
+or select it and press Enter, to open and highlight the relevant member;
+double-click a class heading to open the class. **Find Extenders**, **Find
+Implementors** and **Find Matching Class Nodes** list their results here too. The reference index is rebuilt when JAR content
 changes, so queries do not repeatedly scan every instruction.
 
 ## Project sessions
 
-Use **File > Save Project** to create a `.rikr` session, saved as versioned JSON;
+Use **File > Save Project** (`Cmd+S`) to create a `.rikr` session, saved as versioned JSON;
 project files from older versions of Rikr still open. A project records the
 absolute paths of loaded JARs, accepted cross-JAR mappings, rename history,
 bookmarks, window bounds, split positions, visible tools, and the selected
@@ -139,8 +173,9 @@ exported; saving or overwriting that JAR clears the marker.
 
 In the bytecode view, right-click a class, field or method name and choose
 **Rename** to rename exactly that symbol. Exported JARs keep the original's
-resources and manifest; **Overwrite Original JAR** keeps the previous file as
-`<name>.bak`.
+resources and manifest; **Overwrite Original JAR** asks first, then keeps the
+previous file as `<name>.bak`. Removing a JAR from the project asks first and
+says how many renames, mappings and bookmarks go with it.
 
 ## Rename mappings
 
@@ -152,7 +187,7 @@ rename, and is undone in one step.
 
 ## Entry points, call graphs and control flow
 
-Open the **C** tab, or right-click a JAR and choose **Show Entry Points**, then
+Open **Entry Points and Flow** (the branching icon in the left rail, `Shift+Cmd+C`), or right-click a JAR and choose **Show Entry Points**, then
 pick where the code starts: the manifest's Main-Class, `main` methods, applets
 (including obfuscated ones), thread `run()` methods or event listeners. The
 call graph that opens shows what the method calls; click a method's badge to

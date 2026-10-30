@@ -17,6 +17,7 @@ import org.de.rikr.reference.ReferenceIndexService;
 import org.de.rikr.rename.RenameBatch;
 import org.de.rikr.rename.RenameOperation;
 import org.de.rikr.rename.RenameStep;
+import org.de.rikr.rename.RenameType;
 import org.de.rikr.rename.RenameUndoResult;
 import org.de.rikr.resources.Fonts;
 import org.de.rikr.resources.Images;
@@ -26,6 +27,7 @@ import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.task.TaskRunner;
 import org.de.rikr.ui.ClassNodeImages;
 import org.de.rikr.ui.ClassViewer;
+import org.de.rikr.ui.RecentProjects;
 import org.objectweb.asm.tree.ClassNode;
 
 import javax.swing.*;
@@ -47,6 +49,7 @@ public class Rikr {
     public Rikr() {
         userInterface = new ClassViewer(this);
         tasks = new TaskRunner(userInterface.getLogPanel());
+        tasks.setBusyListener(userInterface::setBusy);
     }
 
     public void start() {
@@ -124,6 +127,7 @@ public class Rikr {
     public void saveProject(File destination) throws IOException {
         projectSessionService.save(destination, project.toSession(userInterface.captureProjectLayout()));
         currentProjectFile = destination.getAbsoluteFile();
+        RecentProjects.add(currentProjectFile);
         userInterface.updateProjectTitle(currentProjectFile);
         log("Saved project to " + currentProjectFile.getAbsolutePath());
     }
@@ -249,6 +253,7 @@ public class Rikr {
             previous.close();
         }
         currentProjectFile = source.getAbsoluteFile();
+        RecentProjects.add(currentProjectFile);
         // The code view shows a class of the closed project.
         userInterface.clearContent();
         userInterface.updateTree(project.jars().classesByJar());
@@ -282,6 +287,14 @@ public class Rikr {
             case ProjectEvent.ClassRemoved removed -> {
             }
             case ProjectEvent.Renamed renamed -> {
+                // A class rename can move a class to another package, so the tree is rebuilt; it keeps its place.
+                boolean classesRenamed = switch (renamed.step()) {
+                    case RenameOperation operation -> operation.type() == RenameType.CLASS;
+                    case RenameBatch batch -> !batch.classes().isEmpty();
+                };
+                if (classesRenamed) {
+                    userInterface.updateTree(project.jars().classesByJar());
+                }
                 userInterface.refreshTreeLabels();
                 userInterface.refreshControlFlow();
                 refreshProjectState();

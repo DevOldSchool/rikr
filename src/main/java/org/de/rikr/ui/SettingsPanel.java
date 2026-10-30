@@ -61,10 +61,8 @@ public class SettingsPanel extends JPanel {
     }
 
     private JLabel label(String text) {
-        JLabel label = new JLabel(text);
-        label.setForeground(Theme.CONTENT_HIGHLIGHT_TEXT_COLOR);
-
-        return label;
+        // The look and feel's label colour is readable in every theme; the muted content colour is not.
+        return new JLabel(text);
     }
 
     private void applyTheme() {

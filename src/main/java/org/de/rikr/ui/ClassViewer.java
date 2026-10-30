@@ -4,11 +4,14 @@ import com.formdev.flatlaf.util.SystemInfo;
 import org.de.rikr.Rikr;
 import org.de.rikr.bookmark.ProjectBookmark;
 import org.de.rikr.project.ProjectLayout;
+import org.de.rikr.mapping.SimilarClassReport;
+import org.de.rikr.reference.ReferenceKind;
 import org.de.rikr.reference.ReferenceResult;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;
 import org.de.rikr.ui.action.ClassFileActions;
 import org.de.rikr.ui.action.ProjectSessionActions;
+import org.de.rikr.utilities.ClassNodeUtil;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.MethodNode;
@@ -17,11 +20,10 @@ import javax.swing.*;
 import javax.swing.plaf.basic.BasicSplitPaneDivider;
 import javax.swing.plaf.basic.BasicSplitPaneUI;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
+import java.text.NumberFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Stack;
@@ -50,6 +52,9 @@ public class ClassViewer {
     private final SimulatorBar simulatorBar;
     private final ClassFileActions classFileActions;
     private final ProjectSessionActions projectSessionActions;
+    private final EmptyStatePanel emptyState;
+    private final StatusBar statusBar;
+    private final NavigationHistory history = new NavigationHistory();
 
     public ClassViewer(Rikr controller) {
         this.controller = controller;
@@ -83,7 +88,11 @@ public class ClassViewer {
 
         // Initialize panels
         treePanel = new TreePanel(controller);
-        codeView = new CodeView(controller);
+        classFileActions = new ClassFileActions(controller, frame, treePanel);
+        projectSessionActions = new ProjectSessionActions(controller, frame);
+        emptyState = new EmptyStatePanel(this::openFileDialog, projectSessionActions::openProject,
+            projectSessionActions::open, controller::loadFiles);
+        codeView = new CodeView(controller, emptyState);
         searchBar = new SearchBar(controller, e -> toggleSearchBarVisibility(false));
         logPanel = new LogPanel();
         projectPanel = new JPanel(new BorderLayout());
@@ -95,8 +104,6 @@ public class ClassViewer {
         flowPanel = new FlowPanel(controller, this::openInBytecode);
         methodSimulatorPanel = new MethodSimulatorPanel(controller);
         simulatorBar = new SimulatorBar(controller, e -> toggleMethodSimulatorVisibility(methodSimulatorPanel.isVisible()));
-        classFileActions = new ClassFileActions(controller, frame, treePanel);
-        projectSessionActions = new ProjectSessionActions(controller, frame);
 
         // Create a panel to hold both the search panel and content panel
         rightPanel = new JPanel(new BorderLayout());
@@ -160,29 +167,42 @@ public class ClassViewer {
 
         JPanel panel = new JPanel(new BorderLayout());
         panel.add(verticalSplitPane, BorderLayout.CENTER);
+        statusBar = new StatusBar(() -> toggleLogVisibility(logPanel.isVisible()));
+        panel.add(statusBar, BorderLayout.SOUTH);
+        // The decompiler's warnings and stack traces stay in the log; the status bar shows what Rikr itself reports.
+        logPanel.addMessageListener(message -> {
+            if (!message.startsWith("[FernFlower]") && !message.contains("\tat ")) {
+                statusBar.setMessage(message);
+            }
+        });
 
         frame.add(panel);
 
         // Initialize menu bar
-        menuBar = new MenuBar(
-            controller,
-            e -> openFileDialog(),
-            e -> projectSessionActions.openProject(),
-            e -> projectSessionActions.saveProject(),
-            e -> projectSessionActions.saveProjectAs(),
-            e -> toggleSearchBarVisibility(false),
-            e -> controller.undoLastRename(),
-            e -> showProjectTab(),
-            e -> showGlobalSearchTab(),
-            e -> showMappingTab(),
-            e -> showReferencesTab(),
-            e -> showBookmarksTab(),
-            e -> toggleLogVisibility(logPanel.isVisible()),
-            e -> classFileActions.saveSelectedClass(),
-            e -> classFileActions.saveSelectedJar(),
-            e -> classFileActions.overwriteOriginalJar(),
-            e -> SettingsDialog.open(frame, codeView::redisplay)
-        );
+        menuBar = new MenuBar(controller, new MenuBar.Actions(
+            this::openFileDialog,
+            projectSessionActions::openProject,
+            projectSessionActions::saveProject,
+            projectSessionActions::saveProjectAs,
+            classFileActions::saveSelectedClass,
+            classFileActions::saveSelectedJar,
+            classFileActions::overwriteOriginalJar,
+            controller::undoLastRename,
+            () -> toggleSearchBarVisibility(true),
+            () -> findNext(1),
+            () -> findNext(-1),
+            this::goTo,
+            () -> history.back(this::isLoaded).ifPresent(this::reveal),
+            () -> history.forward(this::isLoaded).ifPresent(this::reveal),
+            this::showProjectTab,
+            this::showGlobalSearchTab,
+            this::showMappingTab,
+            this::showReferencesTab,
+            this::showBookmarksTab,
+            navigationPanel::selectControlFlowTab,
+            () -> toggleLogVisibility(logPanel.isVisible()),
+            () -> SettingsDialog.open(frame, codeView::redisplay)
+        ));
         frame.setJMenuBar(menuBar);
 
         // Put Preferences under the app menu
@@ -199,19 +219,6 @@ public class ClassViewer {
         menuBar.getSplitAsmJavaItem().addActionListener(
             e -> codeView.setJavaShown(menuBar.getSplitAsmJavaItem().isSelected())
         );
-
-        // Search toggle
-        InputMap inputMap = frame.getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
-        ActionMap actionMap = frame.getRootPane().getActionMap();
-
-        String toggleSearchPanelAction = "toggleSearchPanel";
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_F, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()), toggleSearchPanelAction);
-        actionMap.put(toggleSearchPanelAction, new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                toggleSearchBarVisibility(true);
-            }
-        });
 
         applyTheme();
         SettingsManager.addListener(s -> applyTheme());
@@ -250,6 +257,7 @@ public class ClassViewer {
         searchPanel.init();
         mappingWorkspacePanel.init();
         simulatorBar.init();
+        emptyState.update(false, RecentProjects.list());
 
         SwingUtilities.invokeLater(() -> {
             toggleLogVisibility(logPanel.isVisible());
@@ -266,6 +274,11 @@ public class ClassViewer {
     public void updateTree(Map<String, List<ClassNode>> jarClassesMap) {
         SwingUtilities.invokeLater(() -> {
             treePanel.updateTree(jarClassesMap);
+            int classes = jarClassesMap.values().stream().mapToInt(List::size).sum();
+            statusBar.setSummary(jarClassesMap.isEmpty() ? "No JARs loaded"
+                : jarClassesMap.size() + (jarClassesMap.size() == 1 ? " JAR · " : " JARs · ")
+                + NumberFormat.getIntegerInstance().format(classes) + " classes");
+            emptyState.update(!jarClassesMap.isEmpty(), RecentProjects.list());
             flowPanel.refreshJars(List.copyOf(jarClassesMap.keySet()));
             treePanel.updateDirtyJars(controller.renames().dirtyJars());
             mappingWorkspacePanel.refreshJars(jarClassesMap);
@@ -273,7 +286,54 @@ public class ClassViewer {
     }
 
     public void displayBytecode(ClassNode classNode) {
+        history.visited(classNode);
         codeView.display(classNode);
+    }
+
+    /**
+     * Show that background work is running, or has finished.
+     */
+    public void setBusy(boolean busy) {
+        statusBar.setBusy(busy);
+    }
+
+    private boolean isLoaded(ClassNode classNode) {
+        return controller.jars().jarOf(classNode).isPresent();
+    }
+
+    /**
+     * Select the class in the project tree, which opens it; open it directly if the tree does not show it.
+     */
+    private void reveal(ClassNode classNode) {
+        navigationPanel.selectProjectTab();
+        if (!treePanel.reveal(classNode)) {
+            displayBytecode(classNode);
+        }
+    }
+
+    private void goTo() {
+        List<GoToDialog.Target> recent = history.recent(10).stream()
+            .flatMap(classNode -> controller.jars().jarOf(classNode).stream()
+                .map(jar -> new GoToDialog.Target(jar, classNode, null, null)))
+            .toList();
+        GoToDialog.open(frame, controller.jars().classesByJar(), recent, target -> {
+            reveal(target.owner());
+            if (target.field() != null) {
+                SwingUtilities.invokeLater(() -> getContentPanel().selectTextAfterPattern(
+                    ClassNodeUtil.getFieldNodePattern(target.field()), target.field().name));
+            } else if (target.method() != null) {
+                SwingUtilities.invokeLater(() -> getContentPanel().selectTextAfterPattern(
+                    ClassNodeUtil.getMethodNodePattern(target.method()), target.method().name));
+            }
+        });
+    }
+
+    private void findNext(int direction) {
+        if (!searchBar.isVisible()) {
+            toggleSearchBarVisibility(true);
+            return;
+        }
+        searchBar.navigate(direction);
     }
 
     /**
@@ -285,6 +345,20 @@ public class ClassViewer {
 
     public void showClassReferences(String jarName, ClassNode classNode) {
         referenceWorkspacePanel.showClassReferences(jarName, classNode);
+        navigationPanel.selectReferencesTab();
+    }
+
+    /**
+     * Show classes a search found, such as subclasses, in the References workspace.
+     */
+    public void showClasses(String description, String jarName, List<ClassNode> classes, ReferenceKind kind,
+                            String relation) {
+        referenceWorkspacePanel.showClasses(description, jarName, classes, kind, relation);
+        navigationPanel.selectReferencesTab();
+    }
+
+    public void showSimilarClasses(String jarName, ClassNode source, SimilarClassReport report) {
+        referenceWorkspacePanel.showSimilarClasses(jarName, source, report);
         navigationPanel.selectReferencesTab();
     }
 
@@ -341,6 +415,7 @@ public class ClassViewer {
     }
 
     public void clearContent() {
+        history.clear();
         codeView.clear();
         flowPanel.clear();
     }

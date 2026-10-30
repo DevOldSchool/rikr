@@ -11,6 +11,8 @@ import org.de.rikr.ui.model.FieldNodeMutableTreeNode;
 import org.de.rikr.ui.model.InterfaceNodeMutableTreeNode;
 import org.de.rikr.ui.model.JarMutableTreeNode;
 import org.de.rikr.ui.model.MethodNodeMutableTreeNode;
+import org.de.rikr.ui.model.PackageTreeNode;
+import org.de.rikr.ui.model.TreeNodes;
 import org.de.rikr.utilities.ClassNodeUtil;
 import org.objectweb.asm.tree.ClassNode;
 
@@ -24,10 +26,14 @@ import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Enumeration;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 public class TreePanel extends JPanel {
     private final Rikr controller;
@@ -53,12 +59,14 @@ public class TreePanel extends JPanel {
         // Create the search bar
         searchBarPanel = new JPanel(new BorderLayout());
         searchField = new JTextField();
-        searchField.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        SearchFields.style(searchField, "Find in the tree");
         matchCaseButton = new JButton(Images.getImage("match-case"));
         matchCaseButton.setToolTipText("Match Case");
+        matchCaseButton.getAccessibleContext().setAccessibleName("Match Case");
         matchCaseButton.setBorderPainted(false);
         matchWordButton = new JButton(Images.getImage("match-word"));
         matchWordButton.setToolTipText("Match Words");
+        matchWordButton.getAccessibleContext().setAccessibleName("Match Words");
         matchWordButton.setBorderPainted(false);
 
         // Create a panel for the buttons
@@ -99,6 +107,10 @@ public class TreePanel extends JPanel {
     }
 
     private void applyTheme() {
+        if (searchField != null) {
+            SearchFields.applyTheme(searchField);
+        }
+
         if (searchBarPanel != null) {
             searchBarPanel.setBackground(Theme.BACKGROUND_COLOR);
         }
@@ -188,24 +200,119 @@ public class TreePanel extends JPanel {
         return null;
     }
 
+    /**
+     * Show the JARs, each class under its package, sorted by name. Folders that were open stay open, and the
+     * selection stays, so a rebuild after a rename does not lose the user's place.
+     */
     public void updateTree(Map<String, List<ClassNode>> jarClassesMap) {
-        DefaultMutableTreeNode root = new DefaultMutableTreeNode("Root Node");
-        for (String jarName : jarClassesMap.keySet()) {
+        Set<Object> expanded = new HashSet<>();
+        Enumeration<TreePath> open = tree.getExpandedDescendants(new TreePath(treeModel.getRoot()));
+        while (open != null && open.hasMoreElements()) {
+            Object key = key((DefaultMutableTreeNode) open.nextElement().getLastPathComponent());
+            if (key != null) {
+                expanded.add(key);
+            }
+        }
+        DefaultMutableTreeNode selected = getSelectedNode();
+        Object selectedKey = selected == null ? null : key(selected);
+
+        DefaultMutableTreeNode root = new DefaultMutableTreeNode("JAR Files");
+        jarClassesMap.keySet().stream().sorted().forEach(jarName -> {
             List<ClassNode> classes = jarClassesMap.get(jarName);
             JarMutableTreeNode jarNode = new JarMutableTreeNode(jarName, classes, jarName);
-
-            for (ClassNode classNode : classes) {
-                String className = classNode.name + ".class";
-                jarNode.add(new ClassMutableTreeNode(jarName, classNode, className));
-            }
-
+            addByPackage(jarNode, jarName, classes);
             root.add(jarNode);
-        }
+        });
 
+        // Restoring the selection must not open the class again.
+        tree.removeTreeSelectionListener(treeSelectionHandler);
         treeModel.setRoot(root);
         tree.setModel(treeModel);
+        if (expanded.isEmpty()) {
+            SwingUtilities.invokeLater(this::expandRootChildren);
+        } else {
+            Enumeration<TreeNode> nodes = root.depthFirstEnumeration();
+            List<TreePath> toOpen = new ArrayList<>();
+            TreePath toSelect = null;
+            while (nodes.hasMoreElements()) {
+                DefaultMutableTreeNode node = (DefaultMutableTreeNode) nodes.nextElement();
+                Object key = key(node);
+                if (key != null && expanded.contains(key)) {
+                    toOpen.add(new TreePath(node.getPath()));
+                }
+                if (key != null && key.equals(selectedKey)) {
+                    toSelect = new TreePath(node.getPath());
+                }
+            }
+            toOpen.forEach(tree::expandPath);
+            if (toSelect != null) {
+                tree.setSelectionPath(toSelect);
+            }
+        }
+        tree.addTreeSelectionListener(treeSelectionHandler);
+    }
 
-        SwingUtilities.invokeLater(this::expandRootChildren);
+    /**
+     * Add the classes under one node per package, packages first, then classes in no package; all sorted.
+     */
+    private static void addByPackage(DefaultMutableTreeNode parent, String jarName, List<ClassNode> classes) {
+        Map<String, List<ClassNode>> byPackage = new TreeMap<>();
+        for (ClassNode classNode : classes) {
+            int slash = classNode.name.lastIndexOf('/');
+            byPackage.computeIfAbsent(slash < 0 ? "" : classNode.name.substring(0, slash), name -> new ArrayList<>())
+                .add(classNode);
+        }
+        Comparator<ClassNode> byName = Comparator.comparing(classNode -> classNode.name);
+        byPackage.forEach((packageName, members) -> {
+            if (packageName.isEmpty()) {
+                return;
+            }
+            PackageTreeNode packageNode = new PackageTreeNode(packageName);
+            members.stream().sorted(byName).forEach(classNode ->
+                packageNode.add(new ClassMutableTreeNode(jarName, classNode, simpleName(classNode))));
+            parent.add(packageNode);
+        });
+        byPackage.getOrDefault("", List.of()).stream().sorted(byName).forEach(classNode ->
+            parent.add(new ClassMutableTreeNode(jarName, classNode, classNode.name)));
+    }
+
+    private static String simpleName(ClassNode classNode) {
+        return classNode.name.substring(classNode.name.lastIndexOf('/') + 1);
+    }
+
+    /**
+     * What a node stands for, so the same place can be found again in a rebuilt tree.
+     */
+    private static Object key(DefaultMutableTreeNode node) {
+        return switch (node) {
+            case JarMutableTreeNode jar -> "jar:" + jar.getJarName();
+            case PackageTreeNode packageNode -> "package:" + TreeNodes.jarOf(packageNode).orElse("")
+                + ":" + packageNode.getPackageName();
+            case ClassMutableTreeNode classNode -> classNode.getClassNode();
+            case ClassNodeMutableTreeNode classNode -> List.of("declaration", classNode.getClassNode());
+            case InterfaceNodeMutableTreeNode classNode -> List.of("declaration", classNode.getClassNode());
+            case FieldNodeMutableTreeNode field -> field.getFieldNode();
+            case MethodNodeMutableTreeNode method -> method.getMethodNode();
+            default -> null;
+        };
+    }
+
+    /**
+     * Select a class in the tree and scroll to it, which also opens it in the code view.
+     *
+     * @return false if the class is not in the tree
+     */
+    public boolean reveal(ClassNode classNode) {
+        Enumeration<TreeNode> nodes = ((DefaultMutableTreeNode) treeModel.getRoot()).depthFirstEnumeration();
+        while (nodes.hasMoreElements()) {
+            if (nodes.nextElement() instanceof ClassMutableTreeNode node && node.getClassNode() == classNode) {
+                TreePath path = new TreePath(node.getPath());
+                tree.setSelectionPath(path);
+                tree.scrollPathToVisible(path);
+                return true;
+            }
+        }
+        return false;
     }
 
     public void updateTree(Map<String, List<ClassNode>> jarClassesMap, boolean groupBySuperclass, boolean groupByInterfaces) {
@@ -216,7 +323,13 @@ public class TreePanel extends JPanel {
         }
 
         for (String jarName : jarClassesMap.keySet()) {
-            JarMutableTreeNode jarNode = (JarMutableTreeNode) findChild(rootNode, jarName);
+            JarMutableTreeNode jarNode = null;
+            for (int index = 0; index < rootNode.getChildCount(); index++) {
+                if (rootNode.getChildAt(index) instanceof JarMutableTreeNode candidate
+                    && candidate.getJarName().equals(jarName)) {
+                    jarNode = candidate;
+                }
+            }
 
             if (jarNode == null) {
                 continue;
@@ -232,12 +345,7 @@ public class TreePanel extends JPanel {
             } else {
                 // Remove grouping
                 jarNode.removeAllChildren();
-
-                for (ClassNode classNode : classes) {
-                    String className = classNode.name + ".class";
-                    jarNode.add(new ClassMutableTreeNode(jarName, classNode, className));
-                }
-
+                addByPackage(jarNode, jarName, classes);
                 updateNode(jarNode);
             }
 
@@ -271,7 +379,9 @@ public class TreePanel extends JPanel {
         while (nodes.hasMoreElements()) {
             DefaultMutableTreeNode node = (DefaultMutableTreeNode) nodes.nextElement();
             String label = switch (node) {
-                case ClassMutableTreeNode classNode -> classNode.getClassNode().name + ".class";
+                // Under a package node a class shows its simple name; elsewhere its full name.
+                case ClassMutableTreeNode classNode -> classNode.getParent() instanceof PackageTreeNode
+                    ? simpleName(classNode.getClassNode()) : classNode.getClassNode().name;
                 case ClassNodeMutableTreeNode classNode -> classNode.getClassNode().name;
                 case InterfaceNodeMutableTreeNode classNode -> classNode.getClassNode().name;
                 case FieldNodeMutableTreeNode field -> field.getFieldNode().name + " " + field.getFieldNode().desc;
@@ -381,11 +491,10 @@ public class TreePanel extends JPanel {
                 continue;
             }
 
-            DefaultMutableTreeNode parentNode = new ClassMutableTreeNode(jarName, parentClassNode, name + ".class");
+            DefaultMutableTreeNode parentNode = new ClassMutableTreeNode(jarName, parentClassNode, name);
 
             for (ClassNode classNode : classGroup) {
-                String className = classNode.name + ".class";
-                parentNode.add(new ClassMutableTreeNode(jarName, classNode, className));
+                parentNode.add(new ClassMutableTreeNode(jarName, classNode, classNode.name));
             }
 
             selectedNode.add(parentNode);
@@ -427,6 +536,8 @@ public class TreePanel extends JPanel {
     }
 
     private void toggleButton(JButton button, boolean toggle) {
+        // Screen readers hear the state the colour shows.
+        button.getAccessibleContext().setAccessibleDescription(toggle ? "On" : "Off");
         if (toggle) {
             button.setBackground(Theme.SEARCH_BUTTON_SELECTED_COLOR);
         } else {

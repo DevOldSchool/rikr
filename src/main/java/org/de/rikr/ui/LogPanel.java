@@ -9,8 +9,12 @@ import javax.swing.text.*;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
 public class LogPanel extends JScrollPane implements Logger {
+    private final List<Consumer<String>> messageListeners = new CopyOnWriteArrayList<>();
     private static final String ATTR_KIND = "logKind";
     private static final String KIND_TIMESTAMP = "timestamp";
     private static final String KIND_MESSAGE = "message";
@@ -136,6 +140,14 @@ public class LogPanel extends JScrollPane implements Logger {
             }
 
             logPane.setCaretPosition(document.getLength());
+            messageListeners.forEach(listener -> listener.accept(message));
         });
+    }
+
+    /**
+     * Be told each message as it is logged, on the event thread.
+     */
+    public void addMessageListener(Consumer<String> listener) {
+        messageListeners.add(listener);
     }
 }
