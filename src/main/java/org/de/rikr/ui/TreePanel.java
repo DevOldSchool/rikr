@@ -6,7 +6,11 @@ import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;
 import org.de.rikr.ui.handler.TreeSelectionHandler;
 import org.de.rikr.ui.model.ClassMutableTreeNode;
+import org.de.rikr.ui.model.ClassNodeMutableTreeNode;
+import org.de.rikr.ui.model.FieldNodeMutableTreeNode;
+import org.de.rikr.ui.model.InterfaceNodeMutableTreeNode;
 import org.de.rikr.ui.model.JarMutableTreeNode;
+import org.de.rikr.ui.model.MethodNodeMutableTreeNode;
 import org.de.rikr.utilities.ClassNodeUtil;
 import org.objectweb.asm.tree.ClassNode;
 
@@ -252,6 +256,33 @@ public class TreePanel extends JPanel {
         // Ensure the full path is used to select the node
         TreePath path = new TreePath(node.getPath());
         selectNode(path);
+    }
+
+    /**
+     * Update the labels of classes, fields and methods to their current names. A rename can change names and
+     * descriptors in many classes, so every node is checked. The tree keeps its expansion and selection.
+     */
+    public void refreshLabels() {
+        DefaultMutableTreeNode root = (DefaultMutableTreeNode) treeModel.getRoot();
+        if (root == null) {
+            return;
+        }
+        Enumeration<TreeNode> nodes = root.depthFirstEnumeration();
+        while (nodes.hasMoreElements()) {
+            DefaultMutableTreeNode node = (DefaultMutableTreeNode) nodes.nextElement();
+            String label = switch (node) {
+                case ClassMutableTreeNode classNode -> classNode.getClassNode().name + ".class";
+                case ClassNodeMutableTreeNode classNode -> classNode.getClassNode().name;
+                case InterfaceNodeMutableTreeNode classNode -> classNode.getClassNode().name;
+                case FieldNodeMutableTreeNode field -> field.getFieldNode().name + " " + field.getFieldNode().desc;
+                case MethodNodeMutableTreeNode method -> method.getMethodNode().name + " " + method.getMethodNode().desc;
+                default -> null;
+            };
+            if (label != null && !label.equals(String.valueOf(node.getUserObject()))) {
+                node.setUserObject(label);
+                treeModel.nodeChanged(node);
+            }
+        }
     }
 
     public void updateDirtyJars(Set<String> dirtyJars) {

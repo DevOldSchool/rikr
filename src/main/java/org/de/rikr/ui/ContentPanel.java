@@ -2,13 +2,13 @@ package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
 import org.de.rikr.settings.SettingsManager;
+import org.de.rikr.symbol.BytecodeText;
+import org.de.rikr.symbol.Symbol;
 import org.de.rikr.theme.Theme;
 import org.de.rikr.ui.handler.RenameActionHandler;
 import org.de.rikr.ui.highlighter.LineHighlighter;
 import org.de.rikr.ui.highlighter.SyntaxHighlighter;
 import org.objectweb.asm.tree.ClassNode;
-import org.objectweb.asm.util.Textifier;
-import org.objectweb.asm.util.TraceClassVisitor;
 
 import javax.swing.*;
 import javax.swing.text.*;
@@ -20,9 +20,8 @@ import java.awt.dnd.DropTargetDropEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.util.List;
+import java.util.Optional;
 
 public class ContentPanel extends JScrollPane {
     private final Rikr controller;
@@ -34,13 +33,12 @@ public class ContentPanel extends JScrollPane {
     private final SyntaxHighlighter syntaxHighlighter;
     private final SyntaxHighlighter javaSyntaxHighlighter;
     private final LineHighlighter lineHighlighter;
-    private StringWriter stringWriter;
-    private PrintWriter printWriter;
-    private Textifier textifier;
-    private TraceClassVisitor traceClassVisitor;
-
     private final RenameActionHandler renameActionHandler;
-    private final int[] originalCaretPosition = new int[1];
+    // Where the context menu was opened, so Rename acts on the name that was clicked.
+    private int popupOffset;
+    private ClassNode displayedClass;
+    // The symbols of the bytecode text on screen; null while Java is shown.
+    private BytecodeText displayedBytecode;
     private LineNumberComponent lineNumberComponent;
 
     private final boolean javaOnlyMode;
@@ -65,10 +63,6 @@ public class ContentPanel extends JScrollPane {
         syntaxHighlighter = new SyntaxHighlighter();
         javaSyntaxHighlighter = new SyntaxHighlighter();
         lineHighlighter = new LineHighlighter(contentPane, Theme.BACKGROUND_COLOR);
-        stringWriter = new StringWriter();
-        printWriter = new PrintWriter(stringWriter);
-        textifier = new Textifier();
-        traceClassVisitor = new TraceClassVisitor(null, textifier, printWriter);
 
         // Set up drop listener
         setDropTarget();
@@ -78,7 +72,7 @@ public class ContentPanel extends JScrollPane {
         renameItem = new JMenuItem("Rename");
         contextMenu.add(renameItem);
 
-        renameActionHandler = new RenameActionHandler(controller, contentPane, document, originalCaretPosition);
+        renameActionHandler = new RenameActionHandler(controller, this);
 
         // Disable default right-click behavior
         contentPane.setComponentPopupMenu(null);
@@ -126,7 +120,7 @@ public class ContentPanel extends JScrollPane {
             @Override
             public void mousePressed(MouseEvent e) {
                 if (SwingUtilities.isRightMouseButton(e)) {
-                    originalCaretPosition[0] = contentPane.getCaretPosition();
+                    popupOffset = contentPane.viewToModel2D(e.getPoint());
                 }
             }
 
@@ -149,6 +143,7 @@ public class ContentPanel extends JScrollPane {
             // Render decompiled Java in this panel
             SwingUtilities.invokeLater(() -> {
                 clear();
+                displayedClass = classNode;
                 document.setCharacterAttributes(0, document.getLength(), style, true);
                 contentPane.selectAll();
 
@@ -169,12 +164,10 @@ public class ContentPanel extends JScrollPane {
                 document.setCharacterAttributes(0, document.getLength(), style, true);
                 contentPane.selectAll();
 
-                // Get the class bytecode in human-readable form
-                classNode.accept(traceClassVisitor);
-                printWriter.flush();
-
-                // Highlight and set caret position
-                syntaxHighlighter.highlight(document, stringWriter.toString());
+                BytecodeText bytecode = BytecodeText.of(classNode);
+                syntaxHighlighter.highlight(document, bytecode.text());
+                displayedClass = classNode;
+                displayedBytecode = bytecode;
                 contentPane.setCaretPosition(0);
             });
         }
@@ -206,13 +199,40 @@ public class ContentPanel extends JScrollPane {
     public void clear() {
         try {
             document.remove(0, document.getLength());
-            stringWriter = new StringWriter();
-            printWriter = new PrintWriter(stringWriter);
-            textifier = new Textifier();
-            traceClassVisitor = new TraceClassVisitor(null, textifier, printWriter);
+            displayedClass = null;
+            displayedBytecode = null;
         } catch (BadLocationException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public boolean isJavaOnly() {
+        return javaOnlyMode;
+    }
+
+    /**
+     * The class shown in this panel, or null when it is empty.
+     */
+    public ClassNode getDisplayedClass() {
+        return displayedClass;
+    }
+
+    public int getPopupOffset() {
+        return popupOffset;
+    }
+
+    /**
+     * The class, field or method named at the offset of the bytecode text. Always empty while Java is shown.
+     */
+    public Optional<Symbol> symbolAt(int offset) {
+        return displayedBytecode == null ? Optional.empty() : displayedBytecode.symbolAt(offset);
+    }
+
+    /**
+     * Move the caret back to an offset after the class is shown again, for example after a rename.
+     */
+    public void restoreCaret(int offset) {
+        SwingUtilities.invokeLater(() -> contentPane.setCaretPosition(Math.min(offset, document.getLength())));
     }
 
     private void setDropTarget() {

@@ -103,6 +103,20 @@ public class Workspace {
     }
 
     /**
+     * The JAR that holds this class node.
+     */
+    public synchronized Optional<String> jarOf(ClassNode classNode) {
+        for (Map.Entry<String, Jar> entry : jars.entrySet()) {
+            for (ClassNode candidate : entry.getValue().classes) {
+                if (candidate == classNode) {
+                    return Optional.of(entry.getKey());
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
      * The file the JAR was loaded from, or null for loose classes and unknown JARs.
      */
     public synchronized File sourceFile(String jar) {

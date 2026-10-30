@@ -7,6 +7,7 @@ import org.de.rikr.rename.RenameResult;
 import org.de.rikr.rename.RenameService;
 import org.de.rikr.rename.RenameType;
 import org.de.rikr.rename.RenameUndoResult;
+import org.de.rikr.symbol.Declaration;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.MethodNode;
@@ -38,6 +39,22 @@ public class RenameOperations {
 
     public RenamePreview previewMethod(String jar, ClassNode owner, MethodNode method, String newName) {
         return service.previewMethodRename(classes(jar), owner, method, newName);
+    }
+
+    public RenamePreview preview(String jar, Declaration declaration, String newName) {
+        return switch (declaration) {
+            case Declaration.ClassDeclaration target -> previewClass(jar, target.owner(), newName);
+            case Declaration.FieldDeclaration target -> previewField(jar, target.owner(), target.field(), newName);
+            case Declaration.MethodDeclaration target -> previewMethod(jar, target.owner(), target.method(), newName);
+        };
+    }
+
+    public RenameResult rename(String jar, Declaration declaration, String newName) {
+        return switch (declaration) {
+            case Declaration.ClassDeclaration target -> renameClass(jar, target.owner(), newName);
+            case Declaration.FieldDeclaration target -> renameField(jar, target.owner(), target.field(), newName);
+            case Declaration.MethodDeclaration target -> renameMethod(jar, target.owner(), target.method(), newName);
+        };
     }
 
     public RenameResult renameClass(String jar, ClassNode owner, String newName) {

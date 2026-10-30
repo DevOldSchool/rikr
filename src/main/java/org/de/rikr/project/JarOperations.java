@@ -6,6 +6,9 @@ import org.de.rikr.jar.JarExportService;
 import org.de.rikr.jar.LoadedJar;
 import org.de.rikr.model.ClassRef;
 import org.de.rikr.model.Workspace;
+import org.de.rikr.symbol.Declaration;
+import org.de.rikr.symbol.Symbol;
+import org.de.rikr.symbol.SymbolResolver;
 import org.objectweb.asm.tree.ClassNode;
 
 import java.io.File;
@@ -138,6 +141,18 @@ public class JarOperations {
 
     public Optional<ClassNode> findClass(ClassRef ref) {
         return workspace.findClass(ref);
+    }
+
+    public Optional<String> jarOf(ClassNode classNode) {
+        return workspace.jarOf(classNode);
+    }
+
+    /**
+     * Where the symbol is declared in the JAR, if it is declared there at all.
+     */
+    public Optional<Declaration> resolve(String jar, Symbol symbol) {
+        List<ClassNode> classes = workspace.classesSnapshot(jar);
+        return classes == null ? Optional.empty() : SymbolResolver.resolve(classes, symbol);
     }
 
     public File sourceFile(String jar) {

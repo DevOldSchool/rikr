@@ -493,6 +493,10 @@ public class ClassViewer {
         SwingUtilities.invokeLater(bookmarkWorkspacePanel::refresh);
     }
 
+    public void refreshTreeLabels() {
+        SwingUtilities.invokeLater(treePanel::refreshLabels);
+    }
+
     public void updateDirtyJars(java.util.Set<String> dirtyJars) {
         SwingUtilities.invokeLater(() -> treePanel.updateDirtyJars(dirtyJars));
     }

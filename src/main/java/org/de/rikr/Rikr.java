@@ -93,7 +93,6 @@ public class Rikr {
             return;
         }
         RenameUndoResult value = undo.get();
-        userInterface.updateTree(project.jars().classesByJar());
         userInterface.displayBytecode(value.affectedClass());
         log("Undid rename " + value.operation().newName() + " -> " + value.operation().oldName() + ".");
     }
@@ -201,7 +200,10 @@ public class Rikr {
             case ProjectEvent.JarRemoved removed -> refreshProjectState();
             case ProjectEvent.ClassRemoved removed -> {
             }
-            case ProjectEvent.Renamed renamed -> refreshProjectState();
+            case ProjectEvent.Renamed renamed -> {
+                userInterface.refreshTreeLabels();
+                refreshProjectState();
+            }
             case ProjectEvent.JarsSaved saved -> refreshProjectState();
             case ProjectEvent.BookmarksChanged changed -> userInterface.refreshBookmarks();
         }
