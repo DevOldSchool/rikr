@@ -1,6 +1,6 @@
 package org.de.rikr.project;
 
-import org.de.rikr.service.RenameOperation;
+import org.de.rikr.rename.RenameOperation;
 import org.objectweb.asm.tree.ClassNode;
 
 import java.util.List;

@@ -1,6 +1,6 @@
 package org.de.rikr.behavioral;
 
-import org.de.rikr.service.ClassMatch;
+import org.de.rikr.mapping.ClassMatch;
 import org.objectweb.asm.tree.ClassNode;
 
 import java.lang.reflect.Modifier;

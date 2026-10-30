@@ -1,11 +1,11 @@
 package org.de.rikr.project;
 
 import org.de.rikr.Logger;
+import org.de.rikr.jar.ClassLoadingService;
+import org.de.rikr.jar.JarExportService;
+import org.de.rikr.jar.LoadedJar;
 import org.de.rikr.model.ClassRef;
 import org.de.rikr.model.Workspace;
-import org.de.rikr.service.ClassLoadingService;
-import org.de.rikr.service.JarExportService;
-import org.de.rikr.service.LoadedJar;
 import org.objectweb.asm.tree.ClassNode;
 
 import java.io.File;

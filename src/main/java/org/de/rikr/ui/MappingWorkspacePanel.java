@@ -1,8 +1,8 @@
 package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
-import org.de.rikr.model.ClassMappingDecision;
-import org.de.rikr.service.ClassMatch;
+import org.de.rikr.mapping.ClassMappingDecision;
+import org.de.rikr.mapping.ClassMatch;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;
 import org.objectweb.asm.tree.ClassNode;

@@ -2,11 +2,11 @@ package org.de.rikr.project;
 
 import org.de.rikr.behavioral.ClassComparator;
 import org.de.rikr.behavioral.MethodComparator;
-import org.de.rikr.model.ClassMappingDecision;
+import org.de.rikr.mapping.ClassMappingDecision;
+import org.de.rikr.mapping.ClassMappingService;
+import org.de.rikr.mapping.ClassMatch;
 import org.de.rikr.model.ClassRef;
 import org.de.rikr.model.Workspace;
-import org.de.rikr.service.ClassMappingService;
-import org.de.rikr.service.ClassMatch;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.MethodNode;
 

@@ -1,18 +1,16 @@
 package org.de.rikr.project;
 
 import org.de.rikr.Logger;
-import org.de.rikr.model.ClassMappingDecision;
+import org.de.rikr.bookmark.ProjectBookmark;
+import org.de.rikr.decompiler.DecompilerCacheService;
+import org.de.rikr.mapping.ClassMappingDecision;
 import org.de.rikr.model.Workspace;
-import org.de.rikr.service.DecompilerCacheService;
-import org.de.rikr.service.ProjectBookmark;
-import org.de.rikr.service.ProjectLayout;
-import org.de.rikr.service.ProjectSession;
-import org.de.rikr.service.ReferenceIndexService;
-import org.de.rikr.service.RenameOperation;
-import org.de.rikr.service.RenameType;
-import org.de.rikr.service.SearchQuery;
-import org.de.rikr.service.SearchResult;
-import org.de.rikr.service.SearchService;
+import org.de.rikr.reference.ReferenceIndexService;
+import org.de.rikr.rename.RenameOperation;
+import org.de.rikr.rename.RenameType;
+import org.de.rikr.search.SearchQuery;
+import org.de.rikr.search.SearchResult;
+import org.de.rikr.search.SearchService;
 import org.objectweb.asm.tree.ClassNode;
 
 import java.io.File;

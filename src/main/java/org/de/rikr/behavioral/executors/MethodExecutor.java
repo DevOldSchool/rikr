@@ -1,7 +1,7 @@
 package org.de.rikr.behavioral.executors;
 
 import org.de.rikr.behavioral.InstructionExecutor;
-import org.de.rikr.loader.ClassNodeClassLoader;
+import org.de.rikr.jar.ClassNodeClassLoader;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;

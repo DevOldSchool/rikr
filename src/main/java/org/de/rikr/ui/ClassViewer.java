@@ -2,10 +2,10 @@ package org.de.rikr.ui;
 
 import com.formdev.flatlaf.util.SystemInfo;
 import org.de.rikr.Rikr;
-import org.de.rikr.service.ReferenceResult;
-import org.de.rikr.service.ProjectBookmark;
-import org.de.rikr.service.ProjectBookmarkType;
-import org.de.rikr.service.ProjectLayout;
+import org.de.rikr.bookmark.ProjectBookmark;
+import org.de.rikr.bookmark.ProjectBookmarkType;
+import org.de.rikr.project.ProjectLayout;
+import org.de.rikr.reference.ReferenceResult;
 import org.de.rikr.settings.Settings;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;

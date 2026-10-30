@@ -1,7 +1,7 @@
 package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
-import org.de.rikr.service.ReferenceResult;
+import org.de.rikr.reference.ReferenceResult;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;
 import org.objectweb.asm.tree.ClassNode;

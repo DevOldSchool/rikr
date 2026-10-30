@@ -1,12 +1,12 @@
 package org.de.rikr.project;
 
 import org.de.rikr.model.Workspace;
-import org.de.rikr.service.RenameOperation;
-import org.de.rikr.service.RenamePreview;
-import org.de.rikr.service.RenameResult;
-import org.de.rikr.service.RenameService;
-import org.de.rikr.service.RenameType;
-import org.de.rikr.service.RenameUndoResult;
+import org.de.rikr.rename.RenameOperation;
+import org.de.rikr.rename.RenamePreview;
+import org.de.rikr.rename.RenameResult;
+import org.de.rikr.rename.RenameService;
+import org.de.rikr.rename.RenameType;
+import org.de.rikr.rename.RenameUndoResult;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.MethodNode;

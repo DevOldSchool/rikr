@@ -1,8 +1,8 @@
 package org.de.rikr.ui.handler;
 
 import org.de.rikr.Rikr;
-import org.de.rikr.service.RenameResult;
-import org.de.rikr.service.RenamePreview;
+import org.de.rikr.rename.RenamePreview;
+import org.de.rikr.rename.RenameResult;
 import org.de.rikr.ui.model.*;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldNode;

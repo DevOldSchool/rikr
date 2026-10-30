@@ -1,10 +1,10 @@
 package org.de.rikr.project;
 
-import org.de.rikr.model.ClassMappingDecision;
-import org.de.rikr.service.ClassMatch;
-import org.de.rikr.service.JarExportService;
-import org.de.rikr.service.ProjectBookmark;
-import org.de.rikr.service.ProjectBookmarkType;
+import org.de.rikr.bookmark.ProjectBookmark;
+import org.de.rikr.bookmark.ProjectBookmarkType;
+import org.de.rikr.jar.JarExportService;
+import org.de.rikr.mapping.ClassMappingDecision;
+import org.de.rikr.mapping.ClassMatch;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

@@ -1,9 +1,9 @@
 package org.de.rikr.project;
 
+import org.de.rikr.bookmark.BookmarkService;
+import org.de.rikr.bookmark.ProjectBookmark;
 import org.de.rikr.model.ClassRef;
 import org.de.rikr.model.Workspace;
-import org.de.rikr.service.BookmarkService;
-import org.de.rikr.service.ProjectBookmark;
 import org.objectweb.asm.tree.ClassNode;
 
 import java.util.List;

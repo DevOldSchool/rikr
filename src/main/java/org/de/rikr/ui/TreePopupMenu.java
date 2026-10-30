@@ -1,9 +1,9 @@
 package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
-import org.de.rikr.service.ClassMatch;
-import org.de.rikr.service.ProjectBookmark;
-import org.de.rikr.service.ProjectBookmarkType;
+import org.de.rikr.bookmark.ProjectBookmark;
+import org.de.rikr.bookmark.ProjectBookmarkType;
+import org.de.rikr.mapping.ClassMatch;
 import org.de.rikr.ui.model.*;
 import org.de.rikr.utilities.ClassNodeUtil;
 import org.objectweb.asm.tree.*;
