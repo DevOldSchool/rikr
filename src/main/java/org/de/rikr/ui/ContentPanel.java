@@ -248,11 +248,7 @@ public class ContentPanel extends JScrollPane {
     }
 
     private void processDroppedFile(File file) {
-        if (file.getName().endsWith(".jar")) {
-            controller.jars().loadJars(new File[]{file});
-        } else if (file.getName().endsWith(".class")) {
-            controller.jars().loadClassFiles(new File[]{file});
-        }
+        controller.loadFiles(List.of(file));
     }
 
     public JTextPane getContentPane() {

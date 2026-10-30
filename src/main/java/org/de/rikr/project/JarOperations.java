@@ -39,44 +39,77 @@ public class JarOperations {
      * @return the names of the JARs that were loaded
      */
     public List<String> loadJars(File[] jarFiles) {
-        List<String> loaded = new ArrayList<>();
+        return addJars(readJars(List.of(jarFiles)));
+    }
+
+    /**
+     * Read JARs without adding them, so it is safe to call off the event thread. JARs that cannot be read, or
+     * whose file name is already loaded, are logged and skipped.
+     */
+    public List<LoadedJar> readJars(List<File> jarFiles) {
+        List<LoadedJar> read = new ArrayList<>();
         for (File file : jarFiles) {
-            // JARs are identified by file name, so a second JAR with the same name would be ambiguous.
             if (workspace.contains(file.getName())) {
-                File existing = workspace.sourceFile(file.getName());
-                logger.log("Skipped " + file.getAbsolutePath() + ": a JAR named " + file.getName()
-                    + " is already loaded" + (existing == null ? "" : " from " + existing.getAbsolutePath())
-                    + ". Remove it first.");
+                logAlreadyLoaded(file);
                 continue;
             }
             try {
-                LoadedJar jar = loader.readJar(file, stripAnnotations);
-                workspace.addJar(jar.jarName(), jar.classes(), jar.originalFile());
-                loaded.add(jar.jarName());
-                logger.log("Loaded " + jar.classes().size() + " classes from " + jar.jarName());
+                read.add(loader.readJar(file, stripAnnotations));
             } catch (IOException e) {
                 logger.log("Error processing jar file: " + file.getName() + ": " + e.getMessage());
             }
         }
-        if (!loaded.isEmpty()) {
-            events.publish(new ProjectEvent.JarsLoaded(loaded));
-        }
-        return loaded;
+        return read;
     }
 
-    public void loadClassFiles(File[] classFiles) {
-        boolean added = false;
+    /**
+     * Add JARs from {@link #readJars}, skipping any whose file name was loaded in the meantime.
+     *
+     * @return the names of the JARs that were added
+     */
+    public List<String> addJars(List<LoadedJar> jars) {
+        List<String> added = new ArrayList<>();
+        for (LoadedJar jar : jars) {
+            // JARs are identified by file name, so a second JAR with the same name would be ambiguous.
+            if (workspace.contains(jar.jarName())) {
+                logAlreadyLoaded(jar.originalFile());
+                continue;
+            }
+            workspace.addJar(jar.jarName(), jar.classes(), jar.originalFile());
+            added.add(jar.jarName());
+            logger.log("Loaded " + jar.classes().size() + " classes from " + jar.jarName());
+        }
+        if (!added.isEmpty()) {
+            events.publish(new ProjectEvent.JarsLoaded(added));
+        }
+        return added;
+    }
+
+    /**
+     * Read class files without adding them, so it is safe to call off the event thread. Files that cannot be
+     * read are logged and skipped.
+     */
+    public List<ClassNode> readClassFiles(List<File> classFiles) {
+        List<ClassNode> read = new ArrayList<>();
         for (File file : classFiles) {
             try {
-                workspace.addLooseClass(loader.readClass(file, stripAnnotations));
-                added = true;
+                read.add(loader.readClass(file, stripAnnotations));
             } catch (IOException e) {
                 logger.log("Error processing class file: " + file.getName() + ": " + e.getMessage());
             }
         }
-        if (added) {
-            events.publish(new ProjectEvent.JarsLoaded(List.of(Workspace.LOOSE_CLASSES)));
+        return read;
+    }
+
+    /**
+     * Add classes from {@link #readClassFiles} to {@link Workspace#LOOSE_CLASSES}.
+     */
+    public void addClassFiles(List<ClassNode> classes) {
+        if (classes.isEmpty()) {
+            return;
         }
+        classes.forEach(workspace::addLooseClass);
+        events.publish(new ProjectEvent.JarsLoaded(List.of(Workspace.LOOSE_CLASSES)));
     }
 
     public void removeJar(String jar) {
@@ -133,5 +166,12 @@ public class JarOperations {
 
     public boolean overwriteOriginalJar(String jar) throws IOException {
         return exporter.overwriteOriginalJar(workspace.sourceFile(jar), workspace.classesSnapshot(jar));
+    }
+
+    private void logAlreadyLoaded(File file) {
+        File existing = workspace.sourceFile(file.getName());
+        logger.log("Skipped " + file.getAbsolutePath() + ": a JAR named " + file.getName()
+            + " is already loaded" + (existing == null ? "" : " from " + existing.getAbsolutePath())
+            + ". Remove it first.");
     }
 }

@@ -20,11 +20,7 @@ public class ProjectSessionActions {
         if (chooser.showOpenDialog(frame) != JFileChooser.APPROVE_OPTION) {
             return;
         }
-        try {
-            controller.openProject(chooser.getSelectedFile());
-        } catch (Exception exception) {
-            showFailure("Open Project", exception);
-        }
+        controller.openProject(chooser.getSelectedFile(), exception -> showFailure("Open Project", exception));
     }
 
     public void saveProject() {

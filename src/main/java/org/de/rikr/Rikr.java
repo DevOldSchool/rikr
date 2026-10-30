@@ -3,6 +3,7 @@ package org.de.rikr;
 import com.formdev.flatlaf.util.SystemInfo;
 import org.de.rikr.bookmark.ProjectBookmark;
 import org.de.rikr.decompiler.DecompilerCacheService;
+import org.de.rikr.jar.LoadedJar;
 import org.de.rikr.project.Bookmarks;
 import org.de.rikr.project.JarOperations;
 import org.de.rikr.project.MappingOperations;
@@ -18,18 +19,22 @@ import org.de.rikr.resources.Images;
 import org.de.rikr.search.SearchQuery;
 import org.de.rikr.search.SearchResult;
 import org.de.rikr.settings.SettingsManager;
+import org.de.rikr.task.TaskRunner;
 import org.de.rikr.ui.ClassNodeImages;
 import org.de.rikr.ui.ClassViewer;
+import org.objectweb.asm.tree.ClassNode;
 
 import javax.swing.*;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 public class Rikr {
     private final ClassViewer userInterface;
     private final ProjectSessionService projectSessionService = new ProjectSessionService();
+    private final TaskRunner tasks;
     private Project project;
     private Runnable unsubscribe = () -> {
     };
@@ -37,6 +42,7 @@ public class Rikr {
 
     public Rikr() {
         userInterface = new ClassViewer(this);
+        tasks = new TaskRunner(userInterface.getLogPanel());
     }
 
     public void start() {
@@ -111,11 +117,54 @@ public class Rikr {
         log("Saved project to " + currentProjectFile.getAbsolutePath());
     }
 
-    public void openProject(File source) throws IOException {
-        ProjectSession session = projectSessionService.load(source);
-        Project opened = Project.open(userInterface.getLogPanel(), session);
+    /**
+     * Load JAR and class files in the background, then add them to the project that is open now. If another
+     * project is opened first, the files are dropped.
+     */
+    public void loadFiles(List<File> files) {
+        List<File> jarFiles = files.stream().filter(file -> file.getName().endsWith(".jar")).toList();
+        List<File> classFiles = files.stream().filter(file -> file.getName().endsWith(".class")).toList();
+        if (jarFiles.isEmpty() && classFiles.isEmpty()) {
+            return;
+        }
+        Project target = project;
+        JarOperations jars = target.jars();
+        log("Loading " + files.stream().map(File::getName).toList() + "...");
+        tasks.run(
+            "Loading files",
+            () -> new LoadedFiles(jars.readJars(jarFiles), jars.readClassFiles(classFiles)),
+            loaded -> {
+                if (project != target) {
+                    log("Did not add " + files.size() + " files because another project was opened.");
+                    return;
+                }
+                jars.addJars(loaded.jars());
+                jars.addClassFiles(loaded.classes());
+            }
+        );
+    }
+
+    /**
+     * Open a project in the background and switch to it when it is ready.
+     *
+     * @param onFailure called on the event thread if the project cannot be opened
+     */
+    public void openProject(File source, Consumer<Exception> onFailure) {
+        log("Opening project " + source.getAbsolutePath() + "...");
+        tasks.run(
+            "Opening project",
+            () -> {
+                ProjectSession session = projectSessionService.load(source);
+                return new OpenedProject(Project.open(userInterface.getLogPanel(), session), session);
+            },
+            opened -> showProject(opened, source),
+            onFailure
+        );
+    }
+
+    private void showProject(OpenedProject opened, File source) {
         Project previous = project;
-        useProject(opened);
+        useProject(opened.project());
         if (previous != null) {
             previous.close();
         }
@@ -123,7 +172,7 @@ public class Rikr {
         // The code view shows a class of the closed project.
         userInterface.clearContent();
         userInterface.updateTree(project.jars().classesByJar());
-        userInterface.applyProjectLayout(session.layout());
+        userInterface.applyProjectLayout(opened.session().layout());
         userInterface.updateProjectTitle(currentProjectFile);
         refreshProjectState();
         log("Opened project " + currentProjectFile.getAbsolutePath());
@@ -134,6 +183,7 @@ public class Rikr {
     }
 
     public void shutdown() {
+        tasks.close();
         if (project != null) {
             project.close();
         }
@@ -160,6 +210,12 @@ public class Rikr {
     private void refreshProjectState() {
         userInterface.updateDirtyJars(project.renames().dirtyJars());
         userInterface.refreshBookmarks();
+    }
+
+    private record LoadedFiles(List<LoadedJar> jars, List<ClassNode> classes) {
+    }
+
+    private record OpenedProject(Project project, ProjectSession session) {
     }
 
     public static void main(String[] args) {

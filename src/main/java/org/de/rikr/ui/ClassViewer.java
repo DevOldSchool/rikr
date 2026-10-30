@@ -422,14 +422,7 @@ public class ClassViewer {
         int result = fileChooser.showOpenDialog(frame);
 
         if (result == JFileChooser.APPROVE_OPTION) {
-            File[] selectedFiles = fileChooser.getSelectedFiles();
-            for (File file : selectedFiles) {
-                if (file.getName().endsWith(".jar")) {
-                    controller.jars().loadJars(new File[]{file});
-                } else if (file.getName().endsWith(".class")) {
-                    controller.jars().loadClassFiles(new File[]{file});
-                }
-            }
+            controller.loadFiles(List.of(fileChooser.getSelectedFiles()));
         }
     }
 

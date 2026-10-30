@@ -3,6 +3,7 @@ package org.de.rikr.project;
 import org.de.rikr.bookmark.ProjectBookmark;
 import org.de.rikr.bookmark.ProjectBookmarkType;
 import org.de.rikr.jar.JarExportService;
+import org.de.rikr.jar.LoadedJar;
 import org.de.rikr.mapping.ClassMappingDecision;
 import org.de.rikr.mapping.ClassMatch;
 import org.junit.jupiter.api.AfterEach;
@@ -44,6 +45,23 @@ class ProjectTest {
         assertEquals(List.of("gamepack.jar"), loaded);
         assertEquals("first/Only", project.jars().classes("gamepack.jar").getFirst().name);
         assertEquals(first.getAbsoluteFile(), project.jars().sourceFile("gamepack.jar"));
+        assertTrue(log.stream().anyMatch(message -> message.contains("already loaded")));
+    }
+
+    @Test
+    void skipsReadJarWhoseNameWasLoadedBeforeItWasAdded() throws Exception {
+        File first = writeJar("one", "gamepack.jar", classNode("first/Only"));
+        File second = writeJar("two", "gamepack.jar", classNode("second/Only"));
+        List<LoadedJar> read = project.jars().readJars(List.of(second));
+        List<ProjectEvent> seen = new ArrayList<>();
+        project.events().subscribe(seen::add);
+
+        project.jars().loadJars(new File[]{first});
+        List<String> added = project.jars().addJars(read);
+
+        assertEquals(List.of(), added);
+        assertEquals("first/Only", project.jars().classes("gamepack.jar").getFirst().name);
+        assertEquals(1, seen.size());
         assertTrue(log.stream().anyMatch(message -> message.contains("already loaded")));
     }
 
