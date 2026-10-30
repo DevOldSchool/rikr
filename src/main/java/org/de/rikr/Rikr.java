@@ -3,6 +3,7 @@ package org.de.rikr;
 import com.formdev.flatlaf.util.SystemInfo;
 import org.de.rikr.bookmark.ProjectBookmark;
 import org.de.rikr.decompiler.DecompilerCacheService;
+import org.de.rikr.jar.JarExportService;
 import org.de.rikr.jar.LoadedJar;
 import org.de.rikr.project.Bookmarks;
 import org.de.rikr.project.JarOperations;
@@ -13,6 +14,7 @@ import org.de.rikr.project.ProjectSession;
 import org.de.rikr.project.ProjectSessionService;
 import org.de.rikr.project.RenameOperations;
 import org.de.rikr.reference.ReferenceIndexService;
+import org.de.rikr.rename.RenameOperation;
 import org.de.rikr.rename.RenameUndoResult;
 import org.de.rikr.resources.Fonts;
 import org.de.rikr.resources.Images;
@@ -141,6 +143,75 @@ public class Rikr {
                 jars.addClassFiles(loaded.classes());
             }
         );
+    }
+
+    /**
+     * Export a JAR with its renamed classes to a new file. The classes are converted to bytes now and written in
+     * the background.
+     *
+     * @param onFailure called on the event thread if the JAR cannot be written
+     */
+    public void exportJar(String jar, File destination, Consumer<Exception> onFailure) {
+        Project target = project;
+        JarOperations.JarSnapshot snapshot;
+        try {
+            snapshot = target.jars().snapshot(jar);
+        } catch (IOException exception) {
+            onFailure.accept(exception);
+            return;
+        }
+        long changeCount = target.renames().changeCount();
+        log("Saving " + jar + " to " + destination.getAbsolutePath() + "...");
+        tasks.run(
+            "Saving " + jar,
+            () -> target.jars().write(snapshot, destination),
+            result -> {
+                logExport(result, destination);
+                target.renames().markExported(jar, changeCount);
+            },
+            onFailure
+        );
+    }
+
+    /**
+     * Replace the JAR file a JAR was loaded from, keeping a backup next to it. Its renames are then part of the
+     * file, so they leave the rename history.
+     *
+     * @param onFailure called on the event thread if the JAR cannot be written
+     */
+    public void overwriteOriginalJar(String jar, Consumer<Exception> onFailure) {
+        Project target = project;
+        JarOperations.JarSnapshot snapshot;
+        try {
+            snapshot = target.jars().snapshot(jar);
+        } catch (IOException exception) {
+            onFailure.accept(exception);
+            return;
+        }
+        long changeCount = target.renames().changeCount();
+        List<RenameOperation> written = target.renames().history().stream()
+            .filter(operation -> operation.jarName().equals(jar))
+            .toList();
+        log("Overwriting " + jar + "...");
+        tasks.run(
+            "Overwriting " + jar,
+            () -> target.jars().overwriteOriginal(snapshot),
+            result -> {
+                logExport(result, snapshot.source());
+                log("Kept the previous file as " + snapshot.source().getName() + ".bak");
+                target.renames().commitOverwrittenJar(jar, written, changeCount);
+            },
+            onFailure
+        );
+    }
+
+    private void logExport(JarExportService.ExportResult result, File destination) {
+        log("Saved " + result.classes() + " classes and " + result.resources() + " resources to "
+            + destination.getAbsolutePath());
+        if (result.removedSignatureFiles() > 0) {
+            log("Left out " + result.removedSignatureFiles()
+                + " signature files: the classes changed, so the signature no longer matches.");
+        }
     }
 
     /**

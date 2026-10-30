@@ -171,9 +171,16 @@ public class RenameService {
         dirtyJars.remove(jarName);
     }
 
-    public synchronized void commitOverwrittenJar(String jarName) {
-        history.removeIf(operation -> operation.jarName().equals(jarName));
-        dirtyJars.remove(jarName);
+    /**
+     * The original JAR was overwritten with the {@code written} renames applied, so they leave the history.
+     *
+     * @param clean true when nothing was renamed since the JAR was written
+     */
+    public synchronized void commitOverwrittenJar(String jarName, List<RenameOperation> written, boolean clean) {
+        history.removeIf(operation -> operation.jarName().equals(jarName) && written.contains(operation));
+        if (clean) {
+            dirtyJars.remove(jarName);
+        }
     }
 
     public synchronized void removeJar(String jarName) {

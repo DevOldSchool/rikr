@@ -1,5 +1,7 @@
 package org.de.rikr.project;
 
+import org.de.rikr.mapping.format.NameMappings;
+import org.de.rikr.model.OriginalNames;
 import org.de.rikr.model.Workspace;
 import org.de.rikr.rename.RenameOperation;
 import org.de.rikr.rename.RenamePreview;
@@ -12,6 +14,8 @@ import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.MethodNode;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -23,6 +27,8 @@ public class RenameOperations {
     private final Workspace workspace;
     private final EventBus events;
     private final RenameService service = new RenameService();
+    // Counts renames and undos, so a save that started earlier can tell whether it still has the latest names.
+    private long changeCount;
 
     RenameOperations(Workspace workspace, EventBus events) {
         this.workspace = workspace;
@@ -84,6 +90,37 @@ public class RenameOperations {
         return undo;
     }
 
+    /**
+     * Every class, field and method of the JAR whose name differs from the name it was loaded with. A class is
+     * listed when it or one of its members was renamed. Sorted by original class name.
+     */
+    public NameMappings nameMappings(String jar) {
+        OriginalNames original = workspace.originalNames();
+        List<NameMappings.ClassMapping> mappings = new ArrayList<>();
+        for (ClassNode classNode : classes(jar)) {
+            List<NameMappings.MemberMapping> fields = new ArrayList<>();
+            for (FieldNode field : classNode.fields) {
+                OriginalNames.Member loaded = original.field(field);
+                if (!loaded.name().equals(field.name)) {
+                    fields.add(new NameMappings.MemberMapping(loaded.name(), loaded.descriptor(), field.name));
+                }
+            }
+            List<NameMappings.MemberMapping> methods = new ArrayList<>();
+            for (MethodNode method : classNode.methods) {
+                OriginalNames.Member loaded = original.method(method);
+                if (!loaded.name().equals(method.name)) {
+                    methods.add(new NameMappings.MemberMapping(loaded.name(), loaded.descriptor(), method.name));
+                }
+            }
+            String originalName = original.className(classNode);
+            if (!originalName.equals(classNode.name) || !fields.isEmpty() || !methods.isEmpty()) {
+                mappings.add(new NameMappings.ClassMapping(originalName, classNode.name, fields, methods));
+            }
+        }
+        mappings.sort(Comparator.comparing(NameMappings.ClassMapping::original));
+        return new NameMappings(mappings);
+    }
+
     public List<RenameOperation> history() {
         return service.getHistory();
     }
@@ -92,13 +129,26 @@ public class RenameOperations {
         return service.getDirtyJars();
     }
 
-    public void markExported(String jar) {
-        service.markExported(jar);
+    public long changeCount() {
+        return changeCount;
+    }
+
+    /**
+     * Record that the JAR was exported. It stays unsaved if anything was renamed after {@code changeCountAtSave}.
+     */
+    public void markExported(String jar, long changeCountAtSave) {
+        if (changeCount == changeCountAtSave) {
+            service.markExported(jar);
+        }
         events.publish(new ProjectEvent.JarsSaved());
     }
 
-    public void commitOverwrittenJar(String jar) {
-        service.commitOverwrittenJar(jar);
+    /**
+     * Record that the original JAR now contains the {@code written} renames, so they must not be replayed when the
+     * project is reopened. It stays unsaved if anything was renamed after {@code changeCountAtSave}.
+     */
+    public void commitOverwrittenJar(String jar, List<RenameOperation> written, long changeCountAtSave) {
+        service.commitOverwrittenJar(jar, written, changeCount == changeCountAtSave);
         events.publish(new ProjectEvent.JarsSaved());
     }
 
@@ -126,6 +176,7 @@ public class RenameOperations {
     }
 
     private void publish(RenameOperation operation, boolean undo, RenameResult result) {
+        changeCount++;
         events.publish(new ProjectEvent.Renamed(operation, undo, result.declarationOwners()));
     }
 }

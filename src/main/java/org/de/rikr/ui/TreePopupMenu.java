@@ -3,6 +3,7 @@ package org.de.rikr.ui;
 import org.de.rikr.Rikr;
 import org.de.rikr.mapping.SimilarClassReport;
 import org.de.rikr.symbol.Declaration;
+import org.de.rikr.ui.action.RenameMappingExport;
 import org.de.rikr.ui.model.*;
 import org.de.rikr.utilities.ClassNodeUtil;
 import org.objectweb.asm.tree.ClassNode;
@@ -34,6 +35,7 @@ public class TreePopupMenu extends JPopupMenu {
     private final JMenuItem groupByInterface = item("Group by Interface",
         node -> group(node, ClassNodeUtil::groupByInterface));
     private final JMenuItem removeGrouping = item("Remove Grouping", this::removeGrouping);
+    private final JMenuItem exportRenameMappings = item("Export Rename Mappings...", this::exportRenameMappings);
     private final JMenuItem findExtenders = item("Find Extenders", this::findExtenders);
     private final JMenuItem findImplementors = item("Find Implementors", this::findImplementors);
     private final JMenuItem findMatchingClassNodes = item("Find Matching Class Nodes", this::findMatchingClassNodes);
@@ -83,6 +85,7 @@ public class TreePopupMenu extends JPopupMenu {
                 add(groupBySuperclass);
                 add(groupByInterface);
                 add(removeGrouping);
+                add(exportRenameMappings);
             }
             case ClassMutableTreeNode ignored -> {
                 add(getClassNodeSignature);
@@ -171,6 +174,12 @@ public class TreePopupMenu extends JPopupMenu {
                 node.add(new ClassMutableTreeNode(jarNode.getJarName(), classNode, classNode.name + ".class"));
             }
             controller.getUserInterface().getTreePanel().updateNode(node);
+        }
+    }
+
+    private void exportRenameMappings(DefaultMutableTreeNode node) {
+        if (node instanceof JarMutableTreeNode jarNode) {
+            RenameMappingExport.export(controller, controller.getUserInterface().getFrame(), jarNode.getJarName());
         }
     }
 

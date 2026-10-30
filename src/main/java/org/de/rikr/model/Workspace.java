@@ -22,6 +22,7 @@ public class Workspace {
     public static final String LOOSE_CLASSES = "Classes";
 
     private final Map<String, Jar> jars = new HashMap<>();
+    private final OriginalNames originalNames = new OriginalNames();
 
     public synchronized boolean contains(String jar) {
         return jars.containsKey(jar);
@@ -35,11 +36,13 @@ public class Workspace {
             throw new IllegalArgumentException("A JAR named " + jar + " is already loaded");
         }
         jars.put(jar, new Jar(new ArrayList<>(classes), source == null ? null : source.getAbsoluteFile()));
+        classes.forEach(originalNames::record);
     }
 
     public synchronized void addLooseClass(ClassNode classNode) {
         Jar group = jars.computeIfAbsent(LOOSE_CLASSES, name -> new Jar(new ArrayList<>(), null));
         group.classes.add(classNode);
+        originalNames.record(classNode);
         group.byName = null;
     }
 
@@ -90,7 +93,19 @@ public class Workspace {
     }
 
     public synchronized boolean removeJar(String jar) {
-        return jars.remove(jar) != null;
+        Jar removed = jars.remove(jar);
+        if (removed == null) {
+            return false;
+        }
+        removed.classes.forEach(originalNames::forget);
+        return true;
+    }
+
+    /**
+     * The names every loaded class and member had when it was loaded.
+     */
+    public OriginalNames originalNames() {
+        return originalNames;
     }
 
     public synchronized boolean removeClass(String jar, ClassNode classNode) {

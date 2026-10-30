@@ -26,14 +26,13 @@ public class JarOperations {
     private final Workspace workspace;
     private final EventBus events;
     private final ClassLoadingService loader = new ClassLoadingService();
-    private final JarExportService exporter;
+    private final JarExportService exporter = new JarExportService();
     private volatile boolean stripAnnotations;
 
     JarOperations(Logger logger, Workspace workspace, EventBus events) {
         this.logger = logger;
         this.workspace = workspace;
         this.events = events;
-        this.exporter = new JarExportService(logger);
     }
 
     /**
@@ -171,16 +170,36 @@ public class JarOperations {
         exporter.saveClassToFile(classNode, destination);
     }
 
-    public void exportJar(String jar, File destination) throws IOException {
+    /**
+     * A JAR's classes as class file bytes, ready to write on another thread. Take it on the event thread, where
+     * renames happen, so no rename can change the classes while they are converted.
+     */
+    public record JarSnapshot(String jar, File source, Map<String, byte[]> classEntries) {
+    }
+
+    public JarSnapshot snapshot(String jar) throws IOException {
         List<ClassNode> classes = workspace.classesSnapshot(jar);
         if (classes == null) {
             throw new IOException("Unknown jar group: " + jar);
         }
-        exporter.exportJar(destination, classes);
+        return new JarSnapshot(jar, workspace.sourceFile(jar), exporter.toEntries(classes));
     }
 
-    public boolean overwriteOriginalJar(String jar) throws IOException {
-        return exporter.overwriteOriginalJar(workspace.sourceFile(jar), workspace.classesSnapshot(jar));
+    /**
+     * Write the snapshot to a new JAR, with the resources of the JAR it was loaded from. Safe off the event thread.
+     */
+    public JarExportService.ExportResult write(JarSnapshot snapshot, File destination) throws IOException {
+        return exporter.writeJar(snapshot.source(), destination, snapshot.classEntries());
+    }
+
+    /**
+     * Replace the JAR the snapshot was loaded from, keeping a backup. Safe off the event thread.
+     */
+    public JarExportService.ExportResult overwriteOriginal(JarSnapshot snapshot) throws IOException {
+        if (snapshot.source() == null) {
+            throw new IOException(snapshot.jar() + " was not loaded from a JAR file");
+        }
+        return exporter.overwriteOriginalJar(snapshot.source(), snapshot.classEntries());
     }
 
     private void logAlreadyLoaded(File file) {

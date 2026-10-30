@@ -7,6 +7,8 @@ import org.de.rikr.jar.LoadedJar;
 import org.de.rikr.mapping.ClassMappingDecision;
 import org.de.rikr.mapping.ClassMatch;
 import org.de.rikr.mapping.SimilarClassReport;
+import org.de.rikr.mapping.format.NameMappings;
+import org.de.rikr.rename.RenameOperation;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -156,6 +158,56 @@ class ProjectTest {
         assertEquals("n", match.equivalentMethods().getFirst().target().name);
     }
 
+    @Test
+    void overwriteKeepsRenamesMadeAfterTheJarWasWrittenAndLeavesItUnsaved() throws Exception {
+        loadOldAndNew();
+        ClassNode owner = project.jars().classes("old.jar").getFirst();
+        project.renames().renameClass("old.jar", owner, "Player");
+        List<RenameOperation> written = project.renames().history();
+        long changeCountAtSave = project.renames().changeCount();
+        project.renames().renameField("old.jar", owner, owner.fields.getFirst(), "self");
+
+        project.renames().commitOverwrittenJar("old.jar", written, changeCountAtSave);
+
+        assertEquals(List.of("self"), project.renames().history().stream().map(RenameOperation::newName).toList());
+        assertEquals(Set.of("old.jar"), project.renames().dirtyJars());
+    }
+
+    @Test
+    void exportMarksTheJarSavedOnlyWhenNothingWasRenamedSince() throws Exception {
+        loadOldAndNew();
+        ClassNode owner = project.jars().classes("old.jar").getFirst();
+        project.renames().renameClass("old.jar", owner, "Player");
+        long changeCountAtSave = project.renames().changeCount();
+
+        project.renames().markExported("old.jar", changeCountAtSave - 1);
+        assertEquals(Set.of("old.jar"), project.renames().dirtyJars());
+
+        project.renames().markExported("old.jar", changeCountAtSave);
+        assertEquals(Set.of(), project.renames().dirtyJars());
+    }
+
+    @Test
+    void nameMappingsUseLoadedNamesAndDescriptorsAndSurviveReopening() throws Exception {
+        loadOldAndNew();
+        ClassNode owner = project.jars().classes("old.jar").getFirst();
+        project.renames().renameClass("old.jar", owner, "Player");
+        project.renames().renameField("old.jar", owner, owner.fields.getFirst(), "self");
+        NameMappings expected = new NameMappings(List.of(new NameMappings.ClassMapping("a", "Player",
+            List.of(new NameMappings.MemberMapping("f", "La;", "self")), List.of())));
+
+        assertEquals(expected, project.renames().nameMappings("old.jar"));
+        assertEquals(new NameMappings(List.of()), project.renames().nameMappings("new.jar"));
+
+        try (Project reopened = Project.open(log::add, project.toSession(layout()))) {
+            assertEquals(expected, reopened.renames().nameMappings("old.jar"));
+        }
+    }
+
+    private static ProjectLayout layout() {
+        return new ProjectLayout(0, 0, 0, 0, 0, 0, 0, false, false, false, "PROJECT");
+    }
+
     private static ClassNode classReturning(String name, String method, int value) {
         ClassNode classNode = classNode(name);
         classNode.fields.add(new FieldNode(Opcodes.ACC_PUBLIC, "f", "I", null, null));
@@ -169,8 +221,8 @@ class ProjectTest {
 
     private File writeJar(String directory, String name, ClassNode classNode) throws Exception {
         File jar = tempDir.resolve(directory).resolve(name).toFile();
-        new JarExportService(message -> {
-        }).exportJar(jar, List.of(classNode));
+        JarExportService exporter = new JarExportService();
+        exporter.writeJar(null, jar, exporter.toEntries(List.of(classNode)));
         return jar;
     }
 

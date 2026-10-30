@@ -85,14 +85,7 @@ public class ClassFileActions {
                 file = new File(file.getParentFile(), file.getName() + ".jar");
             }
 
-            try {
-                controller.jars().exportJar(jarName, file);
-                controller.renames().markExported(jarName);
-                controller.log("Saved JAR to " + file.getAbsolutePath());
-            } catch (Exception ex) {
-                controller.log("Save JAR failed: " + ex.getMessage());
-                JOptionPane.showMessageDialog(frame, "Save failed: " + ex.getMessage(), "Save Selected JAR", JOptionPane.ERROR_MESSAGE);
-            }
+            controller.exportJar(jarName, file, exception -> showFailure("Save Selected JAR", exception));
         }
     }
 
@@ -119,29 +112,13 @@ public class ClassFileActions {
             return;
         }
 
-        try {
-            boolean ok = controller.jars().overwriteOriginalJar(jarName);
+        controller.overwriteOriginalJar(jarName, exception -> showFailure("Overwrite Original JAR", exception));
+    }
 
-            if (ok) {
-                controller.renames().commitOverwrittenJar(jarName);
-                controller.log("Overwrote original JAR: " + original.getAbsolutePath());
-            } else {
-                JOptionPane.showMessageDialog(
-                    frame,
-                    "Could not determine original JAR for '" + jarName + "'.",
-                    "Overwrite Original JAR",
-                    JOptionPane.ERROR_MESSAGE
-                );
-            }
-        } catch (Exception ex) {
-            controller.log("Overwrite failed: " + ex.getMessage());
-            JOptionPane.showMessageDialog(
-                frame,
-                "Overwrite failed: " + ex.getMessage(),
-                "Overwrite Original JAR",
-                JOptionPane.ERROR_MESSAGE
-            );
-        }
+    private void showFailure(String title, Exception exception) {
+        controller.log(title + " failed: " + exception.getMessage());
+        JOptionPane.showMessageDialog(frame, title + " failed: " + exception.getMessage(), title,
+            JOptionPane.ERROR_MESSAGE);
     }
 
     private ClassNode getSelectedClassNode(DefaultMutableTreeNode node) {
