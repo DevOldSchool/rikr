@@ -123,7 +123,7 @@ class RenameServiceTest {
         RenameService service = new RenameService();
 
         service.applyMethodRename("app.jar", classes, owner, renamed, "foo");
-        service.undoLast(jarName -> classes).orElseThrow();
+        assertTrue(service.undoLast(jarName -> classes).isPresent());
 
         assertEquals("m", renamed.name);
         assertEquals("foo", existing.name);

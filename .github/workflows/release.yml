@@ -1,0 +1,99 @@
+name: Release
+
+# Push a tag such as v1.2.0 to build Rikr for macOS, Windows and Linux and publish a GitHub release.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    strategy:
+      matrix:
+        include:
+          # macos-latest runs on Apple silicon, so the .dmg is for arm64 Macs.
+          - os: macos-latest
+            platform: macos-arm64
+            types: dmg
+          - os: windows-latest
+            platform: windows-x64
+            types: app-image
+          # The .tar.gz runs on any 64-bit Linux; .deb and .rpm install on Debian/Ubuntu and Fedora/openSUSE.
+          - os: ubuntu-latest
+            platform: linux-x64
+            types: app-image deb rpm
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Verify and package
+        run: mvn -B verify
+
+      - name: Install Linux packaging tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y fakeroot rpm
+
+      # jpackage needs a plain version number, so v1.2.0 becomes 1.2.0.
+      - name: Package with jpackage
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p target/jpackage-input dist
+          cp target/rikr-*.jar target/jpackage-input/rikr.jar
+          cp target/lib/*.jar target/jpackage-input/
+          for type in ${{ matrix.types }}; do
+            # Linux installers also add a menu entry; the option is only valid for them.
+            extra=""
+            if [ "$type" = "deb" ] || [ "$type" = "rpm" ]; then
+              extra="--linux-shortcut"
+            fi
+            jpackage --type "$type" --name Rikr --app-version "$version" \
+              --vendor "Rikr" --description "A reverse engineering workbench for Java bytecode" \
+              --input target/jpackage-input --main-jar rikr.jar --main-class org.de.rikr.Rikr \
+              $extra --dest dist
+          done
+          # An app image is a folder with its own Java runtime: archive it so it can be attached to the release.
+          if [ -d dist/Rikr ]; then
+            name="Rikr-$version-${{ matrix.platform }}"
+            if [ "$RUNNER_OS" = "Windows" ]; then
+              (cd dist && 7z a "$name.zip" Rikr > /dev/null)
+            else
+              tar -czf "dist/$name.tar.gz" -C dist Rikr
+            fi
+            rm -rf dist/Rikr
+          fi
+          ls dist
+
+      - name: Keep the packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: rikr-${{ matrix.platform }}
+          path: dist/*
+
+  release:
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Collect the packages
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "Rikr $GITHUB_REF_NAME" --generate-notes

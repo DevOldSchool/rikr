@@ -48,7 +48,7 @@ public class SettingsPanel extends JPanel {
         add(label("Theme"), gridBagConstraints);
         gridBagConstraints.gridx = 1;
         themeCombo = new JComboBox<>(ThemeRegistry.all());
-        
+
         String id = (settings.getThemeId() != null && !settings.getThemeId().isEmpty()) ? settings.getThemeId() : "dark.flatij";
         ThemeProvider selected = ThemeRegistry.getById(id);
         if (selected != null) {

@@ -41,7 +41,7 @@ public class SimulatorBar extends JPanel {
 
     private void applyTheme() {
         topPanel.setBackground(Theme.BACKGROUND_COLOR);
-        
+
         revalidate();
         repaint();
     }

@@ -13,7 +13,7 @@ public class ControlFlowExecutor implements InstructionExecutor {
         if (stack.isEmpty()) {
             return null;
         }
-        
+
         Object reference;
 
         switch (instruction.getOpcode()) {

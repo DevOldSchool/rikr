@@ -52,7 +52,7 @@ public class MethodSimulatorPanel extends JPanel {
     private void applyTheme() {
         stackArea.setBackground(Theme.BACKGROUND_COLOR);
         localVariableArea.setBackground(Theme.BACKGROUND_COLOR);
-        
+
         revalidate();
         repaint();
     }

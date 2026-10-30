@@ -106,7 +106,7 @@ public final class ControlFlowBuilder {
             bodies.add(lines);
             blockLines.add(new ArrayList<>(lineNumbers));
             blockCalls.add(calls);
-            addEdges(edges, block, last, end < size ? blockOf[end] : -1, labelIndex, blockOf, printer);
+            addEdges(edges, block, last, end < size ? blockOf[end] : -1, labelIndex, blockOf);
         }
         addHandlerEdges(edges, method, labelIndex, blockOf, starts, size);
 
@@ -140,8 +140,7 @@ public final class ControlFlowBuilder {
         AbstractInsnNode last,
         int next,
         Map<LabelNode, Integer> labelIndex,
-        int[] blockOf,
-        Printer printer
+        int[] blockOf
     ) {
         if (last instanceof JumpInsnNode jump) {
             int target = blockOf[labelIndex.get(jump.label)];

@@ -23,6 +23,7 @@ public class LineNumberComponent extends JComponent {
     private int fontLeading;
     private int fontDescent;
     private final int lineHeightOffset;
+    private int preferredWidth;
 
     public LineNumberComponent(JTextPane textPane) {
         this.textPane = textPane;
@@ -34,11 +35,13 @@ public class LineNumberComponent extends JComponent {
         textPane.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
+                updatePreferredWidth();
                 repaint();
             }
 
             @Override
             public void removeUpdate(DocumentEvent e) {
+                updatePreferredWidth();
                 repaint();
             }
 
@@ -62,6 +65,7 @@ public class LineNumberComponent extends JComponent {
         fontMetrics = getFontMetrics(font);
         fontLeading = fontMetrics.getLeading();
         fontDescent = fontMetrics.getDescent();
+        updatePreferredWidth();
         repaint();
     }
 
@@ -120,26 +124,27 @@ public class LineNumberComponent extends JComponent {
         g.setColor(Theme.CONTENT_BORDER_COLOR);
         int borderX = getWidth() - 1;
         g.drawLine(borderX, clip.y, borderX, clip.y + clip.height);
+    }
 
-        int width = fontMetrics.stringWidth(String.valueOf(endLine + 1)) + MARGIN * 2;
-        if (getPreferredWidth() != width) {
-            setPreferredWidth(width);
+    // Fits at least four digits and grows with the line count. Only revalidate
+    // on change: resizing from paintComponent schedules another paint, forever.
+    // Measure with defaultFont, the font the numbers are drawn in, not the
+    // text pane's font, which can be narrower.
+    private void updatePreferredWidth() {
+        FontMetrics numberMetrics = getFontMetrics(defaultFont);
+        Element root = textPane.getDocument().getDefaultRootElement();
+        String widest = String.valueOf(root.getElementCount());
+        int digits = Math.max(numberMetrics.stringWidth("0000"),
+                numberMetrics.stringWidth(widest));
+        int width = digits + MARGIN * 2;
+        if (width != preferredWidth) {
+            preferredWidth = width;
+            revalidate();
         }
-    }
-
-    private int getPreferredWidth() {
-        return fontMetrics.stringWidth("0000") + MARGIN * 2;
-    }
-
-    private void setPreferredWidth(int width) {
-        Dimension dim = getPreferredSize();
-        dim.setSize(width, dim.height);
-        setPreferredSize(dim);
-        setSize(dim);
     }
 
     @Override
     public Dimension getPreferredSize() {
-        return new Dimension(getPreferredWidth(), textPane.getHeight());
+        return new Dimension(preferredWidth, textPane.getHeight());
     }
 }

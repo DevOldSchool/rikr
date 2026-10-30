@@ -132,4 +132,3 @@ public class MethodSimulator {
         return localVariables;
     }
 }
-

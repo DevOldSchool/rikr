@@ -21,7 +21,7 @@ public class LocalVariableExecutor implements InstructionExecutor {
                 if (currentValue instanceof Integer) {
                     localVariables.put(varIndex, (Integer) currentValue + increment);
                 }
-                
+
                 break;
         }
         return null;

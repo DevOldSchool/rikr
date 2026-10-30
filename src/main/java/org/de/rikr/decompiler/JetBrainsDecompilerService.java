@@ -214,14 +214,15 @@ public class JetBrainsDecompilerService {
 
     private void deleteRecursive(Path path) throws IOException {
         if (path == null || !Files.exists(path)) return;
-        Files.walk(path)
-            .sorted((a, b) -> b.compareTo(a)) // delete children before parents
-            .forEach(p -> {
-                try {
-                    Files.deleteIfExists(p);
-                } catch (IOException ignored) {
-                }
-            });
+        try (var paths = Files.walk(path)) {
+            paths.sorted((a, b) -> b.compareTo(a)) // delete children before parents
+                .forEach(p -> {
+                    try {
+                        Files.deleteIfExists(p);
+                    } catch (IOException ignored) {
+                    }
+                });
+        }
     }
 
     /**

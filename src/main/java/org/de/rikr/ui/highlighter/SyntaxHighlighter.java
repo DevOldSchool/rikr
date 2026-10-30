@@ -205,7 +205,7 @@ public class SyntaxHighlighter {
                 return true;
             }
         }
-        
+
         return false;
     }
 }

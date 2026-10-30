@@ -12,13 +12,19 @@ Java 21 and Maven. All dependencies are in Maven Central and the IntelliJ reposi
 | Task | Command |
 |---|---|
 | Run the tests | `mvn -q test` |
-| Check style (not yet part of `verify`) | `mvn -q checkstyle:check` |
+| Everything CI checks: Error Prone, tests, Checkstyle, Spotless, coverage | `mvn -q verify` |
+| Fix formatting Spotless reports (unused imports, whitespace) | `mvn -q spotless:apply` |
 | Build classes and copy dependencies to `target/lib` | `mvn -q -DskipTests package` |
 | Start the GUI | `java -cp "target/classes:target/lib/*" org.de.rikr.Rikr` (after `package`) |
 | Start the MCP server | `bin/rikr-mcp` |
 
-Before handing work back, run the tests and Checkstyle. Checkstyle enforces spaces, not tabs, and a final newline;
-`.editorconfig` asks for 4-space indents and lines of at most 120 characters.
+Before handing work back, run `mvn -q verify`. It compiles with Error Prone, which fails the build on its error-level
+bug patterns; runs the tests, Checkstyle (spaces, not tabs, and a final newline) and Spotless; and checks that the
+`rename`, `mapping`, `flow` and `symbol` packages keep at least 85% line and 55% branch coverage (report in
+`target/site/jacoco`). `.editorconfig` asks for 4-space indents and lines of at most 120 characters.
+
+Pushing a tag such as `v1.2.0` runs `.github/workflows/release.yml`, which builds macOS, Windows and Linux packages
+with `jpackage` and publishes a GitHub release.
 
 ## How the code is organised
 
@@ -57,6 +63,9 @@ Code is grouped by feature under `src/main/java/org/de/rikr`, with tests in the 
   overwriting keeps a `.bak` copy made before anything is written.
 - **On macOS the menu bar is the system menu bar.** `Rikr.main` sets `apple.laf.useScreenMenuBar` before Swing
   starts; anything else that starts the GUI must do the same.
+
+The reasoning behind these rules is in [docs/decisions](docs/decisions/README.md). Add a record there when a change
+sets a new rule.
 
 ## Conventions
 

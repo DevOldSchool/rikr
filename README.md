@@ -11,6 +11,16 @@ mvn -q -DskipTests package
 java -cp "target/classes:target/lib/*" org.de.rikr.Rikr
 ```
 
+`mvn verify` runs everything CI checks: the tests, Error Prone, Checkstyle, Spotless and a coverage report in
+`target/site/jacoco`. Design decisions are recorded in [docs/decisions](docs/decisions/README.md).
+
+Pushing a tag such as `v1.2.0` publishes a GitHub release with packages that include their own Java runtime:
+
+- macOS (Apple silicon): a `.dmg`.
+- Windows: a `.zip`; extract it and run `Rikr\Rikr.exe`.
+- Linux: a `.tar.gz` that runs on any 64-bit distribution (extract it and run `Rikr/bin/Rikr`), plus a `.deb` for
+  Debian and Ubuntu and an `.rpm` for Fedora and openSUSE.
+
 ## Using Rikr from AI agents
 
 `bin/rikr-mcp` runs Rikr as a [Model Context Protocol](https://modelcontextprotocol.io) server, so agents such as

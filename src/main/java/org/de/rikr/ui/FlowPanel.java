@@ -54,10 +54,6 @@ public class FlowPanel extends JPanel {
     /** One step of the path through the code; Back returns to the previous one. */
     private sealed interface View permits CallView, FlowView {
         String jar();
-
-        ClassNode owner();
-
-        MethodNode method();
     }
 
     /**
@@ -301,7 +297,7 @@ public class FlowPanel extends JPanel {
         Deque<MethodRef> pending = new ArrayDeque<>(List.of(root));
         index.put(root, 0);
         Set<MethodRef> expanded = new HashSet<>(List.of(root));
-        state.expanded().forEach(method -> findRef(calls, state, method).ifPresent(expanded::add));
+        state.expanded().forEach(method -> findRef(state, method).ifPresent(expanded::add));
         boolean truncated = false;
         while (!pending.isEmpty()) {
             MethodRef method = pending.removeFirst();
@@ -498,7 +494,7 @@ public class FlowPanel extends JPanel {
             : Optional.empty();
     }
 
-    private Optional<MethodRef> findRef(CallGraph calls, CallView state, MethodNode method) {
+    private Optional<MethodRef> findRef(CallView state, MethodNode method) {
         String owner = ownerOf(state, method);
         return owner == null ? Optional.empty() : Optional.of(new MethodRef(owner, method.name, method.desc));
     }

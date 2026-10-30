@@ -65,3 +65,10 @@ build/
 
 ### Project
 /out/
+
+### Rikr
+# Packages built by jpackage.
+/dist/
+# Claude Code's per-session worktrees and local settings.
+.claude/worktrees/
+.claude/settings.local.json

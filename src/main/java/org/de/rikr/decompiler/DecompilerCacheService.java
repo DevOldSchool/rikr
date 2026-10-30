@@ -1,7 +1,6 @@
 package org.de.rikr.decompiler;
 
 import org.de.rikr.Logger;
-import org.de.rikr.decompiler.JetBrainsDecompilerService;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.tree.ClassNode;
 
@@ -50,7 +49,8 @@ public class DecompilerCacheService implements AutoCloseable {
      */
     public void warmUpJar(String jarName, File jarFile, Supplier<List<ClassNode>> classes) {
         long startGeneration = jarGeneration(jarName);
-        warmUpExecutor.submit(() -> {
+        // execute, not submit: an exception escaping the task should reach the thread's handler, not a Future.
+        warmUpExecutor.execute(() -> {
             try {
                 logger.log("[Decompiler] Warming up sources for JAR: " + jarName);
                 JetBrainsDecompilerService service = new JetBrainsDecompilerService(logger);
