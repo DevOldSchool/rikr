@@ -7,7 +7,7 @@ import org.de.rikr.symbol.Declaration;
 import org.de.rikr.symbol.Symbol;
 import org.de.rikr.symbol.SymbolResolver;
 import org.de.rikr.ui.ContentPanel;
-import org.de.rikr.ui.model.*;
+import org.de.rikr.ui.model.TreeNodes;
 import org.objectweb.asm.tree.ClassNode;
 
 import javax.swing.*;
@@ -60,19 +60,8 @@ public class RenameActionHandler implements ActionListener {
 
     private Optional<RenameTarget> targetInTree() {
         DefaultMutableTreeNode node = controller.getUserInterface().getTreePanel().getSelectedNode();
-        String jar = findJarName(node);
-        if (jar == null) {
-            return Optional.empty();
-        }
-        Declaration declaration = switch (node) {
-            case ClassMutableTreeNode classNode -> new Declaration.ClassDeclaration(classNode.getClassNode());
-            case ClassNodeMutableTreeNode classNode -> new Declaration.ClassDeclaration(classNode.getClassNode());
-            case InterfaceNodeMutableTreeNode classNode -> new Declaration.ClassDeclaration(classNode.getClassNode());
-            case FieldNodeMutableTreeNode field -> new Declaration.FieldDeclaration(field.getOwner(), field.getFieldNode());
-            case MethodNodeMutableTreeNode method -> new Declaration.MethodDeclaration(method.getOwner(), method.getMethodNode());
-            default -> null;
-        };
-        return Optional.ofNullable(declaration).map(value -> new RenameTarget(jar, value));
+        Optional<String> jar = TreeNodes.jarOf(node);
+        return jar.flatMap(name -> TreeNodes.declarationOf(node).map(value -> new RenameTarget(name, value)));
     }
 
     private Optional<RenameTarget> targetInCode() {
@@ -197,19 +186,5 @@ public class RenameActionHandler implements ActionListener {
             case Symbol.FieldSymbol value -> value.owner() + "." + value.name();
             case Symbol.MethodSymbol value -> value.owner() + "." + value.name() + value.descriptor();
         };
-    }
-
-    private static String findJarName(DefaultMutableTreeNode node) {
-        DefaultMutableTreeNode current = node;
-        while (current != null) {
-            if (current instanceof JarMutableTreeNode jarNode) {
-                return jarNode.getJarName();
-            }
-            if (current instanceof ClassMutableTreeNode classNode) {
-                return classNode.getJarName();
-            }
-            current = (DefaultMutableTreeNode) current.getParent();
-        }
-        return null;
     }
 }

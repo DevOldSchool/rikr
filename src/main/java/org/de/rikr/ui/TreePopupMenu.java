@@ -1,12 +1,11 @@
 package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
-import org.de.rikr.bookmark.ProjectBookmark;
-import org.de.rikr.bookmark.ProjectBookmarkType;
-import org.de.rikr.mapping.ClassMatch;
+import org.de.rikr.mapping.SimilarClassReport;
+import org.de.rikr.symbol.Declaration;
 import org.de.rikr.ui.model.*;
 import org.de.rikr.utilities.ClassNodeUtil;
-import org.objectweb.asm.tree.*;
+import org.objectweb.asm.tree.ClassNode;
 
 import javax.swing.*;
 import javax.swing.event.PopupMenuEvent;
@@ -14,45 +13,38 @@ import javax.swing.event.PopupMenuListener;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import java.lang.reflect.Modifier;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ExecutionException;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
+/**
+ * The project tree's context menu. Which items it shows depends on the kind of node that is selected.
+ */
 public class TreePopupMenu extends JPopupMenu {
     private final Rikr controller;
     private final JTree tree;
-    private final JMenuItem removeItem;
-    private final JMenuItem renameItem;
-    private final JMenuItem groupBySuperclass;
-    private final JMenuItem groupByInterface;
-    private final JMenuItem removeGrouping;
-    private final JMenuItem findExtenders;
-    private final JMenuItem findImplementors;
-    private final JMenuItem findMatchingClassNodes;
-    private final JMenuItem getClassNodeSignature;
-    private final JMenuItem simulateMethod;
-    private final JMenuItem showReferences;
-    private final JMenuItem toggleBookmark;
+    private final JMenuItem renameItem = new JMenuItem("Rename");
+    private final JMenuItem removeItem = item("Remove", this::remove);
+    private final JMenuItem groupBySuperclass = item("Group by Superclass",
+        node -> group(node, ClassNodeUtil::groupBySuperclass));
+    private final JMenuItem groupByInterface = item("Group by Interface",
+        node -> group(node, ClassNodeUtil::groupByInterface));
+    private final JMenuItem removeGrouping = item("Remove Grouping", this::removeGrouping);
+    private final JMenuItem findExtenders = item("Find Extenders", this::findExtenders);
+    private final JMenuItem findImplementors = item("Find Implementors", this::findImplementors);
+    private final JMenuItem findMatchingClassNodes = item("Find Matching Class Nodes", this::findMatchingClassNodes);
+    private final JMenuItem getClassNodeSignature = item("Get Class Node Signature", this::showClassSignature);
+    private final JMenuItem simulateMethod = item("Simulate Method", this::simulateMethod);
+    private final JMenuItem showReferences = item("Show References", this::showReferences);
+    private final JMenuItem toggleBookmark = item("Toggle Bookmark", this::toggleBookmark);
 
     public TreePopupMenu(Rikr controller, JTree tree) {
         this.controller = controller;
         this.tree = tree;
-
-        renameItem = new JMenuItem("Rename");
-        removeItem = new JMenuItem("Remove");
-        groupBySuperclass = new JMenuItem("Group by Superclass");
-        groupByInterface = new JMenuItem("Group by Interface");
-        removeGrouping = new JMenuItem("Remove Grouping");
-        findExtenders = new JMenuItem("Find Extenders");
-        findImplementors = new JMenuItem("Find Implementors");
-        findMatchingClassNodes = new JMenuItem("Find Matching Class Nodes");
-        getClassNodeSignature = new JMenuItem("Get Class Node Signature");
-        simulateMethod = new JMenuItem("Simulate Method");
-        showReferences = new JMenuItem("Show References");
-        toggleBookmark = new JMenuItem("Toggle Bookmark");
-
         add(renameItem);
         add(removeItem);
     }
@@ -61,44 +53,9 @@ public class TreePopupMenu extends JPopupMenu {
         addPopupMenuListener(new PopupMenuListener() {
             @Override
             public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
-                DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
-                if (selectedNode != null && selectedNode.getParent() != null) {
-                    boolean canRemoveNode = !(selectedNode instanceof ClassNodeMutableTreeNode ||
-                            selectedNode instanceof InterfaceNodeMutableTreeNode ||
-                            selectedNode instanceof FieldNodeMutableTreeNode ||
-                            selectedNode instanceof MethodNodeMutableTreeNode);
-
-                    removeAll();
-
-                    add(renameItem);
-
-                    if (canRemoveNode) {
-                        add(removeItem);
-                    }
-
-                    if (selectedNode instanceof JarMutableTreeNode) {
-                        add(groupBySuperclass);
-                        add(groupByInterface);
-                        add(removeGrouping);
-                    } else if (selectedNode instanceof ClassMutableTreeNode) {
-                        add(getClassNodeSignature);
-                        add(findMatchingClassNodes);
-                        add(showReferences);
-                    } else if (selectedNode instanceof ClassNodeMutableTreeNode) {
-                        add(findExtenders);
-                        add(showReferences);
-                    } else if (selectedNode instanceof InterfaceNodeMutableTreeNode) {
-                        add(findImplementors);
-                        add(showReferences);
-                    } else if (selectedNode instanceof MethodNodeMutableTreeNode) {
-                        add(simulateMethod);
-                        add(showReferences);
-                    } else if (selectedNode instanceof FieldNodeMutableTreeNode) {
-                        add(showReferences);
-                    }
-                    if (isBookmarkable(selectedNode)) {
-                        add(toggleBookmark);
-                    }
+                DefaultMutableTreeNode node = selectedNode();
+                if (node != null && node.getParent() != null) {
+                    rebuild(node);
                 }
             }
 
@@ -112,324 +69,177 @@ public class TreePopupMenu extends JPopupMenu {
         });
 
         renameItem.addActionListener(controller.getUserInterface().getContentPanel().getRenameActionHandler());
-
-        removeItem.addActionListener(e -> {
-            DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
-            if (selectedNode != null && selectedNode.getParent() != null) {
-                DefaultTreeModel model = (DefaultTreeModel) tree.getModel();
-
-                if (selectedNode instanceof ClassNodeMutableTreeNode ||
-                        selectedNode instanceof InterfaceNodeMutableTreeNode ||
-                        selectedNode instanceof FieldNodeMutableTreeNode ||
-                        selectedNode instanceof MethodNodeMutableTreeNode) {
-                    controller.log("Unable to remove child node.");
-                } else if (selectedNode instanceof ClassMutableTreeNode classMutableTreeNode) {
-                    model.removeNodeFromParent(selectedNode);
-                    controller.jars().removeClass(classMutableTreeNode.getJarName(), classMutableTreeNode.getClassNode());
-                    controller.getUserInterface().clearContent();
-                } else if (selectedNode instanceof JarMutableTreeNode jarMutableTreeNode) {
-                    model.removeNodeFromParent(selectedNode);
-                    controller.jars().removeJar(jarMutableTreeNode.getJarName());
-                    controller.getUserInterface().clearContent();
-                }
-            }
-        });
-
-        toggleBookmark.addActionListener(event -> {
-            DefaultMutableTreeNode selectedNode =
-                (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
-            ProjectBookmark bookmark = createBookmark(selectedNode);
-            if (bookmark != null) {
-                controller.toggleBookmark(bookmark);
-            }
-        });
-
-        findExtenders.addActionListener(e -> {
-            DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
-            if (selectedNode == null) {
-                return;
-            }
-
-            if (selectedNode instanceof ClassNodeMutableTreeNode classNodeMutableTreeNode) {
-                String jarName = classNodeMutableTreeNode.getJarName();
-                ClassNode selectedClassNode = classNodeMutableTreeNode.getClassNode();
-                List<ClassNode> classes = ClassNodeUtil.findClassesExtending(controller.jars().classes(jarName), selectedClassNode);
-
-                boolean foundMatch = false;
-                for (ClassNode classNode : classes) {
-                    controller.log(String.format("Found class %s extends %s", classNode.name, selectedClassNode.name));
-                    foundMatch = true;
-                }
-
-                if (!foundMatch) {
-                    controller.log(String.format("Unable to find extender class for %s", selectedClassNode.name));
-                }
-            }
-        });
-
-        findImplementors.addActionListener(e -> {
-            DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
-            if (selectedNode == null) {
-                return;
-            }
-
-            if (selectedNode instanceof InterfaceNodeMutableTreeNode interfaceNodeMutableTreeNode) {
-                String jarName = interfaceNodeMutableTreeNode.getJarName();
-                ClassNode selectedClassNode = interfaceNodeMutableTreeNode.getClassNode();
-                List<ClassNode> classes = ClassNodeUtil.findClassesImplementing(controller.jars().classes(jarName), selectedClassNode);
-
-                boolean foundMatch = false;
-                for (ClassNode classNode : classes) {
-                    controller.log(String.format("Found class %s implementing %s", classNode.name, selectedClassNode.name));
-                    foundMatch = true;
-                }
-
-                if (!foundMatch) {
-                    controller.log(String.format("Unable to find implementor class for %s", selectedClassNode.name));
-                }
-            }
-        });
-
-        groupBySuperclass.addActionListener(e -> {
-            DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
-            if (selectedNode == null) {
-                return;
-            }
-
-            if (selectedNode instanceof JarMutableTreeNode jarMutableTreeNode) {
-                String jarName = jarMutableTreeNode.getJarName();
-                List<ClassNode> classes = jarMutableTreeNode.getClasses();
-                Map<String, List<ClassNode>> superclassGroups = ClassNodeUtil.groupBySuperclass(classes);
-
-                controller.getUserInterface().getTreePanel().addTreeNodes(selectedNode, jarName, classes, superclassGroups);
-            }
-        });
-
-        groupByInterface.addActionListener(e -> {
-            DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
-            if (selectedNode == null) {
-                return;
-            }
-
-            if (selectedNode instanceof JarMutableTreeNode jarMutableTreeNode) {
-                String jarName = jarMutableTreeNode.getJarName();
-                List<ClassNode> classes = jarMutableTreeNode.getClasses();
-                Map<String, List<ClassNode>> interfaceGroups = ClassNodeUtil.groupByInterface(classes);
-
-                controller.getUserInterface().getTreePanel().addTreeNodes(selectedNode, jarName, classes, interfaceGroups);
-            }
-        });
-
-        removeGrouping.addActionListener(e -> {
-            DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
-            if (selectedNode == null) {
-                return;
-            }
-
-            if (selectedNode instanceof JarMutableTreeNode jarMutableTreeNode) {
-                selectedNode.removeAllChildren();
-                String jarName = jarMutableTreeNode.getJarName();
-                List<ClassNode> classes = jarMutableTreeNode.getClasses();
-
-                for (ClassNode classNode : classes) {
-                    String className = classNode.name + ".class";
-                    selectedNode.add(new ClassMutableTreeNode(jarName, classNode, className));
-                }
-
-                controller.getUserInterface().getTreePanel().updateNode(selectedNode);
-            }
-        });
-
-        getClassNodeSignature.addActionListener(e -> {
-            DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
-            if (selectedNode == null) {
-                return;
-            }
-
-            if (selectedNode instanceof ClassMutableTreeNode classMutableTreeNode) {
-                ClassNode selectedClassNode = classMutableTreeNode.getClassNode();
-                Map<String, String> informationMap = new LinkedHashMap<>();
-
-                boolean isInterface = Modifier.isInterface(selectedClassNode.access);
-                boolean isAbstract = Modifier.isAbstract(selectedClassNode.access);
-                boolean hasSuperClass = selectedClassNode.superName != null
-                    && !"java/lang/Object".equals(selectedClassNode.superName);
-                int interfaceCount = selectedClassNode.interfaces.size();
-
-                List<String> fields = controller.mappings().nonStaticFieldDescriptions(selectedClassNode);
-                List<String> methods = controller.mappings().nonStaticMethodDescriptions(selectedClassNode);
-
-                informationMap.put("ClassNode", selectedClassNode.name);
-                informationMap.put("Is Interface", String.valueOf(isInterface));
-                informationMap.put("Is Abstract", String.valueOf(isAbstract));
-                informationMap.put("Has Superclass", String.valueOf(hasSuperClass));
-                informationMap.put("Interface count", String.valueOf(interfaceCount));
-                informationMap.put("Field count", String.valueOf(fields.size()));
-                informationMap.put("Method count", String.valueOf(methods.size()));
-
-                new InformationFrame(controller, informationMap);
-            }
-        });
-
-        findMatchingClassNodes.addActionListener(e -> {
-            DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
-            if (selectedNode == null) {
-                return;
-            }
-
-            if (selectedNode instanceof ClassMutableTreeNode classMutableTreeNode) {
-                findAndLogMatchingClassNodes(classMutableTreeNode);
-            }
-        });
-
-        simulateMethod.addActionListener(e -> {
-            DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
-            if (selectedNode == null) {
-                return;
-            }
-
-            if (selectedNode instanceof MethodNodeMutableTreeNode methodNodeMutableTreeNode) {
-                ClassNodeMutableTreeNode parentNode = (ClassNodeMutableTreeNode) methodNodeMutableTreeNode.getParent();
-                MethodNode methodNode = methodNodeMutableTreeNode.getMethodNode();
-
-                controller.getUserInterface().getMethodSimulatorPanel().initSimulate(parentNode, methodNode);
-            }
-        });
-
-        showReferences.addActionListener(e -> {
-            DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
-            if (selectedNode == null) {
-                return;
-            }
-
-            if (selectedNode instanceof ClassMutableTreeNode classNode) {
-                controller.getUserInterface().showClassReferences(classNode.getJarName(), classNode.getClassNode());
-            } else if (selectedNode instanceof ClassNodeMutableTreeNode classNode) {
-                controller.getUserInterface().showClassReferences(classNode.getJarName(), classNode.getClassNode());
-            } else if (selectedNode instanceof InterfaceNodeMutableTreeNode interfaceNode) {
-                controller.getUserInterface().showClassReferences(
-                    interfaceNode.getJarName(),
-                    interfaceNode.getClassNode()
-                );
-            } else if (selectedNode instanceof FieldNodeMutableTreeNode fieldNode) {
-                String jarName = getOwnerJarName((DefaultMutableTreeNode) fieldNode.getParent());
-                controller.getUserInterface().showFieldReferences(
-                    jarName,
-                    fieldNode.getOwner(),
-                    fieldNode.getFieldNode()
-                );
-            } else if (selectedNode instanceof MethodNodeMutableTreeNode methodNode) {
-                String jarName = getOwnerJarName((DefaultMutableTreeNode) methodNode.getParent());
-                controller.getUserInterface().showMethodReferences(
-                    jarName,
-                    methodNode.getOwner(),
-                    methodNode.getMethodNode()
-                );
-            }
-        });
     }
 
-    private boolean isBookmarkable(DefaultMutableTreeNode node) {
-        return node instanceof ClassMutableTreeNode
-            || node instanceof ClassNodeMutableTreeNode
-            || node instanceof InterfaceNodeMutableTreeNode
-            || node instanceof FieldNodeMutableTreeNode
-            || node instanceof MethodNodeMutableTreeNode;
+    private void rebuild(DefaultMutableTreeNode node) {
+        removeAll();
+        add(renameItem);
+        if (node instanceof ClassMutableTreeNode || node instanceof JarMutableTreeNode) {
+            add(removeItem);
+        }
+
+        switch (node) {
+            case JarMutableTreeNode ignored -> {
+                add(groupBySuperclass);
+                add(groupByInterface);
+                add(removeGrouping);
+            }
+            case ClassMutableTreeNode ignored -> {
+                add(getClassNodeSignature);
+                add(findMatchingClassNodes);
+                add(showReferences);
+            }
+            case ClassNodeMutableTreeNode ignored -> {
+                add(findExtenders);
+                add(showReferences);
+            }
+            case InterfaceNodeMutableTreeNode ignored -> {
+                add(findImplementors);
+                add(showReferences);
+            }
+            case MethodNodeMutableTreeNode ignored -> {
+                add(simulateMethod);
+                add(showReferences);
+            }
+            case FieldNodeMutableTreeNode ignored -> add(showReferences);
+            default -> {
+            }
+        }
+        if (TreeNodes.declarationOf(node).isPresent()) {
+            add(toggleBookmark);
+        }
     }
 
-    private ProjectBookmark createBookmark(DefaultMutableTreeNode node) {
+    private void toggleBookmark(DefaultMutableTreeNode node) {
+        TreeNodes.bookmarkOf(node).ifPresent(controller::toggleBookmark);
+    }
+
+    private void remove(DefaultMutableTreeNode node) {
+        if (node.getParent() == null) {
+            return;
+        }
+        DefaultTreeModel model = (DefaultTreeModel) tree.getModel();
         if (node instanceof ClassMutableTreeNode classNode) {
-            return classBookmark(classNode.getJarName(), classNode.getClassNode());
+            model.removeNodeFromParent(node);
+            controller.jars().removeClass(classNode.getJarName(), classNode.getClassNode());
+            controller.getUserInterface().clearContent();
+        } else if (node instanceof JarMutableTreeNode jarNode) {
+            model.removeNodeFromParent(node);
+            controller.jars().removeJar(jarNode.getJarName());
+            controller.getUserInterface().clearContent();
+        } else {
+            controller.log("Unable to remove child node.");
         }
+    }
+
+    private void findExtenders(DefaultMutableTreeNode node) {
         if (node instanceof ClassNodeMutableTreeNode classNode) {
-            return classBookmark(classNode.getJarName(), classNode.getClassNode());
-        }
-        if (node instanceof InterfaceNodeMutableTreeNode interfaceNode) {
-            return classBookmark(interfaceNode.getJarName(), interfaceNode.getClassNode());
-        }
-        String jarName = findJarName(node);
-        if (node instanceof FieldNodeMutableTreeNode fieldNode && jarName != null) {
-            return new ProjectBookmark(
-                ProjectBookmarkType.FIELD,
-                jarName,
-                fieldNode.getOwner().name,
-                fieldNode.getFieldNode().name,
-                fieldNode.getFieldNode().desc
-            );
-        }
-        if (node instanceof MethodNodeMutableTreeNode methodNode && jarName != null) {
-            return new ProjectBookmark(
-                ProjectBookmarkType.METHOD,
-                jarName,
-                methodNode.getOwner().name,
-                methodNode.getMethodNode().name,
-                methodNode.getMethodNode().desc
-            );
-        }
-        return null;
-    }
-
-    private ProjectBookmark classBookmark(String jarName, ClassNode classNode) {
-        return new ProjectBookmark(ProjectBookmarkType.CLASS, jarName, classNode.name, null, null);
-    }
-
-    private String findJarName(DefaultMutableTreeNode node) {
-        DefaultMutableTreeNode current = node;
-        while (current != null) {
-            if (current instanceof JarMutableTreeNode jarNode) {
-                return jarNode.getJarName();
+            ClassNode selected = classNode.getClassNode();
+            List<ClassNode> classes = ClassNodeUtil.findClassesExtending(
+                controller.jars().classes(classNode.getJarName()), selected);
+            classes.forEach(found -> controller.log(String.format("Found class %s extends %s", found.name, selected.name)));
+            if (classes.isEmpty()) {
+                controller.log(String.format("Unable to find extender class for %s", selected.name));
             }
-            current = (DefaultMutableTreeNode) current.getParent();
         }
-        return null;
     }
 
-    private String getOwnerJarName(DefaultMutableTreeNode ownerNode) {
-        if (ownerNode instanceof ClassNodeMutableTreeNode classNode) {
-            return classNode.getJarName();
+    private void findImplementors(DefaultMutableTreeNode node) {
+        if (node instanceof InterfaceNodeMutableTreeNode interfaceNode) {
+            ClassNode selected = interfaceNode.getClassNode();
+            List<ClassNode> classes = ClassNodeUtil.findClassesImplementing(
+                controller.jars().classes(interfaceNode.getJarName()), selected);
+            classes.forEach(found -> controller.log(String.format("Found class %s implementing %s", found.name, selected.name)));
+            if (classes.isEmpty()) {
+                controller.log(String.format("Unable to find implementor class for %s", selected.name));
+            }
         }
-        if (ownerNode instanceof InterfaceNodeMutableTreeNode interfaceNode) {
-            return interfaceNode.getJarName();
-        }
-        throw new IllegalStateException("Reference owner is not attached to a loaded JAR");
     }
 
-    private void findAndLogMatchingClassNodes(ClassMutableTreeNode selectedNode) {
-        String sourceJarName = selectedNode.getJarName();
-        ClassNode sourceClassNode = selectedNode.getClassNode();
+    private void group(DefaultMutableTreeNode node, Function<List<ClassNode>, Map<String, List<ClassNode>>> grouping) {
+        if (node instanceof JarMutableTreeNode jarNode) {
+            List<ClassNode> classes = jarNode.getClasses();
+            controller.getUserInterface().getTreePanel()
+                .addTreeNodes(node, jarNode.getJarName(), classes, grouping.apply(classes));
+        }
+    }
 
+    private void removeGrouping(DefaultMutableTreeNode node) {
+        if (node instanceof JarMutableTreeNode jarNode) {
+            node.removeAllChildren();
+            for (ClassNode classNode : jarNode.getClasses()) {
+                node.add(new ClassMutableTreeNode(jarNode.getJarName(), classNode, classNode.name + ".class"));
+            }
+            controller.getUserInterface().getTreePanel().updateNode(node);
+        }
+    }
+
+    private void showClassSignature(DefaultMutableTreeNode node) {
+        if (!(node instanceof ClassMutableTreeNode classNode)) {
+            return;
+        }
+        ClassNode selected = classNode.getClassNode();
+        Map<String, String> information = new LinkedHashMap<>();
+        information.put("ClassNode", selected.name);
+        information.put("Is Interface", String.valueOf(Modifier.isInterface(selected.access)));
+        information.put("Is Abstract", String.valueOf(Modifier.isAbstract(selected.access)));
+        information.put("Has Superclass", String.valueOf(
+            selected.superName != null && !"java/lang/Object".equals(selected.superName)));
+        information.put("Interface count", String.valueOf(selected.interfaces.size()));
+        information.put("Field count", String.valueOf(controller.mappings().nonStaticFieldDescriptions(selected).size()));
+        information.put("Method count", String.valueOf(controller.mappings().nonStaticMethodDescriptions(selected).size()));
+        new InformationFrame(controller, information);
+    }
+
+    private void simulateMethod(DefaultMutableTreeNode node) {
+        if (node instanceof MethodNodeMutableTreeNode methodNode) {
+            ClassNodeMutableTreeNode parent = (ClassNodeMutableTreeNode) methodNode.getParent();
+            controller.getUserInterface().getMethodSimulatorPanel().initSimulate(parent, methodNode.getMethodNode());
+        }
+    }
+
+    private void showReferences(DefaultMutableTreeNode node) {
+        Optional<String> jar = TreeNodes.jarOf(node);
+        Optional<Declaration> declaration = TreeNodes.declarationOf(node);
+        if (jar.isEmpty() || declaration.isEmpty()) {
+            return;
+        }
+        var userInterface = controller.getUserInterface();
+        switch (declaration.get()) {
+            case Declaration.ClassDeclaration target -> userInterface.showClassReferences(jar.get(), target.owner());
+            case Declaration.FieldDeclaration target ->
+                userInterface.showFieldReferences(jar.get(), target.owner(), target.field());
+            case Declaration.MethodDeclaration target ->
+                userInterface.showMethodReferences(jar.get(), target.owner(), target.method());
+        }
+    }
+
+    private void findMatchingClassNodes(DefaultMutableTreeNode node) {
+        if (!(node instanceof ClassMutableTreeNode classNode)) {
+            return;
+        }
+        String sourceJar = classNode.getJarName();
+        ClassNode sourceClass = classNode.getClassNode();
         findMatchingClassNodes.setEnabled(false);
-        controller.log("Finding class nodes similar to " + sourceClassNode.name + "...");
+        controller.log("Finding class nodes similar to " + sourceClass.name + "...");
 
-        new SwingWorker<MatchSearchReport, Void>() {
+        new SwingWorker<SimilarClassReport, Void>() {
             @Override
-            protected MatchSearchReport doInBackground() {
-                return buildMatchSearchReport(sourceJarName, sourceClassNode);
+            protected SimilarClassReport doInBackground() {
+                return controller.mappings().similarClassReport(sourceJar, sourceClass);
             }
 
             @Override
             protected void done() {
                 try {
-                    MatchSearchReport report = get();
-                    if (report.messages().isEmpty()) {
-                        controller.log("Unable to find matching class nodes for " + sourceClassNode.name);
-                    } else {
-                        report.messages().forEach(controller::log);
-                    }
-
-                    if (report.skippedBehaviorComparisons() > 0) {
-                        controller.log(String.format(
-                            "Skipped %d behavioral method comparisons that could not be simulated.",
-                            report.skippedBehaviorComparisons()
-                        ));
-                    }
+                    logReport(sourceClass, get());
                 } catch (InterruptedException exception) {
                     Thread.currentThread().interrupt();
-                    controller.log("Class node matching was interrupted for " + sourceClassNode.name);
+                    controller.log("Class node matching was interrupted for " + sourceClass.name);
                 } catch (ExecutionException exception) {
                     Throwable cause = exception.getCause();
                     String detail = cause == null ? exception.getMessage() : cause.getMessage();
-                    controller.log("Unable to find matching class nodes for " + sourceClassNode.name + ": " + detail);
+                    controller.log("Unable to find matching class nodes for " + sourceClass.name + ": " + detail);
                 } finally {
                     findMatchingClassNodes.setEnabled(true);
                 }
@@ -437,79 +247,51 @@ public class TreePopupMenu extends JPopupMenu {
         }.execute();
     }
 
-    private MatchSearchReport buildMatchSearchReport(String sourceJarName, ClassNode sourceClassNode) {
-        Map<String, List<ClassNode>> jarClasses = controller.jars().classesByJar();
-        List<ClassNode> sourceClasses = jarClasses.getOrDefault(sourceJarName, List.of());
-        Map<String, List<ClassMatch>> jarMatches = controller.mappings().findSimilarClasses(sourceJarName, sourceClassNode);
-        List<String> messages = new ArrayList<>();
-        int skippedBehaviorComparisons = 0;
-
-        for (Map.Entry<String, List<ClassMatch>> entry : jarMatches.entrySet()) {
-            String jarName = entry.getKey();
-            List<ClassNode> candidateClasses = jarClasses.getOrDefault(jarName, List.of());
-
-            for (ClassMatch match : entry.getValue()) {
-                StringBuilder message = new StringBuilder();
+    private void logReport(ClassNode sourceClass, SimilarClassReport report) {
+        if (report.matches().isEmpty()) {
+            controller.log("Unable to find matching class nodes for " + sourceClass.name);
+        }
+        for (SimilarClassReport.Match match : report.matches()) {
+            StringBuilder message = new StringBuilder(String.format(
+                "Found %d%% structural match %s in jar %s",
+                match.match().similarityPercent(),
+                match.match().classNode().name,
+                match.jar()
+            ));
+            for (SimilarClassReport.MethodPair pair : match.equivalentMethods()) {
                 message.append(String.format(
-                    "Found %d%% structural match %s in jar %s",
-                    match.similarityPercent(),
-                    match.classNode().name,
-                    jarName
+                    "\n  - Behaviorally equivalent methods %s%s -> %s%s",
+                    pair.source().name,
+                    pair.source().desc,
+                    pair.target().name,
+                    pair.target().desc
                 ));
-                skippedBehaviorComparisons += appendEquivalentMethods(
-                    message,
-                    sourceClasses,
-                    sourceClassNode,
-                    candidateClasses,
-                    match.classNode()
-                );
-                messages.add(message.toString());
             }
+            controller.log(message.toString());
         }
-
-        return new MatchSearchReport(List.copyOf(messages), skippedBehaviorComparisons);
+        if (report.skippedComparisons() > 0) {
+            controller.log(String.format(
+                "Skipped %d behavioral method comparisons that could not be simulated.",
+                report.skippedComparisons()
+            ));
+        }
     }
 
-    private int appendEquivalentMethods(
-        StringBuilder message,
-        List<ClassNode> sourceClasses,
-        ClassNode sourceClassNode,
-        List<ClassNode> candidateClasses,
-        ClassNode candidateClassNode
-    ) {
-        int skippedComparisons = 0;
-
-        for (MethodNode sourceMethod : sourceClassNode.methods) {
-            String sourceDescriptor = controller.mappings().normalizeDescriptor(sourceMethod.desc);
-            for (MethodNode candidateMethod : candidateClassNode.methods) {
-                if (!sourceDescriptor.equals(controller.mappings().normalizeDescriptor(candidateMethod.desc))) {
-                    continue;
-                }
-
-                try {
-                    if (controller.mappings().areMethodsBehaviorallyEquivalent(
-                        sourceClasses,
-                        sourceMethod,
-                        candidateClasses,
-                        candidateMethod
-                    )) {
-                        message.append(String.format(
-                            "\n  - Behaviorally equivalent methods %s%s -> %s%s",
-                            sourceMethod.name,
-                            sourceMethod.desc,
-                            candidateMethod.name,
-                            candidateMethod.desc
-                        ));
-                    }
-                } catch (RuntimeException exception) {
-                    skippedComparisons++;
-                }
-            }
-        }
-
-        return skippedComparisons;
+    private DefaultMutableTreeNode selectedNode() {
+        return (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
     }
 
-    private record MatchSearchReport(List<String> messages, int skippedBehaviorComparisons) {
+    /**
+     * A menu item that runs its action on the selected node, if there is one.
+     */
+    private JMenuItem item(String label, Consumer<DefaultMutableTreeNode> action) {
+        JMenuItem item = new JMenuItem(label);
+        item.addActionListener(event -> {
+            DefaultMutableTreeNode node = selectedNode();
+            if (node != null) {
+                action.accept(node);
+            }
+        });
+        return item;
     }
 }

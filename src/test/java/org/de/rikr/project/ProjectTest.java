@@ -6,12 +6,16 @@ import org.de.rikr.jar.JarExportService;
 import org.de.rikr.jar.LoadedJar;
 import org.de.rikr.mapping.ClassMappingDecision;
 import org.de.rikr.mapping.ClassMatch;
+import org.de.rikr.mapping.SimilarClassReport;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldNode;
+import org.objectweb.asm.tree.InsnNode;
+import org.objectweb.asm.tree.IntInsnNode;
+import org.objectweb.asm.tree.MethodNode;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -131,6 +135,36 @@ class ProjectTest {
             writeJar("old", "old.jar", classWithSelfField("a")),
             writeJar("new", "new.jar", classWithSelfField("a"))
         });
+    }
+
+    @Test
+    void similarClassReportListsMatchesInOtherJarsWithEquivalentMethods() throws Exception {
+        project.jars().loadJars(new File[]{
+            writeJar("old", "old.jar", classReturning("a", "m", 7)),
+            writeJar("new", "new.jar", classReturning("b", "n", 7))
+        });
+        ClassNode source = project.jars().classes("old.jar").getFirst();
+
+        SimilarClassReport report = project.mappings().similarClassReport("old.jar", source);
+
+        assertEquals(1, report.matches().size());
+        SimilarClassReport.Match match = report.matches().getFirst();
+        assertEquals("new.jar", match.jar());
+        assertEquals("b", match.match().classNode().name);
+        assertEquals(1, match.equivalentMethods().size());
+        assertEquals("m", match.equivalentMethods().getFirst().source().name);
+        assertEquals("n", match.equivalentMethods().getFirst().target().name);
+    }
+
+    private static ClassNode classReturning(String name, String method, int value) {
+        ClassNode classNode = classNode(name);
+        classNode.fields.add(new FieldNode(Opcodes.ACC_PUBLIC, "f", "I", null, null));
+        MethodNode methodNode = new MethodNode(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, method, "()I", null, null);
+        methodNode.instructions.add(new IntInsnNode(Opcodes.BIPUSH, value));
+        methodNode.instructions.add(new InsnNode(Opcodes.IRETURN));
+        methodNode.maxStack = 1;
+        classNode.methods.add(methodNode);
+        return classNode;
     }
 
     private File writeJar(String directory, String name, ClassNode classNode) throws Exception {

@@ -3,15 +3,12 @@ package org.de.rikr.ui;
 import com.formdev.flatlaf.util.SystemInfo;
 import org.de.rikr.Rikr;
 import org.de.rikr.bookmark.ProjectBookmark;
-import org.de.rikr.bookmark.ProjectBookmarkType;
 import org.de.rikr.project.ProjectLayout;
 import org.de.rikr.reference.ReferenceResult;
-import org.de.rikr.settings.Settings;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;
 import org.de.rikr.ui.action.ClassFileActions;
 import org.de.rikr.ui.action.ProjectSessionActions;
-import org.de.rikr.utilities.ClassNodeUtil;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.MethodNode;
@@ -40,11 +37,7 @@ public class ClassViewer {
     private final NavigationPanel navigationPanel;
     private final TreePanel treePanel;
     private final SearchBar searchBar;
-    private final ContentPanel contentPanelLeft;
-    private final ContentPanel contentPanelRight;
-    private JSplitPane asmJavaSplitPane;
-    private boolean asmJavaSplitEnabled = false;
-    private ClassNode lastDisplayedClassNode;
+    private final CodeView codeView;
     private final LogPanel logPanel;
     private final JPanel projectPanel;
     private final SearchPanel searchPanel;
@@ -89,8 +82,7 @@ public class ClassViewer {
 
         // Initialize panels
         treePanel = new TreePanel(controller);
-        contentPanelLeft = new ContentPanel(controller);
-        contentPanelRight = new ContentPanel(controller, true); // Java-only panel
+        codeView = new CodeView(controller);
         searchBar = new SearchBar(controller, e -> toggleSearchBarVisibility(false));
         logPanel = new LogPanel();
         projectPanel = new JPanel(new BorderLayout());
@@ -108,7 +100,7 @@ public class ClassViewer {
         rightPanel = new JPanel(new BorderLayout());
 
         rightPanel.add(searchBar, BorderLayout.NORTH);
-        contentSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, contentPanelLeft, methodSimulatorPanel);
+        contentSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, codeView, methodSimulatorPanel);
         contentSplitPane.setDividerLocation(700);
         contentSplitPane.setResizeWeight(0.80);
         rightPanel.add(contentSplitPane, BorderLayout.CENTER);
@@ -117,11 +109,17 @@ public class ClassViewer {
         // Create the navigation panel
         navigationPanel = new NavigationPanel(
             controller,
-            e -> showProjectPanel(),
-            e -> showSearchPanel(),
-            e -> showMappingPanel(),
-            e -> showReferencePanel(),
-            e -> showBookmarkPanel()
+            e -> showWorkspace(projectPanel, rightPanel, projectPanel),
+            e -> showWorkspace(searchPanel, rightPanel, searchPanel),
+            e -> {
+                mappingWorkspacePanel.refreshJars(controller.jars().classesByJar());
+                showWorkspace(projectPanel, mappingWorkspacePanel, mappingWorkspacePanel);
+            },
+            e -> showWorkspace(projectPanel, referenceWorkspacePanel, referenceWorkspacePanel),
+            e -> {
+                bookmarkWorkspacePanel.refresh();
+                showWorkspace(bookmarkWorkspacePanel, rightPanel, bookmarkWorkspacePanel);
+            }
         );
 
         // Create a split pane for the navigation panel and tree panel
@@ -180,7 +178,7 @@ public class ClassViewer {
             e -> classFileActions.saveSelectedClass(),
             e -> classFileActions.saveSelectedJar(),
             e -> classFileActions.overwriteOriginalJar(),
-            e -> openSettingsDialog()
+            e -> SettingsDialog.open(frame, codeView::redisplay)
         );
         frame.setJMenuBar(menuBar);
 
@@ -189,34 +187,15 @@ public class ClassViewer {
             java.awt.Desktop desktop = java.awt.Desktop.getDesktop();
             try {
                 if (desktop.isSupported(java.awt.Desktop.Action.APP_PREFERENCES)) {
-                    desktop.setPreferencesHandler(e -> openSettingsDialog());
+                    desktop.setPreferencesHandler(e -> SettingsDialog.open(frame, codeView::redisplay));
                 }
             } catch (UnsupportedOperationException ignored) {
             }
         }
 
-        // Wire split view toggle
-        menuBar.getSplitAsmJavaItem().addActionListener(e -> {
-            boolean selected = menuBar.getSplitAsmJavaItem().isSelected();
-            asmJavaSplitEnabled = selected;
-            if (selected) {
-                asmJavaSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, contentPanelLeft, contentPanelRight);
-                asmJavaSplitPane.setResizeWeight(0.5);
-                asmJavaSplitPane.setDividerSize(5);
-                contentSplitPane.setLeftComponent(asmJavaSplitPane);
-
-                SettingsManager.refreshThemeFor(contentPanelRight);
-                SettingsManager.updateComponentTree(asmJavaSplitPane);
-                if (lastDisplayedClassNode != null) {
-                    contentPanelRight.displayBytecode(lastDisplayedClassNode);
-                }
-            } else {
-                contentSplitPane.setLeftComponent(contentPanelLeft);
-                asmJavaSplitPane = null;
-            }
-            frame.revalidate();
-            frame.repaint();
-        });
+        menuBar.getSplitAsmJavaItem().addActionListener(
+            e -> codeView.setJavaShown(menuBar.getSplitAsmJavaItem().isSelected())
+        );
 
         // Search toggle
         InputMap inputMap = frame.getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
@@ -259,8 +238,7 @@ public class ClassViewer {
     }
 
     public void init() {
-        contentPanelLeft.init();
-        contentPanelRight.init();
+        codeView.init();
         navigationPanel.init();
         treePanel.init();
         searchBar.init();
@@ -278,7 +256,7 @@ public class ClassViewer {
             frame.setVisible(true);
             searchBar.setVisible(false);
 
-            contentPanelLeft.getContentPane().grabFocus();
+            codeView.bytecodePanel().getContentPane().grabFocus();
         });
     }
 
@@ -291,12 +269,7 @@ public class ClassViewer {
     }
 
     public void displayBytecode(ClassNode classNode) {
-        lastDisplayedClassNode = classNode;
-
-        contentPanelLeft.displayBytecode(classNode);
-        if (asmJavaSplitEnabled) {
-            contentPanelRight.displayBytecode(classNode);
-        }
+        codeView.display(classNode);
     }
 
     public void showClassReferences(String jarName, ClassNode classNode) {
@@ -316,101 +289,27 @@ public class ClassViewer {
 
     public void openReferenceResult(ReferenceResult result) {
         navigationPanel.selectProjectTab();
-        displayBytecode(result.navigationClass());
-        SwingUtilities.invokeLater(() -> contentPanelLeft.selectTextAfterPattern(
-            result.navigationPattern(),
-            result.highlightText()
-        ));
+        codeView.showReference(result);
     }
 
     public boolean openBookmark(ProjectBookmark bookmark, ClassNode owner) {
-        displayBytecode(owner);
-        if (bookmark.type() == ProjectBookmarkType.CLASS) {
-            SwingUtilities.invokeLater(() -> contentPanelLeft.selectTextAfterPattern(
-                ClassNodeUtil.getPattern(owner, null, null),
-                owner.name
-            ));
-            return true;
-        }
-        if (bookmark.type() == ProjectBookmarkType.FIELD) {
-            FieldNode field = owner.fields.stream()
-                .filter(candidate -> candidate.name.equals(bookmark.memberName()))
-                .filter(candidate -> candidate.desc.equals(bookmark.descriptor()))
-                .findFirst()
-                .orElse(null);
-            if (field == null) {
-                return false;
-            }
-            SwingUtilities.invokeLater(() -> contentPanelLeft.selectTextAfterPattern(
-                ClassNodeUtil.getFieldNodePattern(field),
-                field.name
-            ));
-            return true;
-        }
-        MethodNode method = owner.methods.stream()
-            .filter(candidate -> candidate.name.equals(bookmark.memberName()))
-            .filter(candidate -> candidate.desc.equals(bookmark.descriptor()))
-            .findFirst()
-            .orElse(null);
-        if (method == null) {
-            return false;
-        }
-        SwingUtilities.invokeLater(() -> contentPanelLeft.selectTextAfterPattern(
-            ClassNodeUtil.getMethodNodePattern(method),
-            method.name
-        ));
-        return true;
+        return codeView.showBookmark(bookmark, owner);
     }
 
     public void clearContent() {
-        lastDisplayedClassNode = null;
-        contentPanelLeft.clear();
-        contentPanelRight.clear();
+        codeView.clear();
     }
 
-    private void showProjectPanel() {
-        leftSplitPane.setRightComponent(projectPanel);
-        mainSplitPane.setRightComponent(rightPanel);
+    /**
+     * Show a workspace: {@code left} beside the navigation bar and {@code right} in the main area.
+     *
+     * @param opened the workspace's own panel, whose theme may be out of date while it was hidden
+     */
+    private void showWorkspace(Component left, Component right, JComponent opened) {
+        leftSplitPane.setRightComponent(left);
+        mainSplitPane.setRightComponent(right);
         mainSplitPane.setDividerLocation(300);
-        SettingsManager.refreshThemeFor(projectPanel);
-        frame.revalidate();
-        frame.repaint();
-    }
-
-    private void showSearchPanel() {
-        leftSplitPane.setRightComponent(searchPanel);
-        mainSplitPane.setRightComponent(rightPanel);
-        mainSplitPane.setDividerLocation(300);
-        SettingsManager.refreshThemeFor(searchPanel);
-        frame.revalidate();
-        frame.repaint();
-    }
-
-    private void showMappingPanel() {
-        leftSplitPane.setRightComponent(projectPanel);
-        mainSplitPane.setRightComponent(mappingWorkspacePanel);
-        mainSplitPane.setDividerLocation(300);
-        mappingWorkspacePanel.refreshJars(controller.jars().classesByJar());
-        SettingsManager.refreshThemeFor(mappingWorkspacePanel);
-        frame.revalidate();
-        frame.repaint();
-    }
-
-    private void showReferencePanel() {
-        leftSplitPane.setRightComponent(projectPanel);
-        mainSplitPane.setRightComponent(referenceWorkspacePanel);
-        mainSplitPane.setDividerLocation(300);
-        SettingsManager.refreshThemeFor(referenceWorkspacePanel);
-        frame.revalidate();
-        frame.repaint();
-    }
-
-    private void showBookmarkPanel() {
-        leftSplitPane.setRightComponent(bookmarkWorkspacePanel);
-        mainSplitPane.setRightComponent(rightPanel);
-        mainSplitPane.setDividerLocation(300);
-        bookmarkWorkspacePanel.refresh();
-        SettingsManager.refreshThemeFor(bookmarkWorkspacePanel);
+        SettingsManager.refreshThemeFor(opened);
         frame.revalidate();
         frame.repaint();
     }
@@ -513,7 +412,7 @@ public class ClassViewer {
             contentSplitPane.getDividerLocation(),
             logPanel.isVisible(),
             methodSimulatorPanel.isVisible(),
-            asmJavaSplitEnabled,
+            codeView.isJavaShown(),
             navigationPanel.getSelectedTabId()
         );
     }
@@ -534,7 +433,7 @@ public class ClassViewer {
             if (methodSimulatorPanel.isVisible() != layout.simulatorVisible()) {
                 toggleMethodSimulatorVisibility(methodSimulatorPanel.isVisible());
             }
-            if (asmJavaSplitEnabled != layout.splitJavaVisible()) {
+            if (codeView.isJavaShown() != layout.splitJavaVisible()) {
                 menuBar.getSplitAsmJavaItem().doClick();
             }
             navigationPanel.selectTab(layout.selectedWorkspace());
@@ -561,11 +460,11 @@ public class ClassViewer {
     }
 
     public ContentPanel getContentPanel() {
-        return contentPanelLeft;
+        return codeView.bytecodePanel();
     }
 
     public JTextPane getContentPane() {
-        return contentPanelLeft.getContentPane();
+        return codeView.bytecodePanel().getContentPane();
     }
 
     public TreePanel getTreePanel() {
@@ -578,45 +477,5 @@ public class ClassViewer {
 
     public JFrame getFrame() {
         return frame;
-    }
-
-    private void openSettingsDialog() {
-        JDialog dialog = new JDialog(frame, "Settings", true);
-        Settings initial = SettingsManager.getCurrent();
-        SettingsPanel panel = new SettingsPanel(initial);
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton apply = new JButton("Apply");
-        JButton ok = new JButton("OK");
-        JButton cancel = new JButton("Cancel");
-        buttons.add(cancel);
-        buttons.add(apply);
-        buttons.add(ok);
-
-        apply.addActionListener(e -> applySettings(panel));
-        ok.addActionListener(e -> {
-            applySettings(panel);
-            dialog.dispose();
-        });
-        cancel.addActionListener(e -> dialog.dispose());
-
-        JPanel content = new JPanel(new BorderLayout());
-        content.add(panel, BorderLayout.CENTER);
-        content.add(buttons, BorderLayout.SOUTH);
-        dialog.setContentPane(content);
-        dialog.pack();
-        dialog.setLocationRelativeTo(frame);
-        dialog.setVisible(true);
-    }
-
-    private void applySettings(SettingsPanel panel) {
-        Settings s = panel.collectSettings();
-        SettingsManager.applyAndSave(s, frame);
-        // Refresh current views
-        if (lastDisplayedClassNode != null) {
-            contentPanelLeft.displayClass(lastDisplayedClassNode);
-            if (asmJavaSplitEnabled && contentPanelRight != null) {
-                contentPanelRight.displayBytecode(lastDisplayedClassNode);
-            }
-        }
     }
 }

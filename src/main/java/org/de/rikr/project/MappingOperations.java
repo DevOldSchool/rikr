@@ -5,6 +5,7 @@ import org.de.rikr.behavioral.MethodComparator;
 import org.de.rikr.mapping.ClassMappingDecision;
 import org.de.rikr.mapping.ClassMappingService;
 import org.de.rikr.mapping.ClassMatch;
+import org.de.rikr.mapping.SimilarClassReport;
 import org.de.rikr.model.ClassRef;
 import org.de.rikr.model.Workspace;
 import org.objectweb.asm.tree.ClassNode;
@@ -12,6 +13,7 @@ import org.objectweb.asm.tree.MethodNode;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -121,17 +123,38 @@ public class MappingOperations {
         return classComparator.getNonStaticMethodDescriptions(classNode);
     }
 
-    public String normalizeDescriptor(String descriptor) {
-        return classComparator.normalizeDescriptor(descriptor);
-    }
-
-    public boolean areMethodsBehaviorallyEquivalent(
-        List<ClassNode> classNodes1,
-        MethodNode methodNode1,
-        List<ClassNode> classNodes2,
-        MethodNode methodNode2
-    ) {
-        return methodComparator.areBehaviorallyEquivalent(classNodes1, methodNode1, classNodes2, methodNode2);
+    /**
+     * The closest matches of the class in every other JAR, and for each match the methods with the same
+     * normalized descriptor that also behave the same when simulated.
+     */
+    public SimilarClassReport similarClassReport(String sourceJar, ClassNode sourceClass) {
+        List<ClassNode> sourceClasses = Optional.ofNullable(workspace.classesSnapshot(sourceJar)).orElse(List.of());
+        List<SimilarClassReport.Match> matches = new ArrayList<>();
+        int skipped = 0;
+        for (Map.Entry<String, List<ClassMatch>> entry : findSimilarClasses(sourceJar, sourceClass).entrySet()) {
+            List<ClassNode> targetClasses = Optional.ofNullable(workspace.classesSnapshot(entry.getKey())).orElse(List.of());
+            for (ClassMatch match : entry.getValue()) {
+                List<SimilarClassReport.MethodPair> equivalent = new ArrayList<>();
+                for (MethodNode sourceMethod : sourceClass.methods) {
+                    String descriptor = classComparator.normalizeDescriptor(sourceMethod.desc);
+                    for (MethodNode targetMethod : match.classNode().methods) {
+                        if (!descriptor.equals(classComparator.normalizeDescriptor(targetMethod.desc))) {
+                            continue;
+                        }
+                        try {
+                            if (methodComparator.areBehaviorallyEquivalent(sourceClasses, sourceMethod, targetClasses, targetMethod)) {
+                                equivalent.add(new SimilarClassReport.MethodPair(sourceMethod, targetMethod));
+                            }
+                        } catch (RuntimeException exception) {
+                            // The simulator does not support every instruction; count it rather than fail the report.
+                            skipped++;
+                        }
+                    }
+                }
+                matches.add(new SimilarClassReport.Match(entry.getKey(), match, equivalent));
+            }
+        }
+        return new SimilarClassReport(matches, skipped);
     }
 
     /**

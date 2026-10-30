@@ -6,14 +6,11 @@ import org.de.rikr.mapping.ClassMatch;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;
 import org.objectweb.asm.tree.ClassNode;
-import org.objectweb.asm.tree.FieldNode;
-import org.objectweb.asm.tree.MethodNode;
 
 import javax.swing.*;
 import java.awt.*;
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.Modifier;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -25,8 +22,7 @@ public class MappingWorkspacePanel extends JPanel {
     private static final int MAXIMUM_CANDIDATES = 100;
 
     private final Rikr controller;
-    private final JComboBox<String> sourceJarBox = new JComboBox<>();
-    private final JComboBox<String> targetJarBox = new JComboBox<>();
+    private final JarPairSelector jars = new JarPairSelector(this::reloadSourceClasses);
     private final JSpinner minimumSimilaritySpinner = new JSpinner(
         new SpinnerNumberModel(DEFAULT_MINIMUM_SIMILARITY, 0, 100, 5)
     );
@@ -45,7 +41,6 @@ public class MappingWorkspacePanel extends JPanel {
     private final JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT));
     private final JPanel decisionBar = new JPanel(new FlowLayout(FlowLayout.LEFT));
 
-    private boolean updatingJarChoices;
     private int candidateRequestSequence;
 
     public MappingWorkspacePanel(Rikr controller) {
@@ -61,8 +56,7 @@ public class MappingWorkspacePanel extends JPanel {
     }
 
     public void init() {
-        sourceJarBox.addActionListener(event -> jarSelectionChanged());
-        targetJarBox.addActionListener(event -> jarSelectionChanged());
+        jars.init();
         minimumSimilaritySpinner.addChangeListener(event -> refreshCandidates());
         sourceClassList.addListSelectionListener(event -> {
             if (!event.getValueIsAdjusting()) {
@@ -83,32 +77,15 @@ public class MappingWorkspacePanel extends JPanel {
     }
 
     public void refreshJars(Map<String, List<ClassNode>> jarClasses) {
-        String previousSource = selectedSourceJar();
-        String previousTarget = selectedTargetJar();
-        List<String> jarNames = jarClasses.keySet().stream().sorted().toList();
-
-        updatingJarChoices = true;
-        sourceJarBox.removeAllItems();
-        targetJarBox.removeAllItems();
-        jarNames.forEach(jarName -> {
-            sourceJarBox.addItem(jarName);
-            targetJarBox.addItem(jarName);
-        });
-
-        selectItem(sourceJarBox, previousSource, 0);
-        int defaultTargetIndex = jarNames.size() > 1 ? 1 : 0;
-        selectItem(targetJarBox, previousTarget, defaultTargetIndex);
-        ensureDifferentJars();
-        updatingJarChoices = false;
-
+        jars.setJars(jarClasses.keySet().stream().sorted().toList());
         reloadSourceClasses();
     }
 
     private void buildToolbar() {
         toolbar.add(new JLabel("Source JAR"));
-        toolbar.add(sourceJarBox);
+        toolbar.add(jars.sourceBox());
         toolbar.add(new JLabel("Target JAR"));
-        toolbar.add(targetJarBox);
+        toolbar.add(jars.targetBox());
         toolbar.add(new JLabel("Minimum %"));
         toolbar.add(minimumSimilaritySpinner);
         toolbar.add(autoMatchButton);
@@ -146,79 +123,11 @@ public class MappingWorkspacePanel extends JPanel {
     }
 
     private void configureRenderers() {
-        sourceClassList.setCellRenderer(new DefaultListCellRenderer() {
-            @Override
-            public Component getListCellRendererComponent(
-                JList<?> list,
-                Object value,
-                int index,
-                boolean isSelected,
-                boolean cellHasFocus
-            ) {
-                JLabel label = (JLabel) super.getListCellRendererComponent(
-                    list,
-                    value,
-                    index,
-                    isSelected,
-                    cellHasFocus
-                );
-                if (value instanceof ClassNode sourceClass) {
-                    Optional<ClassMappingDecision> accepted = acceptedMapping(sourceClass);
-                    String prefix = accepted.map(mapping -> "[Accepted " + mapping.similarityPercent() + "%] ")
-                        .orElse("");
-                    label.setText(prefix + sourceClass.name);
-                }
-                return label;
-            }
-        });
-
-        candidateList.setCellRenderer(new DefaultListCellRenderer() {
-            @Override
-            public Component getListCellRendererComponent(
-                JList<?> list,
-                Object value,
-                int index,
-                boolean isSelected,
-                boolean cellHasFocus
-            ) {
-                JLabel label = (JLabel) super.getListCellRendererComponent(
-                    list,
-                    value,
-                    index,
-                    isSelected,
-                    cellHasFocus
-                );
-                if (value instanceof ClassMatch candidate) {
-                    String state = candidateState(candidate);
-                    label.setText(candidate.similarityPercent() + "%  " + candidate.classNode().name + state);
-                }
-                return label;
-            }
-        });
-    }
-
-    private void jarSelectionChanged() {
-        if (updatingJarChoices) {
-            return;
-        }
-        updatingJarChoices = true;
-        ensureDifferentJars();
-        updatingJarChoices = false;
-        reloadSourceClasses();
-    }
-
-    private void ensureDifferentJars() {
-        String sourceJar = selectedSourceJar();
-        String targetJar = selectedTargetJar();
-        if (sourceJar == null || !sourceJar.equals(targetJar)) {
-            return;
-        }
-        for (int index = 0; index < targetJarBox.getItemCount(); index++) {
-            if (!sourceJar.equals(targetJarBox.getItemAt(index))) {
-                targetJarBox.setSelectedIndex(index);
-                return;
-            }
-        }
+        sourceClassList.setCellRenderer(new LabelRenderer<>(ClassNode.class, sourceClass ->
+            acceptedMapping(sourceClass).map(mapping -> "[Accepted " + mapping.similarityPercent() + "%] ").orElse("")
+                + sourceClass.name));
+        candidateList.setCellRenderer(new LabelRenderer<>(ClassMatch.class, candidate ->
+            candidate.similarityPercent() + "%  " + candidate.classNode().name + candidateState(candidate)));
     }
 
     private void reloadSourceClasses() {
@@ -416,28 +325,11 @@ public class MappingWorkspacePanel extends JPanel {
             return;
         }
 
-        JFileChooser chooser = new JFileChooser();
-        chooser.setSelectedFile(new File(exportFileName(sourceJar, targetJar)));
-        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+        Optional<File> chosen = MappingExportDialog.chooseDestination(this, sourceJar, targetJar);
+        if (chosen.isEmpty()) {
             return;
         }
-
-        File destination = chooser.getSelectedFile();
-        if (!destination.getName().toLowerCase().endsWith(".json")) {
-            destination = new File(destination.getParentFile(), destination.getName() + ".json");
-        }
-        if (destination.exists()) {
-            int overwrite = JOptionPane.showConfirmDialog(
-                this,
-                "Replace " + destination.getName() + "?",
-                "Export mappings",
-                JOptionPane.YES_NO_OPTION,
-                JOptionPane.WARNING_MESSAGE
-            );
-            if (overwrite != JOptionPane.YES_OPTION) {
-                return;
-            }
-        }
+        File destination = chosen.get();
         try {
             controller.mappings().export(destination, sourceJar, targetJar);
             statusLabel.setText("Exported " + mappings.size() + " mappings to " + destination.getName());
@@ -449,8 +341,8 @@ public class MappingWorkspacePanel extends JPanel {
     private void updateDetailsAndControls() {
         ClassNode sourceClass = sourceClassList.getSelectedValue();
         ClassMatch candidate = candidateList.getSelectedValue();
-        sourceDetails.setText(describeClass(sourceClass, null));
-        candidateDetails.setText(describeClass(
+        sourceDetails.setText(ClassDetails.describe(sourceClass, null));
+        candidateDetails.setText(ClassDetails.describe(
             candidate == null ? null : candidate.classNode(),
             candidate == null ? null : candidate.similarityPercent()
         ));
@@ -510,65 +402,21 @@ public class MappingWorkspacePanel extends JPanel {
         return "";
     }
 
-    private String describeClass(ClassNode classNode, Integer similarityPercent) {
-        if (classNode == null) {
-            return "";
-        }
-        StringBuilder details = new StringBuilder();
-        if (similarityPercent != null) {
-            details.append("Similarity: ").append(similarityPercent).append("%\n");
-        }
-        details.append("Name: ").append(classNode.name).append('\n');
-        details.append("Kind: ").append(classKind(classNode)).append('\n');
-        details.append("Superclass: ").append(classNode.superName == null ? "<none>" : classNode.superName).append('\n');
-        details.append("Interfaces (").append(classNode.interfaces.size()).append("):\n");
-        classNode.interfaces.forEach(name -> details.append("  ").append(name).append('\n'));
-        details.append("\nFields (").append(classNode.fields.size()).append("):\n");
-        for (FieldNode field : classNode.fields) {
-            details.append("  ");
-            if (Modifier.isStatic(field.access)) {
-                details.append("static ");
-            }
-            details.append(field.name).append(' ').append(field.desc).append('\n');
-        }
-        details.append("\nMethods (").append(classNode.methods.size()).append("):\n");
-        for (MethodNode method : classNode.methods) {
-            details.append("  ");
-            if (Modifier.isStatic(method.access)) {
-                details.append("static ");
-            }
-            details.append(method.name).append(method.desc).append('\n');
-        }
-        return details.toString();
-    }
-
-    private String classKind(ClassNode classNode) {
-        if (Modifier.isInterface(classNode.access)) {
-            return "interface";
-        }
-        if (Modifier.isAbstract(classNode.access)) {
-            return "abstract class";
-        }
-        return "class";
-    }
-
     private void repaintLists() {
         sourceClassList.repaint();
         candidateList.repaint();
     }
 
     private boolean hasJarPair() {
-        String sourceJar = selectedSourceJar();
-        String targetJar = selectedTargetJar();
-        return sourceJar != null && targetJar != null && !sourceJar.equals(targetJar);
+        return jars.hasPair();
     }
 
     private String selectedSourceJar() {
-        return (String) sourceJarBox.getSelectedItem();
+        return jars.source();
     }
 
     private String selectedTargetJar() {
-        return (String) targetJarBox.getSelectedItem();
+        return jars.target();
     }
 
     private int findSourceIndex(String className) {
@@ -581,23 +429,6 @@ public class MappingWorkspacePanel extends JPanel {
             }
         }
         return -1;
-    }
-
-    private void selectItem(JComboBox<String> comboBox, String preferred, int defaultIndex) {
-        if (preferred != null) {
-            comboBox.setSelectedItem(preferred);
-        }
-        if (comboBox.getSelectedIndex() < 0 && comboBox.getItemCount() > defaultIndex) {
-            comboBox.setSelectedIndex(defaultIndex);
-        }
-    }
-
-    private String exportFileName(String sourceJar, String targetJar) {
-        return stripJarSuffix(sourceJar) + "-to-" + stripJarSuffix(targetJar) + "-mappings.json";
-    }
-
-    private String stripJarSuffix(String name) {
-        return name.toLowerCase().endsWith(".jar") ? name.substring(0, name.length() - 4) : name;
     }
 
     private void showError(String title, Throwable throwable) {
