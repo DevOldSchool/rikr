@@ -2,6 +2,24 @@
 
 A software reverse engineering suite of tools for Java.
 
+## Building and running
+
+Rikr needs Java 21 and Maven.
+
+```bash
+mvn -q -DskipTests package
+java -cp "target/classes:target/lib/*" org.de.rikr.Rikr
+```
+
+## Using Rikr from AI agents
+
+`bin/rikr-mcp` runs Rikr as a [Model Context Protocol](https://modelcontextprotocol.io) server, so agents such as
+Claude Code can load JARs, read bytecode and decompiled Java, follow references, rename classes and members, match
+classes between JARs, and import or export tiny v2, Enigma and ProGuard mappings without the GUI. This repository's
+`.mcp.json` registers it for Claude Code; for another client, run `bin/rikr-mcp` as a stdio server.
+
+See [AGENTS.md](AGENTS.md) for how the code is organised and the rules agents working on it should follow.
+
 ## Roadmap
 
 The following items are listed in no particular order and are here as a todo list.

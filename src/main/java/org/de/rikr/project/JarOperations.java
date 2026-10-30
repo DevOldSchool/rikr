@@ -142,6 +142,13 @@ public class JarOperations {
         return workspace.findClass(ref);
     }
 
+    /**
+     * The class's name when it was loaded, before any rename.
+     */
+    public String originalName(ClassNode classNode) {
+        return workspace.originalNames().className(classNode);
+    }
+
     public Optional<String> jarOf(ClassNode classNode) {
         return workspace.jarOf(classNode);
     }
