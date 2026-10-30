@@ -1,7 +1,6 @@
 package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
-import org.de.rikr.resources.Images;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;
 
@@ -24,14 +23,12 @@ public class SearchBar extends JPanel {
     private final JButton upButton;
     private final JButton downButton;
     private final JLabel resultCounter;
-    private final JButton matchCaseButton;
-    private final JButton matchWordButton;
+    private final MatchOptions matchOptions;
     private boolean matchCase;
     private boolean matchWord;
 
     private final List<int[]> searchResults;
     private int currentResultIndex;
-    private Color defaultBackgroundColor;
     private final JPanel topPanel;
 
     public SearchBar(Rikr controller, ActionListener closeListener) {
@@ -40,16 +37,13 @@ public class SearchBar extends JPanel {
         setLayout(new BorderLayout());
 
         // Initialize components
-        searchField = new JTextField(20);
+        searchField = new JTextField(26);
         SearchFields.style(searchField, "Find in this class");
-        matchCaseButton = new JButton(Images.getImage("match-case"));
-        matchCaseButton.setToolTipText("Match Case");
-        matchCaseButton.getAccessibleContext().setAccessibleName("Match Case");
-        matchCaseButton.setBorderPainted(false);
-        matchWordButton = new JButton(Images.getImage("match-word"));
-        matchWordButton.setToolTipText("Match Words");
-        matchWordButton.getAccessibleContext().setAccessibleName("Match Words");
-        matchWordButton.setBorderPainted(false);
+        matchOptions = new MatchOptions(searchField, options -> {
+            matchCase = options.matchCase();
+            matchWord = options.matchWord();
+            search();
+        });
         resultCounter = new JLabel(" ");
         upButton = new JButton("Previous");
         upButton.setToolTipText("Previous match (Shift+Cmd+G)");
@@ -65,10 +59,8 @@ public class SearchBar extends JPanel {
         searchResults = new ArrayList<>();
         currentResultIndex = -1;
 
-        topPanel = new JPanel();
+        topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
         topPanel.add(searchField);
-        topPanel.add(matchCaseButton);
-        topPanel.add(matchWordButton);
         topPanel.add(resultCounter);
         topPanel.add(upButton);
         topPanel.add(downButton);
@@ -77,7 +69,6 @@ public class SearchBar extends JPanel {
 
         add(topPanel, BorderLayout.NORTH);
 
-        defaultBackgroundColor = matchCaseButton.getBackground();
 
         matchCase = false;
         matchWord = false;
@@ -98,15 +89,6 @@ public class SearchBar extends JPanel {
             }
         });
 
-        matchCaseButton.addActionListener(e -> {
-            matchCase = !matchCase;
-            toggleButton(matchCaseButton, matchCase);
-        });
-
-        matchWordButton.addActionListener(e -> {
-            matchWord = !matchWord;
-            toggleButton(matchWordButton, matchWord);
-        });
 
         upButton.addActionListener(e -> navigateResults(-1));
         downButton.addActionListener(e -> navigateResults(1));
@@ -227,27 +209,10 @@ public class SearchBar extends JPanel {
         }
     }
 
-    private void toggleButton(JButton button, boolean toggle) {
-        // Screen readers hear the state the colour shows.
-        button.getAccessibleContext().setAccessibleDescription(toggle ? "On" : "Off");
-        SearchFields.toggleIcon(button, button == matchCaseButton ? "match-case" : "match-word", toggle);
-        if (toggle) {
-            button.setBackground(Theme.SEARCH_BUTTON_SELECTED_COLOR);
-        } else {
-            button.setBackground(defaultBackgroundColor);
-        }
-
-        search();
-    }
-
     private void applyTheme() {
         topPanel.setBackground(Theme.BACKGROUND_COLOR);
         SearchFields.applyTheme(searchField);
-        SearchFields.toggleIcon(matchCaseButton, "match-case", matchCase);
-        SearchFields.toggleIcon(matchWordButton, "match-word", matchWord);
-        defaultBackgroundColor = matchCaseButton.getBackground();
-        matchCaseButton.setBackground(matchCase ? Theme.SEARCH_BUTTON_SELECTED_COLOR : defaultBackgroundColor);
-        matchWordButton.setBackground(matchWord ? Theme.SEARCH_BUTTON_SELECTED_COLOR : defaultBackgroundColor);
+        matchOptions.applyTheme();
 
         revalidate();
         repaint();

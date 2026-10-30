@@ -27,12 +27,9 @@ public class SearchPanel extends JPanel {
     private final JList<SearchResultItem> resultsList;
     private final JLabel summary = new JLabel(" ");
     private final DefaultListModel<SearchResultItem> listModel;
-    private final JButton matchCaseButton;
-    private final JButton matchWordButton;
+    private final MatchOptions matchOptions;
     private boolean matchCase;
     private boolean matchWord;
-    private Color defaultBackgroundColor;
-    private JPanel buttonsPanel;
     private JPanel searchBarPanel;
     private JScrollPane scrollPane;
     private static final int SEARCH_DEBOUNCE_MS = 250;
@@ -47,25 +44,18 @@ public class SearchPanel extends JPanel {
         searchBarPanel = new JPanel(new BorderLayout());
         searchField = new JTextField();
         SearchFields.style(searchField, "Search names and instructions");
-        matchCaseButton = new JButton(Images.getImage("match-case"));
-        matchCaseButton.setToolTipText("Match Case");
-        matchCaseButton.getAccessibleContext().setAccessibleName("Match Case");
-        matchCaseButton.setBorderPainted(false);
-        matchWordButton = new JButton(Images.getImage("match-word"));
-        matchWordButton.setToolTipText("Match Words");
-        matchWordButton.getAccessibleContext().setAccessibleName("Match Words");
-        matchWordButton.setBorderPainted(false);
+        matchOptions = new MatchOptions(searchField, options -> {
+            matchCase = options.matchCase();
+            matchWord = options.matchWord();
+            // Use debounce to avoid lag when toggling options rapidly
+            triggerSearchDebounced();
+        });
 
         // Create a panel for the buttons
-        buttonsPanel = new JPanel();
-        buttonsPanel.setBackground(Theme.BACKGROUND_COLOR);
-        buttonsPanel.setLayout(new BoxLayout(buttonsPanel, BoxLayout.X_AXIS));
-        buttonsPanel.add(matchCaseButton);
-        buttonsPanel.add(matchWordButton);
 
         // Add components to the main panel
+        searchBarPanel.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
         searchBarPanel.add(searchField, BorderLayout.CENTER);
-        searchBarPanel.add(buttonsPanel, BorderLayout.EAST);
 
         // Create the list model and the results list
         listModel = new DefaultListModel<>();
@@ -85,9 +75,6 @@ public class SearchPanel extends JPanel {
         add(top, BorderLayout.NORTH);
         add(scrollPane, BorderLayout.CENTER);
 
-        defaultBackgroundColor = matchCaseButton.getBackground();
-        matchCase = false;
-        matchWord = false;
 
         applyTheme();
         SettingsManager.addListener(s -> applyTheme());
@@ -96,12 +83,7 @@ public class SearchPanel extends JPanel {
     private void applyTheme() {
         if (searchField != null) {
             SearchFields.applyTheme(searchField);
-            SearchFields.toggleIcon(matchCaseButton, "match-case", matchCase);
-            SearchFields.toggleIcon(matchWordButton, "match-word", matchWord);
-        }
-
-        if (buttonsPanel != null) {
-            buttonsPanel.setBackground(Theme.BACKGROUND_COLOR);
+            matchOptions.applyTheme();
         }
 
         if (resultsList != null) {
@@ -128,10 +110,6 @@ public class SearchPanel extends JPanel {
             }
         }
 
-        defaultBackgroundColor = matchCaseButton.getBackground();
-        matchCaseButton.setBackground(matchCase ? Theme.SEARCH_BUTTON_SELECTED_COLOR : defaultBackgroundColor);
-        matchWordButton.setBackground(matchWord ? Theme.SEARCH_BUTTON_SELECTED_COLOR : defaultBackgroundColor);
-
         revalidate();
         repaint();
     }
@@ -155,16 +133,6 @@ public class SearchPanel extends JPanel {
         });
 
         searchField.addActionListener(e -> triggerSearchImmediate());
-
-        matchCaseButton.addActionListener(e -> {
-            matchCase = !matchCase;
-            toggleButton(matchCaseButton, matchCase);
-        });
-
-        matchWordButton.addActionListener(e -> {
-            matchWord = !matchWord;
-            toggleButton(matchWordButton, matchWord);
-        });
 
         resultsList.addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
@@ -250,20 +218,6 @@ public class SearchPanel extends JPanel {
             case METHOD -> ClassNodeImages.getMethodNodeImage(result.methodNode());
             case INSTRUCTION -> Images.getImage("instruction");
         };
-    }
-
-    private void toggleButton(JButton button, boolean toggle) {
-        // Screen readers hear the state the colour shows.
-        button.getAccessibleContext().setAccessibleDescription(toggle ? "On" : "Off");
-        SearchFields.toggleIcon(button, button == matchCaseButton ? "match-case" : "match-word", toggle);
-        if (toggle) {
-            button.setBackground(Theme.SEARCH_BUTTON_SELECTED_COLOR);
-        } else {
-            button.setBackground(defaultBackgroundColor);
-        }
-
-        // Use debounce to avoid lag when toggling options rapidly
-        triggerSearchDebounced();
     }
 
     private void triggerSearchDebounced() {

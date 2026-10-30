@@ -26,8 +26,6 @@ public class Images {
             "references",
             "bookmarks",
             "flow",
-            "match-case",
-            "match-word",
             "instruction"
         };
 

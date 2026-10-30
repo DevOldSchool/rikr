@@ -25,7 +25,7 @@ public class DecompilerCacheService implements AutoCloseable {
     private final ExecutorService warmUpExecutor;
     private final ExecutorService classExecutor;
     // ClassNode does not override equals/hashCode, so entries are keyed by instance.
-    private final Map<ClassNode, String> sources = new WeakHashMap<>();
+    private final Map<ClassNode, OriginalLines> sources = new WeakHashMap<>();
     private final Map<String, Long> jarGenerations = new HashMap<>();
     private long generation;
 
@@ -79,17 +79,27 @@ public class DecompilerCacheService implements AutoCloseable {
         long startGeneration = currentGeneration();
         return CompletableFuture.supplyAsync(() -> {
             JetBrainsDecompilerService service = new JetBrainsDecompilerService(logger);
-            String source = service.decompile(internalName, classBytes);
-            if (source == null || source.isEmpty()) {
+            OriginalLines source = OriginalLines.parse(service.decompile(internalName, classBytes));
+            if (source.source() == null || source.source().isEmpty()) {
                 return DecompileResult.failure("Failed to decompile using JetBrains decompiler.");
             }
             cacheSource(classNode, source, startGeneration);
-            return DecompileResult.success(source);
+            return DecompileResult.success(source.source());
         }, classExecutor);
     }
 
     public synchronized String getDecompiledSource(ClassNode classNode) {
-        return classNode == null ? null : sources.get(classNode);
+        OriginalLines source = classNode == null ? null : sources.get(classNode);
+        return source == null ? null : source.source();
+    }
+
+    /**
+     * For each line of the class's cached Java, counted from 0, the class file's line numbers it came from; empty
+     * when the class has no line numbers or is not decompiled yet.
+     */
+    public synchronized Map<Integer, List<Integer>> getOriginalLines(ClassNode classNode) {
+        OriginalLines source = classNode == null ? null : sources.get(classNode);
+        return source == null ? Map.of() : source.originalsByLine();
     }
 
     /**
@@ -111,7 +121,7 @@ public class DecompilerCacheService implements AutoCloseable {
         return generation;
     }
 
-    private synchronized void cacheSource(ClassNode classNode, String source, long startGeneration) {
+    private synchronized void cacheSource(ClassNode classNode, OriginalLines source, long startGeneration) {
         if (generation == startGeneration) {
             sources.put(classNode, source);
         }
@@ -134,7 +144,7 @@ public class DecompilerCacheService implements AutoCloseable {
         for (ClassNode classNode : current) {
             String source = decompiled.get(classNode.name);
             if (source != null && !source.isEmpty()) {
-                sources.putIfAbsent(classNode, source);
+                sources.putIfAbsent(classNode, OriginalLines.parse(source));
                 cached++;
             }
         }

@@ -112,6 +112,10 @@ public class JetBrainsDecompilerService {
             options.put("asc", "1"); // encode non-ASCII
             options.put("rsy", "1"); // retain synthetic
             options.put("lit", "1"); // use 'final' for literals
+            // Mark each line with the class file's line numbers; OriginalLines takes them out again. The marks need
+            // the bytecode-to-source mapping turned on too.
+            options.put("bsm", "1");
+            options.put("__dump_original_lines__", "1");
 
             IFernflowerLogger fernLogger = new IFernflowerLogger() {
                 @Override
@@ -246,6 +250,8 @@ public class JetBrainsDecompilerService {
             options.put("asc", "1");
             options.put("rsy", "1");
             options.put("lit", "1");
+            options.put("bsm", "1");
+            options.put("__dump_original_lines__", "1");
 
             IFernflowerLogger fernLogger = new IFernflowerLogger() {
                 @Override

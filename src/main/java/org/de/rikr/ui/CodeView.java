@@ -21,6 +21,7 @@ import java.awt.*;
 public class CodeView extends JPanel {
     private static final String EMPTY = "empty";
     private static final String CODE = "code";
+    private static final int LINK_DELAY_MS = 120;
 
     private final ContentPanel bytecodePanel;
     private final ContentPanel javaPanel;
@@ -30,6 +31,11 @@ public class CodeView extends JPanel {
     // Where the user last put the divider between bytecode and Java, as a share of the width.
     private double javaDivider = 0.5;
     private ClassNode displayedClass;
+    private Object linkHighlight;
+    private final Timer linkToJava = new Timer(LINK_DELAY_MS, event -> linkFrom(true));
+    private final Timer linkToBytecode = new Timer(LINK_DELAY_MS, event -> linkFrom(false));
+    // True while a link moves the other view's caret, which must not link back.
+    private boolean linking;
     private final Rikr controller;
     // Which class is open, and from which JAR, since the tree selection may be elsewhere.
     private final JLabel heading = new JLabel(" ");
@@ -45,19 +51,12 @@ public class CodeView extends JPanel {
         code.add(heading, BorderLayout.NORTH);
         code.add(body, BorderLayout.CENTER);
         body.add(bytecodePanel, BorderLayout.CENTER);
-        // With both views shown, a click in one shows the same method in the other.
-        bytecodePanel.getContentPane().addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override
-            public void mouseClicked(java.awt.event.MouseEvent event) {
-                showInJava();
-            }
-        });
-        javaPanel.getContentPane().addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override
-            public void mouseClicked(java.awt.event.MouseEvent event) {
-                showInBytecode();
-            }
-        });
+        // With both views shown, moving the caret in one, by clicking or with the keyboard, shows the same code in
+        // the other. Moves are settled first, so holding an arrow key does not link every line it passes.
+        linkToJava.setRepeats(false);
+        linkToBytecode.setRepeats(false);
+        bytecodePanel.getContentPane().addCaretListener(event -> caretMoved(linkToJava));
+        javaPanel.getContentPane().addCaretListener(event -> caretMoved(linkToBytecode));
         add(emptyState, EMPTY);
         add(code, CODE);
         cards.show(this, EMPTY);
@@ -233,18 +232,31 @@ public class CodeView extends JPanel {
         SwingUtilities.invokeLater(() -> bytecodePanel.selectInMethod(pattern, label));
     }
 
+    // Only moves made in the focused view link; a view moved by a link, or scrolled by a search, does not.
+    private void caretMoved(Timer link) {
+        if (!linking && javaShown) {
+            link.restart();
+        }
+    }
+
+    // Focus is checked when the link runs, since a click moves the caret before the clicked view has focus.
+    private void linkFrom(boolean bytecode) {
+        if (bytecode && bytecodePanel.getContentPane().isFocusOwner()) {
+            showInJava();
+        } else if (!bytecode && javaPanel.getContentPane().isFocusOwner()) {
+            showInBytecode();
+        }
+    }
+
     private void showInJava() {
         if (!javaShown || displayedClass == null) {
             return;
         }
         JTextPane bytecode = bytecodePanel.getContentPane();
         JTextPane java = javaPanel.getContentPane();
-        CodeLink.methodAtBytecode(displayedClass, bytecode.getText(), bytecode.getCaretPosition())
-            .flatMap(method -> CodeLink.javaDeclaration(displayedClass, method, java.getText()))
-            .ifPresent(range -> {
-                java.select(range[0], range[1]);
-                scrollToSelection(java);
-            });
+        CodeLink.bytecodeToJava(displayedClass, text(bytecode), bytecode.getCaretPosition(), text(java),
+                controller.decompiler().getOriginalLines(displayedClass))
+            .ifPresent(range -> showLinked(java, range));
     }
 
     private void showInBytecode() {
@@ -252,12 +264,42 @@ public class CodeView extends JPanel {
             return;
         }
         JTextPane java = javaPanel.getContentPane();
-        CodeLink.methodAtJava(displayedClass, java.getText(), java.getCaretPosition())
-            .ifPresent(method -> {
-                bytecodePanel.selectTextAfterPattern(ClassNodeUtil.getMethodNodePattern(method),
-                    method.name.startsWith("<") ? method.name.substring(1, method.name.length() - 1) : method.name);
-                scrollToSelection(bytecodePanel.getContentPane());
-            });
+        JTextPane bytecode = bytecodePanel.getContentPane();
+        CodeLink.javaToBytecode(displayedClass, text(java), java.getCaretPosition(), text(bytecode),
+                controller.decompiler().getOriginalLines(displayedClass))
+            .ifPresent(range -> showLinked(bytecode, range));
+    }
+
+    // The document's own text, whose offsets match the caret's; getText() may change line endings.
+    private static String text(JTextPane pane) {
+        try {
+            return pane.getDocument().getText(0, pane.getDocument().getLength());
+        } catch (javax.swing.text.BadLocationException exception) {
+            return "";
+        }
+    }
+
+    // Marks the linked text with a highlight, which shows without taking focus from the pane that was clicked.
+    private void showLinked(JTextPane pane, CodeLink.Range range) {
+        javax.swing.text.Highlighter highlighter = pane.getHighlighter();
+        if (linkHighlight != null) {
+            bytecodePanel.getContentPane().getHighlighter().removeHighlight(linkHighlight);
+            javaPanel.getContentPane().getHighlighter().removeHighlight(linkHighlight);
+        }
+        try {
+            linkHighlight = highlighter.addHighlight(range.start(), range.end(),
+                new javax.swing.text.DefaultHighlighter.DefaultHighlightPainter(
+                    Theme.CONTENT_SELECTED_HIGHLIGHT_COLOR));
+        } catch (javax.swing.text.BadLocationException ignored) {
+            return;
+        }
+        linking = true;
+        try {
+            pane.setCaretPosition(range.start());
+        } finally {
+            linking = false;
+        }
+        scrollToSelection(pane);
     }
 
     // Scrolls to the selection, or to the caret when nothing is selected.

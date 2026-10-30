@@ -110,10 +110,20 @@ typed it lists the classes opened most recently. **Navigate > Back** and
 
 The bar above the code names the open class and its JAR, and the project tree
 selects it wherever it was opened from. With **View > Split Bytecode and Java**
-on, click inside a method in either view to show the same method in the other.
+on, click or move the caret with the keyboard in either view to show the same
+code in the other. A field shows its
+declaration. Inside a method, the class file's line numbers find the Java line
+an instruction was decompiled into, and the instruction is matched to what it
+reads as: a load to its variable, a call or field to its name, a return to
+`return`, a constant to its value, `IMUL` to `*` and the other arithmetic to
+their operators, a cast to its type, and a branch to its `if`, `for`, `while`
+or `?`.
+Clicking Java works the other way. Without line numbers the whole method is
+searched, and what cannot be matched shows the line or the method.
 
 **Edit > Find in Class...** (`Cmd+F`) searches the open class; **Find Next**
-and **Find Previous** are `Cmd+G` and `Shift+Cmd+G`. The status bar shows the
+and **Find Previous** are `Cmd+G` and `Shift+Cmd+G`. In every search field,
+`Alt+C` and `Alt+W` switch Match Case and Match Words. The status bar shows the
 latest message and when background work is running; click it, or press `Cmd+L`,
 to show the full log.
 
