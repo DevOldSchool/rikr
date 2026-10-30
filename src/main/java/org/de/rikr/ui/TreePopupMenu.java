@@ -43,6 +43,9 @@ public class TreePopupMenu extends JPopupMenu {
     private final JMenuItem findMatchingClassNodes = item("Find Matching Class Nodes", this::findMatchingClassNodes);
     private final JMenuItem getClassNodeSignature = item("Get Class Node Signature", this::showClassSignature);
     private final JMenuItem simulateMethod = item("Simulate Method", this::simulateMethod);
+    private final JMenuItem showControlFlow = item("Show Control Flow", this::showControlFlow);
+    private final JMenuItem showCallGraph = item("Show Call Graph", this::showCallGraph);
+    private final JMenuItem showEntryPoints = item("Show Entry Points", this::showEntryPoints);
     private final JMenuItem showReferences = item("Show References", this::showReferences);
     private final JMenuItem toggleBookmark = item("Toggle Bookmark", this::toggleBookmark);
 
@@ -87,6 +90,7 @@ public class TreePopupMenu extends JPopupMenu {
                 add(groupBySuperclass);
                 add(groupByInterface);
                 add(removeGrouping);
+                add(showEntryPoints);
                 add(importRenameMappings);
                 add(exportRenameMappings);
             }
@@ -104,6 +108,8 @@ public class TreePopupMenu extends JPopupMenu {
                 add(showReferences);
             }
             case MethodNodeMutableTreeNode ignored -> {
+                add(showControlFlow);
+                add(showCallGraph);
                 add(simulateMethod);
                 add(showReferences);
             }
@@ -213,6 +219,24 @@ public class TreePopupMenu extends JPopupMenu {
         if (node instanceof MethodNodeMutableTreeNode methodNode) {
             ClassNodeMutableTreeNode parent = (ClassNodeMutableTreeNode) methodNode.getParent();
             controller.getUserInterface().getMethodSimulatorPanel().initSimulate(parent, methodNode.getMethodNode());
+        }
+    }
+
+    private void showControlFlow(DefaultMutableTreeNode node) {
+        if (node instanceof MethodNodeMutableTreeNode methodNode) {
+            controller.getUserInterface().showControlFlow(methodNode.getOwner(), methodNode.getMethodNode());
+        }
+    }
+
+    private void showCallGraph(DefaultMutableTreeNode node) {
+        if (node instanceof MethodNodeMutableTreeNode methodNode) {
+            controller.getUserInterface().showCallGraph(methodNode.getOwner(), methodNode.getMethodNode());
+        }
+    }
+
+    private void showEntryPoints(DefaultMutableTreeNode node) {
+        if (node instanceof JarMutableTreeNode jarNode) {
+            controller.getUserInterface().showEntryPoints(jarNode.getJarName());
         }
     }
 

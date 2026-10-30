@@ -168,6 +168,11 @@ class RikrMcpTest {
             .contains("GETFIELD a.hp : I"));
         assertTrue(text(call("find_references", args("jar", "game.jar", "class", "a", "field", "hp")))
             .contains("Reads (1)"));
+        assertEquals("No entry points found in game.jar.", text(call("list_entry_points", args("jar", "game.jar"))));
+        String calls = text(call("get_call_graph", args("jar", "game.jar", "class", "b", "method", "make")));
+        assertTrue(calls.contains("-> static b.read(La;)I"), calls);
+        String flow = text(call("get_control_flow", args("jar", "game.jar", "class", "b", "method", "read")));
+        assertTrue(flow.startsWith("b.read(La;)I: 1 blocks, 0 edges") && flow.contains("exits the method"), flow);
 
         JsonObject dryRun = call("rename",
             args("jar", "game.jar", "class", "a", "new_name", "game.Player", "dry_run", true));

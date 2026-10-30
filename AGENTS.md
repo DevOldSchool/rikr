@@ -30,6 +30,7 @@ Code is grouped by feature under `src/main/java/org/de/rikr`, with tests in the 
 | `model` | `Workspace` (classes by JAR), `ClassRef`, `OriginalNames` (names as loaded). |
 | `rename` | `RenameEngine` (ASM `Remapper` passes), `RenameService` (validation, history, undo, replay), `RenameStep` = `RenameOperation` or `RenameBatch`. |
 | `symbol` | Symbols recorded while printing bytecode, so a click resolves to a class, field or method. |
+| `flow` | Following code: `EntryPoints` (where a JAR starts, including obfuscated applets), `CallGraph` (calls with override dispatch), `ControlFlowBuilder` (basic blocks and edges), and `GraphLayout` (layered layout). Drawn by `ui/FlowPanel` with `ui/graph/GraphView`. |
 | `mapping` | Class matching between JARs (`MappingSet`, `ClassMappingService`) and `mapping/format` for tiny v2, Enigma and ProGuard files. |
 | `jar` | Reading JARs and class files, and `JarExportService` for safe export. |
 | `reference`, `search`, `decompiler`, `bookmark` | The features their names say. The decompiler is JetBrains FernFlower. |
@@ -75,7 +76,7 @@ revisions from 2024-11-05 to 2025-11-25, which start with `initialize`. `McpServ
 request, as the specification's dual-era rules describe.
 
 The tools: `load_jars`, `remove_jar`, `list_jars`, `list_classes`, `describe_class`, `get_bytecode`, `decompile`,
-`search`, `find_references`, `rename`, `undo`, `rename_history`, `import_mappings`, `export_mappings`, `export_jar`,
+`search`, `find_references`, `list_entry_points`, `get_call_graph`, `get_control_flow`, `rename`, `undo`, `rename_history`, `import_mappings`, `export_mappings`, `export_jar`,
 `overwrite_original_jar`, `match_classes`, `accept_class_mapping`, `auto_match_classes`, `list_class_mappings`,
 `open_project` and `save_project`. Class names are internal (`a/b/C`); dotted names are accepted too. Renames and
 imports take `dry_run`. Nothing on disk changes until a save or export tool is called.

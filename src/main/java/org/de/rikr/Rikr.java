@@ -283,6 +283,7 @@ public class Rikr {
             }
             case ProjectEvent.Renamed renamed -> {
                 userInterface.refreshTreeLabels();
+                userInterface.refreshControlFlow();
                 refreshProjectState();
             }
             case ProjectEvent.JarsSaved saved -> refreshProjectState();

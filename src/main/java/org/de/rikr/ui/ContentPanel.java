@@ -12,6 +12,7 @@ import org.objectweb.asm.tree.ClassNode;
 
 import javax.swing.*;
 import javax.swing.text.*;
+import java.awt.Rectangle;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.dnd.DnDConstants;
@@ -277,6 +278,45 @@ public class ContentPanel extends JScrollPane {
 
     public RenameActionHandler getRenameActionHandler() {
         return renameActionHandler;
+    }
+
+    /**
+     * Select the label that starts a block of a method, as the bytecode view prints it, or the method's
+     * declaration when {@code label} is null or not found.
+     *
+     * @param methodPattern the method's name and descriptor, which only its declaration prints together
+     */
+    public void selectInMethod(String methodPattern, String label) {
+        String text;
+        try {
+            text = document.getText(0, document.getLength());
+        } catch (BadLocationException e) {
+            return;
+        }
+        int method = text.indexOf(methodPattern);
+        if (method < 0) {
+            return;
+        }
+        int start = method;
+        int end = method + methodPattern.length();
+        if (label != null) {
+            // Textifier prints a label on a line of its own, indented by three spaces.
+            int at = text.indexOf("\n   " + label + "\n", method);
+            if (at >= 0) {
+                start = at + 4;
+                end = start + label.length();
+            }
+        }
+        contentPane.grabFocus();
+        contentPane.select(start, end);
+        try {
+            // Show the block's first instructions below the label, not just the label at the edge of the view.
+            Rectangle shown = contentPane.modelToView2D(start).getBounds();
+            shown.height += getViewport().getHeight() / 2;
+            contentPane.scrollRectToVisible(shown);
+        } catch (BadLocationException ignored) {
+            // The selection is still made.
+        }
     }
 
     public void selectTextAfterPattern(String pattern, String textToSelect) {

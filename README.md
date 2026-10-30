@@ -34,7 +34,7 @@ The following items are listed in no particular order and are here as a todo lis
 - ~~Step through the instructions in a method.~~
 - ~~View the stack as you go.~~
 - ~~View local variables as you go.~~
-- Visually show the control flow.
+- ~~Visually show the control flow.~~
 
 #### User interface for class mapping between Jars.
 
@@ -59,8 +59,19 @@ The following items are listed in no particular order and are here as a todo lis
 
 #### Control flow graph
 
-- Follow code from jar entry point.
-- Load control flow from selected point.
+- ~~Follow code from jar entry point.~~
+- ~~Load control flow from selected point.~~
+
+#### Renaming and mappings
+
+- ~~Rename classes, fields and methods with a preview and undo.~~
+- ~~Rename by clicking a name in the bytecode view.~~
+- ~~Export renames as tiny v2, Enigma or ProGuard mappings.~~
+- ~~Import tiny v2, Enigma or ProGuard mappings as one undoable step.~~
+
+#### AI agents
+
+- ~~Use Rikr's features from agents through an MCP server.~~
 
 #### Settings
 
@@ -72,8 +83,8 @@ The following items are listed in no particular order and are here as a todo lis
 
 #### Documentation
 
-- Building.
-- Running.
+- ~~Building.~~
+- ~~Running.~~
 - User guides.
 
 ## Cross-JAR mapping workspace
@@ -98,7 +109,8 @@ changes, so queries do not repeatedly scan every instruction.
 
 ## Project sessions
 
-Use **File > Save Project** to create a `.rikr` session. A project records the
+Use **File > Save Project** to create a `.rikr` session, saved as versioned JSON;
+project files from older versions of Rikr still open. A project records the
 absolute paths of loaded JARs, accepted cross-JAR mappings, rename history,
 bookmarks, window bounds, split positions, visible tools, and the selected
 workspace. Opening a project validates its JAR paths and restores into a staged
@@ -114,3 +126,28 @@ names and member/class collisions and shows the number of affected references
 and classes. Use **Edit > Undo Rename** (`Ctrl/Cmd+Z`) to reverse the latest
 rename. A `*` beside a JAR marks bytecode with changes that have not been
 exported; saving or overwriting that JAR clears the marker.
+
+In the bytecode view, right-click a class, field or method name and choose
+**Rename** to rename exactly that symbol. Exported JARs keep the original's
+resources and manifest; **Overwrite Original JAR** keeps the previous file as
+`<name>.bak`.
+
+## Rename mappings
+
+Right-click a JAR and choose **Export Rename Mappings...** to save its renames
+as a tiny v2, Enigma or ProGuard file, or **Import Rename Mappings...** to apply
+one. Mapping files name classes and members as they were when the JAR was
+loaded. An import is checked before anything changes, shows what it will
+rename, and is undone in one step.
+
+## Entry points, call graphs and control flow
+
+Open the **C** tab, or right-click a JAR and choose **Show Entry Points**, then
+pick where the code starts: the manifest's Main-Class, `main` methods, applets
+(including obfuscated ones), thread `run()` methods or event listeners. The
+call graph that opens shows what the method calls; click a method's badge to
+show its calls, and double-click it for its control flow graph of basic blocks.
+In a control flow graph, right-click a block to follow the methods it calls,
+and double-click it to see it in the bytecode view. **Back** retraces the path.
+A method's right-click menu in the project tree also has **Show Call Graph** and
+**Show Control Flow**.

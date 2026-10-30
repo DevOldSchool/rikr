@@ -131,6 +131,15 @@ public class CodeView extends JPanel {
         return true;
     }
 
+    /**
+     * Show the class and select a block of one of its methods, given the label that starts the block.
+     */
+    public void showBlock(ClassNode owner, MethodNode method, String label) {
+        display(owner);
+        String pattern = ClassNodeUtil.getMethodNodePattern(method);
+        SwingUtilities.invokeLater(() -> bytecodePanel.selectInMethod(pattern, label));
+    }
+
     private void select(String pattern, String name) {
         SwingUtilities.invokeLater(() -> bytecodePanel.selectTextAfterPattern(pattern, name));
     }

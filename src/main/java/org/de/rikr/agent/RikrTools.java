@@ -2,6 +2,11 @@ package org.de.rikr.agent;
 
 import org.de.rikr.Logger;
 import org.de.rikr.decompiler.DecompileResult;
+import org.de.rikr.flow.CallGraph;
+import org.de.rikr.flow.ControlFlowBuilder;
+import org.de.rikr.flow.ControlFlowGraph;
+import org.de.rikr.flow.EntryPoint;
+import org.de.rikr.flow.MethodRef;
 import org.de.rikr.jar.JarExportService;
 import org.de.rikr.mapping.ClassMappingDecision;
 import org.de.rikr.mapping.ClassMatch;
@@ -118,6 +123,39 @@ final class RikrTools implements AutoCloseable {
                     .string("descriptor", "Only print the method with this descriptor, such as (I)V.", false)
                     .integer("max_chars", "Truncate longer output. Default 60000."),
                 true, this::bytecode),
+            tool("list_entry_points", """
+                    Where a JAR's code starts, most likely first: the manifest's Main-Class, static main methods, \
+                    applet lifecycles (init, then start) even in obfuscated applets, thread run() methods and \
+                    event listener methods. Start a call graph from one of these.""",
+                Schema.object()
+                    .string("jar", "JAR name.", true)
+                    .integer("limit", "How many entry points to return. Default 200."),
+                true, this::entryPoints),
+            tool("get_call_graph", """
+                    The methods a method calls, and what those call, breadth first to a depth. Virtual and \
+                    interface calls also list the overrides in the JAR they may dispatch to. Methods at the \
+                    depth limit are listed as targets only.""",
+                Schema.object()
+                    .string("jar", "JAR name.", true)
+                    .string("class", "Class of the starting method.", true)
+                    .string("method", "Starting method name.", true)
+                    .string("descriptor", "Method descriptor, needed when the name is overloaded.", false)
+                    .integer("depth", "How many calls deep to follow. Default 2, at most 6.")
+                    .bool("include_library",
+                        "Also list calls to methods outside the JAR, such as the JDK. Default false.")
+                    .integer("limit", "Most methods to expand. Default 200."),
+                true, this::callGraph),
+            tool("get_control_flow", """
+                    The control flow graph of a method: its basic blocks of bytecode, named by the labels the \
+                    bytecode view prints, and the edges between them (fall-through, jump, branch taken or not, \
+                    switch case, exception handler). Unreachable blocks are marked.""",
+                Schema.object()
+                    .string("jar", "JAR name.", true)
+                    .string("class", "Class name.", true)
+                    .string("method", "Method name.", true)
+                    .string("descriptor", "Method descriptor, needed when the name is overloaded.", false)
+                    .integer("max_chars", "Truncate longer output. Default 60000."),
+                true, this::controlFlow),
             tool("decompile",
                 "Decompile a class to Java with the JetBrains (FernFlower) decompiler, using current names.",
                 Schema.object()
@@ -376,6 +414,99 @@ final class RikrTools implements AutoCloseable {
             printed.methods = methods;
         }
         return truncate(BytecodeText.of(printed).text(), arguments);
+    }
+
+    private String entryPoints(Arguments arguments) throws ToolException {
+        String jar = jar(arguments, "jar");
+        List<EntryPoint> entries = project.jars().entryPoints(jar);
+        if (entries.isEmpty()) {
+            return "No entry points found in " + jar + ".";
+        }
+        int limit = Math.max(1, arguments.integer("limit", DEFAULT_LIMIT));
+        StringBuilder out = new StringBuilder(entries.size() + " entry points in " + jar
+            + (entries.size() > limit ? ", showing " + limit : "") + ", most likely first:\n");
+        for (EntryPoint entry : entries.subList(0, Math.min(limit, entries.size()))) {
+            out.append("  ").append(entry.kind().name().toLowerCase(Locale.ROOT)).append(": ").append(entry.method())
+                .append("  (").append(entry.reason()).append(")\n");
+        }
+        return out.toString().strip();
+    }
+
+    private String callGraph(Arguments arguments) throws ToolException {
+        String jar = jar(arguments, "jar");
+        ClassNode classNode = classNode(jar, arguments.className("class"));
+        if (!(member(arguments, classNode, jar) instanceof Declaration.MethodDeclaration declaration)) {
+            throw new ToolException("Give the method to start the call graph from.");
+        }
+        int depth = Math.max(1, Math.min(6, arguments.integer("depth", 2)));
+        int limit = Math.max(1, arguments.integer("limit", DEFAULT_LIMIT));
+        boolean library = arguments.bool("include_library", false);
+        CallGraph graph = new CallGraph(project.jars().classes(jar));
+        MethodRef root = new MethodRef(declaration.owner().name, declaration.method().name, declaration.method().desc);
+        Map<MethodRef, List<CallGraph.Call>> reachable = graph.reachable(root, depth, limit, library);
+        StringBuilder out = new StringBuilder("Calls from " + root + ", " + depth + " deep: " + reachable.size()
+            + " methods expanded\n");
+        for (Map.Entry<MethodRef, List<CallGraph.Call>> entry : reachable.entrySet()) {
+            out.append('\n').append(entry.getKey()).append(entry.getValue().isEmpty() ? " (calls nothing shown)" : "")
+                .append('\n');
+            for (CallGraph.Call call : entry.getValue()) {
+                out.append("  -> ").append(call.kind().name().toLowerCase(Locale.ROOT)).append(' ')
+                    .append(call.target()).append(call.inJar() ? "" : "  [outside the JAR]").append('\n');
+            }
+        }
+        return truncate(out.toString().strip(), arguments);
+    }
+
+    private String controlFlow(Arguments arguments) throws ToolException {
+        String jar = jar(arguments, "jar");
+        ClassNode classNode = classNode(jar, arguments.className("class"));
+        if (!(member(arguments, classNode, jar) instanceof Declaration.MethodDeclaration declaration)) {
+            throw new ToolException("Give the method whose control flow you want.");
+        }
+        ControlFlowGraph graph = ControlFlowBuilder.build(declaration.owner().name, declaration.method());
+        long unreachable = graph.blocks().stream().filter(block -> !block.reachable()).count();
+        StringBuilder out = new StringBuilder();
+        out.append(graph.owner()).append('.').append(graph.method()).append(graph.descriptor()).append(": ")
+            .append(graph.blocks().size()).append(" blocks, ").append(graph.edges().size()).append(" edges");
+        if (unreachable > 0) {
+            out.append(", ").append(unreachable).append(" unreachable");
+        }
+        out.append('\n');
+        for (ControlFlowGraph.Block block : graph.blocks()) {
+            out.append('\n').append(blockName(block));
+            if (!block.lineNumbers().isEmpty()) {
+                out.append(" (source line ").append(block.lineNumbers().getFirst())
+                    .append(block.lineNumbers().size() > 1 ? "-" + block.lineNumbers().getLast() : "").append(')');
+            }
+            if (!block.reachable()) {
+                out.append(" [unreachable]");
+            }
+            out.append(":\n");
+            block.lines().forEach(line -> out.append("    ").append(line).append('\n'));
+            List<String> successors = graph.edges().stream()
+                .filter(edge -> edge.from() == block.id())
+                .map(edge -> edgeKind(edge) + " -> " + blockName(graph.blocks().get(edge.to())))
+                .toList();
+            out.append("  ").append(successors.isEmpty() ? "exits the method" : String.join(", ", successors))
+                .append('\n');
+        }
+        return truncate(out.toString().strip(), arguments);
+    }
+
+    private static String blockName(ControlFlowGraph.Block block) {
+        return block.id() == 0 ? "entry" : block.label() != null ? block.label() : "block " + block.id();
+    }
+
+    private static String edgeKind(ControlFlowGraph.Edge edge) {
+        String kind = switch (edge.kind()) {
+            case FALLTHROUGH -> "next";
+            case JUMP -> "jump";
+            case TRUE -> "if true";
+            case FALSE -> "if false";
+            case SWITCH -> "case";
+            case EXCEPTION -> "catch";
+        };
+        return edge.label() == null ? kind : kind + " " + edge.label();
     }
 
     private String decompile(Arguments arguments) throws Exception {

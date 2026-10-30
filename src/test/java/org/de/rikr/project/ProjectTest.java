@@ -25,6 +25,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -34,7 +35,8 @@ class ProjectTest {
     @TempDir
     Path tempDir;
 
-    private final List<String> log = new ArrayList<>();
+    // The decompiler's warm-up thread logs too, so the list must take messages from several threads.
+    private final List<String> log = new CopyOnWriteArrayList<>();
     private final Project project = new Project(log::add);
 
     @AfterEach

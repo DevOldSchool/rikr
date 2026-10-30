@@ -1,6 +1,8 @@
 package org.de.rikr.project;
 
 import org.de.rikr.Logger;
+import org.de.rikr.flow.EntryPoint;
+import org.de.rikr.flow.EntryPoints;
 import org.de.rikr.jar.ClassLoadingService;
 import org.de.rikr.jar.JarExportService;
 import org.de.rikr.jar.LoadedJar;
@@ -17,6 +19,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.jar.JarFile;
+import java.util.jar.Manifest;
 
 /**
  * Loading, removing and exporting the project's JARs and loose class files.
@@ -147,6 +151,27 @@ public class JarOperations {
      */
     public String originalName(ClassNode classNode) {
         return workspace.originalNames().className(classNode);
+    }
+
+    /**
+     * Where the JAR's code is started from, most likely first. See {@link EntryPoints}.
+     */
+    public List<EntryPoint> entryPoints(String jar) {
+        List<ClassNode> classes = workspace.classesSnapshot(jar);
+        return classes == null ? List.of() : EntryPoints.find(classes, manifest(jar));
+    }
+
+    private Manifest manifest(String jar) {
+        File source = workspace.sourceFile(jar);
+        if (source == null) {
+            return null;
+        }
+        try (JarFile file = new JarFile(source)) {
+            return file.getManifest();
+        } catch (IOException exception) {
+            logger.log("Could not read the manifest of " + jar + ": " + exception.getMessage());
+            return null;
+        }
     }
 
     public Optional<String> jarOf(ClassNode classNode) {

@@ -44,6 +44,7 @@ public class ClassViewer {
     private final MappingWorkspacePanel mappingWorkspacePanel;
     private final ReferenceWorkspacePanel referenceWorkspacePanel;
     private final BookmarkWorkspacePanel bookmarkWorkspacePanel;
+    private final FlowPanel flowPanel;
     private final MethodSimulatorPanel methodSimulatorPanel;
     private final JPanel rightPanel;
     private final SimulatorBar simulatorBar;
@@ -91,6 +92,7 @@ public class ClassViewer {
         mappingWorkspacePanel = new MappingWorkspacePanel(controller);
         referenceWorkspacePanel = new ReferenceWorkspacePanel(controller);
         bookmarkWorkspacePanel = new BookmarkWorkspacePanel(controller);
+        flowPanel = new FlowPanel(controller, this::openInBytecode);
         methodSimulatorPanel = new MethodSimulatorPanel(controller);
         simulatorBar = new SimulatorBar(controller, e -> toggleMethodSimulatorVisibility(methodSimulatorPanel.isVisible()));
         classFileActions = new ClassFileActions(controller, frame, treePanel);
@@ -119,7 +121,8 @@ public class ClassViewer {
             e -> {
                 bookmarkWorkspacePanel.refresh();
                 showWorkspace(bookmarkWorkspacePanel, rightPanel, bookmarkWorkspacePanel);
-            }
+            },
+            e -> showWorkspace(projectPanel, flowPanel, flowPanel)
         );
 
         // Create a split pane for the navigation panel and tree panel
@@ -263,6 +266,7 @@ public class ClassViewer {
     public void updateTree(Map<String, List<ClassNode>> jarClassesMap) {
         SwingUtilities.invokeLater(() -> {
             treePanel.updateTree(jarClassesMap);
+            flowPanel.refreshJars(List.copyOf(jarClassesMap.keySet()));
             treePanel.updateDirtyJars(controller.renames().dirtyJars());
             mappingWorkspacePanel.refreshJars(jarClassesMap);
         });
@@ -289,6 +293,39 @@ public class ClassViewer {
         navigationPanel.selectReferencesTab();
     }
 
+    private void openInBytecode(ClassNode owner, MethodNode method, String label) {
+        navigationPanel.selectProjectTab();
+        codeView.showBlock(owner, method, label);
+    }
+
+    /**
+     * Draw the method's control flow graph and switch to it.
+     */
+    public void showControlFlow(ClassNode owner, MethodNode method) {
+        controller.jars().jarOf(owner).ifPresent(jar -> {
+            navigationPanel.selectControlFlowTab();
+            flowPanel.showControlFlow(jar, owner, method);
+        });
+    }
+
+    /**
+     * Draw the calls the method makes and switch to them.
+     */
+    public void showCallGraph(ClassNode owner, MethodNode method) {
+        controller.jars().jarOf(owner).ifPresent(jar -> {
+            navigationPanel.selectControlFlowTab();
+            flowPanel.showCallGraph(jar, owner, method);
+        });
+    }
+
+    /**
+     * Switch to the flow tab with the JAR's entry points to choose from.
+     */
+    public void showEntryPoints(String jar) {
+        navigationPanel.selectControlFlowTab();
+        flowPanel.showEntryPoints(jar);
+    }
+
     public void showMethodReferences(String jarName, ClassNode owner, MethodNode method) {
         referenceWorkspacePanel.showMethodReferences(jarName, owner, method);
         navigationPanel.selectReferencesTab();
@@ -305,6 +342,7 @@ public class ClassViewer {
 
     public void clearContent() {
         codeView.clear();
+        flowPanel.clear();
     }
 
     /**
@@ -401,6 +439,13 @@ public class ClassViewer {
 
     public void refreshTreeLabels() {
         SwingUtilities.invokeLater(treePanel::refreshLabels);
+    }
+
+    /**
+     * Redraw the control flow graph, whose instructions show names that a rename may have changed.
+     */
+    public void refreshControlFlow() {
+        SwingUtilities.invokeLater(flowPanel::refresh);
     }
 
     public void updateDirtyJars(java.util.Set<String> dirtyJars) {

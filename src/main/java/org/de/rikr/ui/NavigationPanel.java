@@ -16,6 +16,7 @@ public class NavigationPanel extends JPanel {
     private final JButton mappingButton;
     private final JButton referencesButton;
     private final JButton bookmarksButton;
+    private final JButton controlFlowButton;
     private SelectedTab selectedTab = SelectedTab.PROJECT;
 
     public NavigationPanel(
@@ -24,7 +25,8 @@ public class NavigationPanel extends JPanel {
         ActionListener searchAction,
         ActionListener mappingAction,
         ActionListener referencesAction,
-        ActionListener bookmarksAction
+        ActionListener bookmarksAction,
+        ActionListener controlFlowAction
     ) {
         this.controller = controller;
 
@@ -62,6 +64,12 @@ public class NavigationPanel extends JPanel {
         bookmarksButton.setBorderPainted(false);
         bookmarksButton.addActionListener(bookmarksAction);
 
+        controlFlowButton = new JButton("C");
+        controlFlowButton.setToolTipText("Entry points, call graphs and control flow");
+        controlFlowButton.setAlignmentX(Component.CENTER_ALIGNMENT);
+        controlFlowButton.setBorderPainted(false);
+        controlFlowButton.addActionListener(controlFlowAction);
+
         add(Box.createRigidArea(new Dimension(36, 5)));
         add(projectButton);
         add(Box.createRigidArea(new Dimension(36, 5)));
@@ -72,6 +80,8 @@ public class NavigationPanel extends JPanel {
         add(referencesButton);
         add(Box.createRigidArea(new Dimension(36, 5)));
         add(bookmarksButton);
+        add(Box.createRigidArea(new Dimension(36, 5)));
+        add(controlFlowButton);
         add(Box.createRigidArea(new Dimension(36, 5)));
 
         applyTheme();
@@ -107,6 +117,11 @@ public class NavigationPanel extends JPanel {
             selectedTab = SelectedTab.BOOKMARKS;
             applyTheme();
         });
+
+        controlFlowButton.addActionListener(e -> {
+            selectedTab = SelectedTab.CONTROL_FLOW;
+            applyTheme();
+        });
     }
 
     public void selectProjectTab() {
@@ -129,6 +144,10 @@ public class NavigationPanel extends JPanel {
         bookmarksButton.doClick();
     }
 
+    public void selectControlFlowTab() {
+        controlFlowButton.doClick();
+    }
+
     public String getSelectedTabId() {
         return selectedTab.name();
     }
@@ -141,6 +160,7 @@ public class NavigationPanel extends JPanel {
                 case MAPPING -> selectMappingTab();
                 case REFERENCES -> selectReferencesTab();
                 case BOOKMARKS -> selectBookmarksTab();
+                case CONTROL_FLOW -> selectControlFlowTab();
                 default -> selectProjectTab();
             }
         } catch (IllegalArgumentException exception) {
@@ -165,6 +185,9 @@ public class NavigationPanel extends JPanel {
         bookmarksButton.setBackground(
             selectedTab == SelectedTab.BOOKMARKS ? Theme.NAVBAR_BUTTON_SELECTED_COLOR : Theme.BACKGROUND_COLOR
         );
+        controlFlowButton.setBackground(
+            selectedTab == SelectedTab.CONTROL_FLOW ? Theme.NAVBAR_BUTTON_SELECTED_COLOR : Theme.BACKGROUND_COLOR
+        );
 
         revalidate();
         repaint();
@@ -175,6 +198,7 @@ public class NavigationPanel extends JPanel {
         SEARCH,
         MAPPING,
         REFERENCES,
-        BOOKMARKS
+        BOOKMARKS,
+        CONTROL_FLOW
     }
 }
