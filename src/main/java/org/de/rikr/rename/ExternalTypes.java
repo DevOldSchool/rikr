@@ -7,7 +7,9 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Looks up JDK types that a JAR extends but does not contain, such as {@code java/lang/Object} or
@@ -17,15 +19,23 @@ final class ExternalTypes {
     private ExternalTypes() {
     }
 
+    // JDK types do not change while Rikr runs, so each type's overridable methods are collected once.
+    private static final Map<String, Set<String>> OVERRIDABLE = new ConcurrentHashMap<>();
+
     /**
      * Whether the external type, or one of its supertypes, declares a method that subclasses override when they
      * declare {@code name + descriptor}.
      */
     static boolean declaresOverridableMethod(String internalName, String name, String descriptor) {
+        return OVERRIDABLE.computeIfAbsent(internalName, ExternalTypes::overridableMethods).contains(name + descriptor);
+    }
+
+    private static Set<String> overridableMethods(String internalName) {
         Class<?> start = load(internalName);
         if (start == null) {
-            return false;
+            return Set.of();
         }
+        Set<String> methods = new HashSet<>();
         Deque<Class<?>> pending = new ArrayDeque<>();
         Set<Class<?>> visited = new HashSet<>();
         pending.add(start);
@@ -37,11 +47,8 @@ final class ExternalTypes {
             try {
                 for (Method method : current.getDeclaredMethods()) {
                     int modifiers = method.getModifiers();
-                    if (method.getName().equals(name)
-                        && !Modifier.isPrivate(modifiers)
-                        && !Modifier.isStatic(modifiers)
-                        && Type.getMethodDescriptor(method).equals(descriptor)) {
-                        return true;
+                    if (!Modifier.isPrivate(modifiers) && !Modifier.isStatic(modifiers)) {
+                        methods.add(method.getName() + Type.getMethodDescriptor(method));
                     }
                 }
             } catch (LinkageError | SecurityException ignored) {
@@ -54,7 +61,7 @@ final class ExternalTypes {
                 pending.add(interfaceType);
             }
         }
-        return false;
+        return Set.copyOf(methods);
     }
 
     private static Class<?> load(String internalName) {

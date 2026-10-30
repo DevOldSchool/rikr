@@ -9,6 +9,7 @@ import org.de.rikr.mapping.ClassMatch;
 import org.de.rikr.mapping.SimilarClassReport;
 import org.de.rikr.mapping.format.NameMappings;
 import org.de.rikr.rename.RenameOperation;
+import org.de.rikr.rename.RenameStep;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -163,13 +164,14 @@ class ProjectTest {
         loadOldAndNew();
         ClassNode owner = project.jars().classes("old.jar").getFirst();
         project.renames().renameClass("old.jar", owner, "Player");
-        List<RenameOperation> written = project.renames().history();
+        List<RenameStep> written = project.renames().history();
         long changeCountAtSave = project.renames().changeCount();
         project.renames().renameField("old.jar", owner, owner.fields.getFirst(), "self");
 
         project.renames().commitOverwrittenJar("old.jar", written, changeCountAtSave);
 
-        assertEquals(List.of("self"), project.renames().history().stream().map(RenameOperation::newName).toList());
+        assertEquals(List.of("self"), project.renames().history().stream()
+            .map(step -> ((RenameOperation) step).newName()).toList());
         assertEquals(Set.of("old.jar"), project.renames().dirtyJars());
     }
 
@@ -202,6 +204,44 @@ class ProjectTest {
         try (Project reopened = Project.open(log::add, project.toSession(layout()))) {
             assertEquals(expected, reopened.renames().nameMappings("old.jar"));
         }
+    }
+
+    @Test
+    void importedMappingsRenameByLoadedNamesAndUndoAndReopenAsOneStep() throws Exception {
+        loadOldAndNew();
+        ClassNode owner = project.jars().classes("old.jar").getFirst();
+        ClassNode target = project.jars().classes("new.jar").getFirst();
+        project.mappings().accept("old.jar", "new.jar", owner, new ClassMatch(target, 100));
+        project.bookmarks().toggle(new ProjectBookmark(ProjectBookmarkType.FIELD, "old.jar", "a", "f", "La;"));
+        project.renames().renameClass("old.jar", owner, "Renamed");
+        NameMappings file = new NameMappings(List.of(
+            new NameMappings.ClassMapping("a", "game/Player",
+                List.of(new NameMappings.MemberMapping("f", "La;", "self")), List.of()),
+            new NameMappings.ClassMapping("missing", "game/Missing", List.of(), List.of())));
+
+        RenameOperations.ImportPlan plan = project.renames().planImport("old.jar", file, "player.tiny");
+        project.renames().applyImport(plan);
+
+        assertEquals(1, plan.skipped());
+        assertEquals("game/Player", owner.name);
+        assertEquals("self", owner.fields.getFirst().name);
+        assertEquals("Lgame/Player;", owner.fields.getFirst().desc);
+        assertEquals("game/Player", project.mappings().allAccepted().getFirst().sourceClassName());
+        assertEquals(List.of(new ProjectBookmark(ProjectBookmarkType.FIELD, "old.jar", "game/Player", "self",
+            "Lgame/Player;")), project.bookmarks().all());
+
+        try (Project reopened = Project.open(log::add, project.toSession(layout()))) {
+            ClassNode reopenedOwner = reopened.jars().classes("old.jar").getFirst();
+            assertEquals("game/Player", reopenedOwner.name);
+            assertEquals(2, reopened.renames().history().size());
+        }
+
+        project.renames().undoLast();
+
+        assertEquals("Renamed", owner.name);
+        assertEquals("f", owner.fields.getFirst().name);
+        assertEquals("Renamed", project.mappings().allAccepted().getFirst().sourceClassName());
+        assertEquals("f", project.bookmarks().all().getFirst().memberName());
     }
 
     private static ProjectLayout layout() {

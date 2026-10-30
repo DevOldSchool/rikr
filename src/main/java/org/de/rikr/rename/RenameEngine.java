@@ -107,6 +107,109 @@ public final class RenameEngine {
     }
 
     /**
+     * Apply every rename of the batch in one pass over the classes. Field and method references are matched to
+     * the declaration they resolve to, so the batch must list each declaration it renames, including every
+     * declaration of an overridden method's family.
+     */
+    public Changes renameBatch(List<ClassNode> classes, RenameBatch batch, boolean apply) {
+        ClassHierarchy hierarchy = new ClassHierarchy(classes);
+        Map<String, String> fields = new HashMap<>();
+        for (RenameBatch.MemberRename field : batch.fields()) {
+            fields.put(field.owner() + "." + field.name() + ":" + field.descriptor(), field.newName());
+        }
+        Map<String, String> methods = new HashMap<>();
+        // For lambdas, whose invokedynamic only names the interface method, not its descriptor.
+        Map<String, String> methodsByName = new HashMap<>();
+        for (RenameBatch.MemberRename method : batch.methods()) {
+            methods.put(method.owner() + "." + method.name() + method.descriptor(), method.newName());
+            methodsByName.put(method.owner() + "." + method.name(), method.newName());
+        }
+        Set<String> declarationOwners = new LinkedHashSet<>(batch.classes().keySet());
+        batch.fields().forEach(field -> declarationOwners.add(field.owner()));
+        batch.methods().forEach(method -> declarationOwners.add(method.owner()));
+
+        CountingRemapper remapper = new CountingRemapper() {
+            @Override
+            public String map(String internalName) {
+                String newName = batch.classes().get(internalName);
+                return newName == null ? internalName : hit(newName);
+            }
+
+            @Override
+            public String mapFieldName(String fieldOwner, String fieldName, String fieldDescriptor) {
+                String declaring = hierarchy.resolveField(fieldOwner, fieldName, fieldDescriptor);
+                String newName = declaring == null ? null : fields.get(declaring + "." + fieldName + ":" + fieldDescriptor);
+                return newName == null ? fieldName : hit(newName);
+            }
+
+            @Override
+            public String mapMethodName(String methodOwner, String methodName, String methodDescriptor) {
+                String declaring = hierarchy.resolveMethod(methodOwner, methodName, methodDescriptor);
+                String newName = declaring == null ? null : methods.get(declaring + "." + methodName + methodDescriptor);
+                return newName == null ? methodName : hit(newName);
+            }
+
+            @Override
+            public String mapInvokeDynamicMethodName(String methodName, String methodDescriptor) {
+                Type produced = Type.getReturnType(methodDescriptor);
+                if (produced.getSort() == Type.OBJECT) {
+                    for (String type : hierarchy.selfAndAncestors(produced.getInternalName())) {
+                        String newName = methodsByName.get(type + "." + methodName);
+                        if (newName != null) {
+                            return hit(newName);
+                        }
+                    }
+                }
+                return methodName;
+            }
+        };
+        return remap(classes, remapper, declarationOwners, apply);
+    }
+
+    /**
+     * The family of every method declared in the JAR, keyed by {@code owner + "." + name + descriptor}: the same
+     * as {@link #methodFamily} for each method, found in one pass over the classes.
+     */
+    public Map<String, Set<String>> methodFamilies(ClassHierarchy hierarchy) {
+        Map<String, String> parents = new HashMap<>();
+        for (ClassNode classNode : hierarchy.classes()) {
+            for (MethodNode method : classNode.methods) {
+                String key = classNode.name + "." + method.name + method.desc;
+                parents.put(key, key);
+            }
+        }
+        // Every class links the overridable declarations it can see that share a name and descriptor.
+        for (ClassNode classNode : hierarchy.classes()) {
+            Map<String, String> firstDeclaration = new HashMap<>();
+            for (String ancestor : hierarchy.selfAndAncestors(classNode.name)) {
+                ClassNode ancestorNode = hierarchy.get(ancestor);
+                if (ancestorNode == null) {
+                    continue;
+                }
+                for (MethodNode method : ancestorNode.methods) {
+                    if (!ClassHierarchy.isOverridable(method)) {
+                        continue;
+                    }
+                    String signature = method.name + method.desc;
+                    String key = ancestor + "." + signature;
+                    String first = firstDeclaration.putIfAbsent(signature, key);
+                    if (first != null) {
+                        union(parents, first, key);
+                    }
+                }
+            }
+        }
+        Map<String, Set<String>> byRoot = new HashMap<>();
+        Map<String, Set<String>> families = new HashMap<>();
+        for (String key : parents.keySet()) {
+            Set<String> family = byRoot.computeIfAbsent(find(parents, key), root -> new LinkedHashSet<>());
+            family.add(key.substring(0, key.lastIndexOf('.', key.indexOf('('))));
+            families.put(key, family);
+        }
+        return families;
+    }
+
+    /**
      * Every class in the JAR whose declaration of {@code name + descriptor} must be renamed together with the
      * declaration in {@code owner}. Private, static and special methods are not overridden and form a family
      * of one.

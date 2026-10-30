@@ -3,11 +3,13 @@ package org.de.rikr.project;
 import org.de.rikr.mapping.format.NameMappings;
 import org.de.rikr.model.OriginalNames;
 import org.de.rikr.model.Workspace;
+import org.de.rikr.rename.RenameBatch;
 import org.de.rikr.rename.RenameOperation;
 import org.de.rikr.rename.RenamePreview;
 import org.de.rikr.rename.RenameResult;
 import org.de.rikr.rename.RenameService;
 import org.de.rikr.rename.RenameType;
+import org.de.rikr.rename.RenameStep;
 import org.de.rikr.rename.RenameUndoResult;
 import org.de.rikr.symbol.Declaration;
 import org.objectweb.asm.tree.ClassNode;
@@ -16,7 +18,10 @@ import org.objectweb.asm.tree.MethodNode;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -84,9 +89,90 @@ public class RenameOperations {
         return result;
     }
 
+    /**
+     * A mapping file checked against a JAR.
+     *
+     * @param skipped classes and members the file names that are not in the JAR, as it was loaded
+     */
+    public record ImportPlan(RenameService.BatchPlan plan, int skipped) {
+        public RenameBatch batch() {
+            return plan.batch();
+        }
+
+        public List<String> problems() {
+            return plan.problems();
+        }
+    }
+
+    /**
+     * Match a mapping file to the JAR and check the renames it asks for. The file names classes and members as
+     * they were loaded, so this works even after other renames. Entries that keep their original name, or already
+     * have the new name, are left out.
+     */
+    public ImportPlan planImport(String jar, NameMappings mappings, String source) {
+        OriginalNames original = workspace.originalNames();
+        Map<String, ClassNode> byOriginalName = new HashMap<>();
+        for (ClassNode classNode : classes(jar)) {
+            byOriginalName.put(original.className(classNode), classNode);
+        }
+        Map<String, String> classRenames = new LinkedHashMap<>();
+        List<RenameBatch.MemberRename> fields = new ArrayList<>();
+        List<RenameBatch.MemberRename> methods = new ArrayList<>();
+        int skipped = 0;
+        for (NameMappings.ClassMapping mapping : mappings.classes()) {
+            ClassNode classNode = byOriginalName.get(mapping.original());
+            if (classNode == null) {
+                skipped += 1 + mapping.fields().size() + mapping.methods().size();
+                continue;
+            }
+            if (!mapping.named().equals(mapping.original()) && !mapping.named().equals(classNode.name)) {
+                classRenames.put(classNode.name, mapping.named());
+            }
+            for (NameMappings.MemberMapping member : mapping.fields()) {
+                FieldNode field = classNode.fields.stream()
+                    .filter(candidate -> original.field(candidate).equals(
+                        new OriginalNames.Member(member.original(), member.descriptor())))
+                    .findFirst().orElse(null);
+                if (field == null) {
+                    skipped++;
+                } else if (!member.named().equals(member.original()) && !member.named().equals(field.name)) {
+                    fields.add(new RenameBatch.MemberRename(classNode.name, field.name, field.desc, member.named()));
+                }
+            }
+            for (NameMappings.MemberMapping member : mapping.methods()) {
+                MethodNode method = classNode.methods.stream()
+                    .filter(candidate -> original.method(candidate).equals(
+                        new OriginalNames.Member(member.original(), member.descriptor())))
+                    .findFirst().orElse(null);
+                if (method == null) {
+                    skipped++;
+                } else if (!member.named().equals(member.original()) && !member.named().equals(method.name)) {
+                    methods.add(new RenameBatch.MemberRename(classNode.name, method.name, method.desc, member.named()));
+                }
+            }
+        }
+        RenameBatch requested = new RenameBatch(jar, source, classRenames, fields, methods);
+        return new ImportPlan(service.planBatch(classes(jar), requested), skipped);
+    }
+
+    /**
+     * Apply a mapping file checked by {@link #planImport}. Undo reverts the whole import.
+     *
+     * @throws IllegalArgumentException if the plan has problems or the JAR changed since it was made
+     */
+    public RenameResult applyImport(ImportPlan plan) {
+        if (!plan.problems().isEmpty()) {
+            throw new IllegalArgumentException(plan.problems().getFirst());
+        }
+        RenameBatch batch = plan.batch();
+        RenameResult result = service.applyBatch(classes(batch.jarName()), batch);
+        publish(batch, false, result);
+        return result;
+    }
+
     public Optional<RenameUndoResult> undoLast() {
         Optional<RenameUndoResult> undo = service.undoLast(workspace::classes);
-        undo.ifPresent(value -> publish(value.operation(), true, value.result()));
+        undo.ifPresent(value -> publish(value.step(), true, value.result()));
         return undo;
     }
 
@@ -121,7 +207,7 @@ public class RenameOperations {
         return new NameMappings(mappings);
     }
 
-    public List<RenameOperation> history() {
+    public List<RenameStep> history() {
         return service.getHistory();
     }
 
@@ -147,7 +233,7 @@ public class RenameOperations {
      * Record that the original JAR now contains the {@code written} renames, so they must not be replayed when the
      * project is reopened. It stays unsaved if anything was renamed after {@code changeCountAtSave}.
      */
-    public void commitOverwrittenJar(String jar, List<RenameOperation> written, long changeCountAtSave) {
+    public void commitOverwrittenJar(String jar, List<RenameStep> written, long changeCountAtSave) {
         service.commitOverwrittenJar(jar, written, changeCount == changeCountAtSave);
         events.publish(new ProjectEvent.JarsSaved());
     }
@@ -158,8 +244,8 @@ public class RenameOperations {
      *
      * @return the JARs that were renamed
      */
-    Set<String> replay(List<RenameOperation> operations) {
-        service.replay(operations, workspace::classes);
+    Set<String> replay(List<RenameStep> steps) {
+        service.replay(steps, workspace::classes);
         return service.getDirtyJars();
     }
 
@@ -175,8 +261,8 @@ public class RenameOperations {
         return classes;
     }
 
-    private void publish(RenameOperation operation, boolean undo, RenameResult result) {
+    private void publish(RenameStep step, boolean undo, RenameResult result) {
         changeCount++;
-        events.publish(new ProjectEvent.Renamed(operation, undo, result.declarationOwners()));
+        events.publish(new ProjectEvent.Renamed(step, undo, result.declarationOwners()));
     }
 }

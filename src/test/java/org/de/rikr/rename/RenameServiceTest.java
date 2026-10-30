@@ -84,7 +84,7 @@ class RenameServiceTest {
         RenameUndoResult undo = service.undoLast(jarName -> classes).orElseThrow();
 
         assertEquals("oldField", field.name);
-        assertEquals(RenameType.FIELD, undo.operation().type());
+        assertEquals(RenameType.FIELD, ((RenameOperation) undo.step()).type());
         assertFalse(service.canUndo());
         assertTrue(service.getDirtyJars().contains("app.jar"));
     }

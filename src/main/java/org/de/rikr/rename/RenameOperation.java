@@ -9,7 +9,7 @@ public record RenameOperation(
     String descriptor,
     String oldName,
     String newName
-) {
+) implements RenameStep {
     public RenameOperation {
         Objects.requireNonNull(type, "type");
         Objects.requireNonNull(jarName, "jarName");

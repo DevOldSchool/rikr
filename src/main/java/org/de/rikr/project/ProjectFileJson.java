@@ -9,12 +9,16 @@ import com.google.gson.JsonParser;
 import org.de.rikr.bookmark.ProjectBookmark;
 import org.de.rikr.bookmark.ProjectBookmarkType;
 import org.de.rikr.mapping.ClassMappingDecision;
+import org.de.rikr.rename.RenameBatch;
 import org.de.rikr.rename.RenameOperation;
+import org.de.rikr.rename.RenameStep;
 import org.de.rikr.rename.RenameType;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 
 /**
@@ -23,6 +27,7 @@ import java.util.function.Function;
  */
 final class ProjectFileJson {
     static final int FORMAT_VERSION = 2;
+    private static final String BATCH = "BATCH";
 
     private static final Gson GSON = new GsonBuilder()
         .setPrettyPrinting()
@@ -42,7 +47,28 @@ final class ProjectFileJson {
     ) {
     }
 
-    record RenameModel(String type, String jar, String owner, String descriptor, String oldName, String newName) {
+    /**
+     * A single rename, or with type {@code BATCH} a batch imported from a mapping file. Only the fields of its
+     * type are set.
+     */
+    record RenameModel(
+        String type,
+        String jar,
+        String owner,
+        String descriptor,
+        String oldName,
+        String newName,
+        String source,
+        List<ClassRenameModel> classes,
+        List<MemberRenameModel> fields,
+        List<MemberRenameModel> methods
+    ) {
+    }
+
+    record ClassRenameModel(String oldName, String newName) {
+    }
+
+    record MemberRenameModel(String owner, String name, String descriptor, String newName) {
     }
 
     record MappingModel(String sourceJar, String targetJar, String sourceClass, String targetClass, int similarityPercent) {
@@ -71,10 +97,7 @@ final class ProjectFileJson {
         FileModel file = new FileModel(
             FORMAT_VERSION,
             session.jarPaths(),
-            session.renames().stream()
-                .map(rename -> new RenameModel(rename.type().name(), rename.jarName(), rename.ownerName(),
-                    rename.descriptor(), rename.oldName(), rename.newName()))
-                .toList(),
+            session.renames().stream().map(ProjectFileJson::toModel).toList(),
             session.mappings().stream()
                 .map(mapping -> new MappingModel(mapping.sourceJar(), mapping.targetJar(), mapping.sourceClassName(),
                     mapping.targetClassName(), mapping.similarityPercent()))
@@ -118,12 +141,12 @@ final class ProjectFileJson {
             jars.add(require(jarPaths.get(index), "jars[" + index + "]"));
         }
 
-        List<RenameOperation> renames = new ArrayList<>();
+        List<RenameStep> renames = new ArrayList<>();
         List<RenameModel> renameModels = require(file.renames(), "renames");
         for (int index = 0; index < renameModels.size(); index++) {
             String path = "renames[" + index + "]";
             RenameModel rename = require(renameModels.get(index), path);
-            renames.add(new RenameOperation(
+            renames.add(BATCH.equals(rename.type()) ? toBatch(rename, path) : new RenameOperation(
                 parseEnum(rename.type(), RenameType::valueOf, path + ".type"),
                 require(rename.jar(), path + ".jar"),
                 require(rename.owner(), path + ".owner"),
@@ -175,6 +198,56 @@ final class ProjectFileJson {
             layout.javaVisible(),
             require(layout.workspace(), "layout.workspace")
         ));
+    }
+
+    private static RenameModel toModel(RenameStep step) {
+        return switch (step) {
+            case RenameOperation rename -> new RenameModel(rename.type().name(), rename.jarName(), rename.ownerName(),
+                rename.descriptor(), rename.oldName(), rename.newName(), null, null, null, null);
+            case RenameBatch batch -> new RenameModel(BATCH, batch.jarName(), null, null, null, null, batch.source(),
+                batch.classes().entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey())
+                    .map(entry -> new ClassRenameModel(entry.getKey(), entry.getValue()))
+                    .toList(),
+                batch.fields().stream().map(ProjectFileJson::toModel).toList(),
+                batch.methods().stream().map(ProjectFileJson::toModel).toList());
+        };
+    }
+
+    private static MemberRenameModel toModel(RenameBatch.MemberRename member) {
+        return new MemberRenameModel(member.owner(), member.name(), member.descriptor(), member.newName());
+    }
+
+    private static RenameBatch toBatch(RenameModel model, String path) throws IOException {
+        Map<String, String> classes = new LinkedHashMap<>();
+        List<ClassRenameModel> classModels = require(model.classes(), path + ".classes");
+        for (int index = 0; index < classModels.size(); index++) {
+            String classPath = path + ".classes[" + index + "]";
+            ClassRenameModel rename = require(classModels.get(index), classPath);
+            classes.put(require(rename.oldName(), classPath + ".oldName"), require(rename.newName(), classPath + ".newName"));
+        }
+        return new RenameBatch(
+            require(model.jar(), path + ".jar"),
+            require(model.source(), path + ".source"),
+            classes,
+            toMembers(require(model.fields(), path + ".fields"), path + ".fields"),
+            toMembers(require(model.methods(), path + ".methods"), path + ".methods")
+        );
+    }
+
+    private static List<RenameBatch.MemberRename> toMembers(List<MemberRenameModel> models, String path) throws IOException {
+        List<RenameBatch.MemberRename> members = new ArrayList<>();
+        for (int index = 0; index < models.size(); index++) {
+            String memberPath = path + "[" + index + "]";
+            MemberRenameModel member = require(models.get(index), memberPath);
+            members.add(new RenameBatch.MemberRename(
+                require(member.owner(), memberPath + ".owner"),
+                require(member.name(), memberPath + ".name"),
+                require(member.descriptor(), memberPath + ".descriptor"),
+                require(member.newName(), memberPath + ".newName")
+            ));
+        }
+        return members;
     }
 
     private static <T> T require(T value, String path) throws IOException {

@@ -6,7 +6,9 @@ import org.de.rikr.decompiler.DecompilerCacheService;
 import org.de.rikr.mapping.ClassMappingDecision;
 import org.de.rikr.model.Workspace;
 import org.de.rikr.reference.ReferenceIndexService;
+import org.de.rikr.rename.RenameBatch;
 import org.de.rikr.rename.RenameOperation;
+import org.de.rikr.rename.RenameStep;
 import org.de.rikr.rename.RenameType;
 import org.de.rikr.search.SearchQuery;
 import org.de.rikr.search.SearchResult;
@@ -100,8 +102,8 @@ public class Project implements AutoCloseable {
         List<ClassMappingDecision> savedMappings = allMappings.stream()
             .filter(mapping -> savedJars.containsKey(mapping.sourceJar()) && savedJars.containsKey(mapping.targetJar()))
             .toList();
-        List<RenameOperation> allRenames = renames.history();
-        List<RenameOperation> savedRenames = allRenames.stream()
+        List<RenameStep> allRenames = renames.history();
+        List<RenameStep> savedRenames = allRenames.stream()
             .filter(operation -> savedJars.containsKey(operation.jarName()))
             .toList();
         List<ProjectBookmark> allBookmarks = bookmarks.all();
@@ -178,14 +180,22 @@ public class Project implements AutoCloseable {
                 reindex(removed.jar());
             }
             case ProjectEvent.Renamed renamed -> {
-                RenameOperation operation = renamed.operation();
-                refreshJar(operation.jarName());
-                if (operation.type() == RenameType.CLASS) {
-                    String from = renamed.undo() ? operation.newName() : operation.oldName();
-                    String to = renamed.undo() ? operation.oldName() : operation.newName();
-                    mappings.renameClass(operation.jarName(), from, to);
+                refreshJar(renamed.step().jarName());
+                switch (renamed.step()) {
+                    case RenameOperation operation -> {
+                        if (operation.type() == RenameType.CLASS) {
+                            String from = renamed.undo() ? operation.newName() : operation.oldName();
+                            String to = renamed.undo() ? operation.oldName() : operation.newName();
+                            mappings.renameClass(operation.jarName(), from, to);
+                        }
+                        bookmarks.service().applyRename(operation, renamed.undo(), renamed.declarationOwners());
+                    }
+                    case RenameBatch batch -> {
+                        RenameBatch applied = renamed.undo() ? batch.inverse() : batch;
+                        mappings.renameClasses(applied.jarName(), applied.classes());
+                        bookmarks.service().applyBatch(applied);
+                    }
                 }
-                bookmarks.service().applyRename(operation, renamed.undo(), renamed.declarationOwners());
             }
             case ProjectEvent.JarsSaved saved -> {
             }

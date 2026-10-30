@@ -14,7 +14,9 @@ import org.de.rikr.project.ProjectSession;
 import org.de.rikr.project.ProjectSessionService;
 import org.de.rikr.project.RenameOperations;
 import org.de.rikr.reference.ReferenceIndexService;
+import org.de.rikr.rename.RenameBatch;
 import org.de.rikr.rename.RenameOperation;
+import org.de.rikr.rename.RenameStep;
 import org.de.rikr.rename.RenameUndoResult;
 import org.de.rikr.resources.Fonts;
 import org.de.rikr.resources.Images;
@@ -95,8 +97,16 @@ public class Rikr {
             return;
         }
         RenameUndoResult value = undo.get();
-        userInterface.displayBytecode(value.affectedClass());
-        log("Undid rename " + value.operation().newName() + " -> " + value.operation().oldName() + ".");
+        if (value.affectedClass() != null) {
+            userInterface.displayBytecode(value.affectedClass());
+        } else {
+            userInterface.refreshCode();
+        }
+        switch (value.step()) {
+            case RenameOperation operation ->
+                log("Undid rename " + operation.newName() + " -> " + operation.oldName() + ".");
+            case RenameBatch batch -> log("Undid the import of " + batch.source() + ".");
+        }
     }
 
     public boolean toggleBookmark(ProjectBookmark bookmark) {
@@ -189,7 +199,7 @@ public class Rikr {
             return;
         }
         long changeCount = target.renames().changeCount();
-        List<RenameOperation> written = target.renames().history().stream()
+        List<RenameStep> written = target.renames().history().stream()
             .filter(operation -> operation.jarName().equals(jar))
             .toList();
         log("Overwriting " + jar + "...");

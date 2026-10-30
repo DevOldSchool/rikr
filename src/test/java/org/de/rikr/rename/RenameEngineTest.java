@@ -63,6 +63,57 @@ class RenameEngineTest {
     }
 
     @Test
+    void batchRenamesClassesFieldsAndOverridesInOnePassAndCanSwapNames() throws Exception {
+        List<ClassNode> classes = program();
+        RenameService service = new RenameService();
+        RenameBatch requested = new RenameBatch("program.jar", "test.tiny",
+            Map.of("a", "ab", "ab", "a"),
+            List.of(new RenameBatch.MemberRename("a", "f", "I", "count")),
+            List.of(new RenameBatch.MemberRename("a", "m", "()I", "value")));
+
+        RenameService.BatchPlan plan = service.planBatch(classes, requested);
+        engine.renameBatch(classes, plan.batch(), true);
+
+        assertEquals(List.of(), plan.problems());
+        assertEquals(2, plan.batch().methods().size(), "the override in ab is renamed with a.m");
+        assertEquals("ab", find(classes, "a").superName, "the old subclass now extends the old base under its new name");
+        assertNotNull(ClassHierarchy.findMethod(find(classes, "a"), "value", "()I"));
+        assertEquals(12, run(classes));
+    }
+
+    @Test
+    void batchInverseRestoresTheProgram() throws Exception {
+        List<ClassNode> classes = program();
+        RenameBatch batch = new RenameService().planBatch(classes, new RenameBatch("program.jar", "test.tiny",
+            Map.of("a", "Foo"),
+            List.of(new RenameBatch.MemberRename("a", "f", "I", "count")),
+            List.of(new RenameBatch.MemberRename("ab", "m", "()I", "value")))).batch();
+
+        engine.renameBatch(classes, batch, true);
+        engine.renameBatch(classes, batch.inverse(), true);
+
+        assertNotNull(find(classes, "a"));
+        assertNotNull(ClassHierarchy.findMethod(find(classes, "ab"), "m", "()I"));
+        assertEquals(12, run(classes));
+    }
+
+    @Test
+    void batchPlanReportsCollisionsInsteadOfApplyingThem() {
+        List<ClassNode> classes = program();
+        RenameService.BatchPlan plan = new RenameService().planBatch(classes, new RenameBatch("program.jar", "test.tiny",
+            Map.of("a", "c"),
+            List.of(),
+            List.of(new RenameBatch.MemberRename("a", "m", "()I", "one"),
+                new RenameBatch.MemberRename("ab", "m", "()I", "two"),
+                new RenameBatch.MemberRename("a", "<init>", "()V", "make"))));
+
+        assertEquals(3, plan.problems().size(), plan.problems().toString());
+        assertTrue(plan.problems().get(0).contains("would both be named c"), plan.problems().get(0));
+        assertTrue(plan.problems().get(1).contains("renamed to both"), plan.problems().get(1));
+        assertTrue(plan.problems().get(2).contains("constructors"), plan.problems().get(2));
+    }
+
+    @Test
     void dryRunReportsChangesWithoutMutating() {
         List<ClassNode> classes = program();
 

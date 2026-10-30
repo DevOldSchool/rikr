@@ -272,6 +272,13 @@ public class ClassViewer {
         codeView.display(classNode);
     }
 
+    /**
+     * Show the class on screen again, for example after renames it did not start.
+     */
+    public void refreshCode() {
+        codeView.redisplay();
+    }
+
     public void showClassReferences(String jarName, ClassNode classNode) {
         referenceWorkspacePanel.showClassReferences(jarName, classNode);
         navigationPanel.selectReferencesTab();

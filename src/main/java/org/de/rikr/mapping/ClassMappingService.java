@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -122,6 +123,10 @@ public class ClassMappingService {
     /**
      * Keep the decisions of a class that was renamed.
      */
+    public void renameClasses(String jarName, Map<String, String> renames) {
+        mappings.renameClasses(jarName, renames);
+    }
+
     public void renameClass(String jarName, String oldName, String newName) {
         mappings.renameClass(new ClassRef(jarName, oldName), newName);
     }

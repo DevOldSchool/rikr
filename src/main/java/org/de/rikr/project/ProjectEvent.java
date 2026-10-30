@@ -1,6 +1,6 @@
 package org.de.rikr.project;
 
-import org.de.rikr.rename.RenameOperation;
+import org.de.rikr.rename.RenameStep;
 import org.objectweb.asm.tree.ClassNode;
 
 import java.util.List;
@@ -31,11 +31,11 @@ public sealed interface ProjectEvent {
     }
 
     /**
-     * Classes of the operation's JAR were renamed in place, or a rename was undone.
+     * Classes of the step's JAR were renamed in place, or a rename step was undone.
      *
      * @param declarationOwners every class whose declaration was renamed
      */
-    record Renamed(RenameOperation operation, boolean undo, Set<String> declarationOwners) implements ProjectEvent {
+    record Renamed(RenameStep step, boolean undo, Set<String> declarationOwners) implements ProjectEvent {
         public Renamed {
             declarationOwners = Set.copyOf(declarationOwners);
         }

@@ -3,7 +3,7 @@ package org.de.rikr.project;
 
 import org.de.rikr.bookmark.ProjectBookmark;
 import org.de.rikr.mapping.ClassMappingDecision;
-import org.de.rikr.rename.RenameOperation;
+import org.de.rikr.rename.RenameStep;
 
 import java.util.List;
 import java.util.Objects;
@@ -11,7 +11,7 @@ import java.util.Objects;
 public record ProjectSession(
     List<String> jarPaths,
     List<ClassMappingDecision> mappings,
-    List<RenameOperation> renames,
+    List<RenameStep> renames,
     List<ProjectBookmark> bookmarks,
     ProjectLayout layout
 ) {

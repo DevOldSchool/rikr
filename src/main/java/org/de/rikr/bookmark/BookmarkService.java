@@ -1,12 +1,15 @@
 package org.de.rikr.bookmark;
 
+import org.de.rikr.rename.RenameBatch;
 import org.de.rikr.rename.RenameOperation;
 import org.de.rikr.rename.RenameType;
 import org.objectweb.asm.commons.Remapper;
 import org.objectweb.asm.commons.SimpleRemapper;
 
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -68,6 +71,40 @@ public class BookmarkService {
             } else {
                 updated.add(bookmark);
             }
+        }
+        bookmarks.clear();
+        bookmarks.addAll(updated);
+    }
+
+    /**
+     * Follow a batch of renames made at once. Bookmarks name members in the names before the batch, so members
+     * are matched first and classes renamed after.
+     */
+    public synchronized void applyBatch(RenameBatch batch) {
+        Map<String, String> fields = new HashMap<>();
+        batch.fields().forEach(field -> fields.put(field.owner() + "." + field.name() + ":" + field.descriptor(), field.newName()));
+        Map<String, String> methods = new HashMap<>();
+        batch.methods().forEach(method -> methods.put(method.owner() + "." + method.name() + method.descriptor(), method.newName()));
+        Remapper remapper = batch.classRemapper();
+        Set<ProjectBookmark> updated = new LinkedHashSet<>();
+        for (ProjectBookmark bookmark : bookmarks) {
+            if (!bookmark.jarName().equals(batch.jarName())) {
+                updated.add(bookmark);
+                continue;
+            }
+            String member = bookmark.memberName();
+            if (bookmark.type() == ProjectBookmarkType.FIELD) {
+                member = fields.getOrDefault(bookmark.className() + "." + member + ":" + bookmark.descriptor(), member);
+            } else if (bookmark.type() == ProjectBookmarkType.METHOD) {
+                member = methods.getOrDefault(bookmark.className() + "." + member + bookmark.descriptor(), member);
+            }
+            updated.add(new ProjectBookmark(
+                bookmark.type(),
+                bookmark.jarName(),
+                remapper.map(bookmark.className()),
+                member,
+                remapDescriptor(remapper, bookmark)
+            ));
         }
         bookmarks.clear();
         bookmarks.addAll(updated);

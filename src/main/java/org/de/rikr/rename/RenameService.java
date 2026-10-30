@@ -5,8 +5,13 @@ import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.MethodNode;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -15,7 +20,7 @@ import java.util.function.Function;
 
 public class RenameService {
     private final RenameEngine engine = new RenameEngine();
-    private final List<RenameOperation> history = new ArrayList<>();
+    private final List<RenameStep> history = new ArrayList<>();
     private final Set<String> dirtyJars = new HashSet<>();
 
     public RenamePreview previewClassRename(List<ClassNode> classes, ClassNode owner, String newName) {
@@ -104,16 +109,189 @@ public class RenameService {
         return result;
     }
 
+    /**
+     * The result of checking a batch: the batch to apply, with every overridden method's family filled in, and
+     * the problems that stop it from being applied.
+     */
+    public record BatchPlan(RenameBatch batch, List<String> problems) {
+        public BatchPlan {
+            problems = List.copyOf(problems);
+        }
+
+        public boolean valid() {
+            return problems.isEmpty();
+        }
+    }
+
+    /**
+     * Check a batch of renames against the JAR. Each method rename is extended to every declaration in its
+     * family. Two classes, or two members of one class, may not end up with the same name, and a renamed field
+     * or method may not start to hide or override another one.
+     */
+    public BatchPlan planBatch(List<ClassNode> classes, RenameBatch requested) {
+        List<String> problems = new ArrayList<>();
+        ClassHierarchy hierarchy = new ClassHierarchy(classes);
+
+        Map<String, String> classNames = new LinkedHashMap<>();
+        requested.classes().forEach((oldName, newName) -> {
+            if (!hierarchy.contains(oldName)) {
+                problems.add("Class " + oldName + " is not in the JAR.");
+                return;
+            }
+            String invalid = validateName(oldName, newName, true);
+            if (invalid != null) {
+                problems.add(oldName + ": " + invalid);
+                return;
+            }
+            classNames.put(oldName, newName);
+        });
+        Map<String, String> finalClassNames = new HashMap<>();
+        for (ClassNode classNode : classes) {
+            String finalName = classNames.getOrDefault(classNode.name, classNode.name);
+            String other = finalClassNames.putIfAbsent(finalName, classNode.name);
+            if (other != null) {
+                problems.add("Classes " + other + " and " + classNode.name + " would both be named " + finalName + ".");
+            }
+        }
+
+        Map<String, String> fieldNames = new LinkedHashMap<>();
+        List<RenameBatch.MemberRename> fields = new ArrayList<>();
+        for (RenameBatch.MemberRename field : requested.fields()) {
+            ClassNode owner = hierarchy.get(field.owner());
+            if (owner == null || ClassHierarchy.findField(owner, field.name(), field.descriptor()) == null) {
+                problems.add("Field " + field.owner() + "." + field.name() + " is not in the JAR.");
+                continue;
+            }
+            String invalid = validateName(field.name(), field.newName(), false);
+            if (invalid != null) {
+                problems.add(field.owner() + "." + field.name() + ": " + invalid);
+                continue;
+            }
+            fieldNames.put(memberKey(field.owner(), field.name(), field.descriptor()), field.newName());
+            fields.add(field);
+        }
+        for (RenameBatch.MemberRename field : fields) {
+            Set<String> related = new LinkedHashSet<>(hierarchy.selfAndAncestors(field.owner()));
+            related.addAll(hierarchy.selfAndDescendants(field.owner()));
+            for (String className : related) {
+                ClassNode classNode = hierarchy.get(className);
+                if (classNode == null) {
+                    continue;
+                }
+                boolean sameClass = className.equals(field.owner());
+                for (FieldNode other : classNode.fields) {
+                    // Fields that already shared the name keep the relation they had; only a new match matters.
+                    if (other.name.equals(field.name())) {
+                        continue;
+                    }
+                    // In its own class a field name must be unique; in related classes only a same-typed field
+                    // would capture references.
+                    String otherName = fieldNames.getOrDefault(memberKey(className, other.name, other.desc), other.name);
+                    if (otherName.equals(field.newName()) && (sameClass || other.desc.equals(field.descriptor()))) {
+                        problems.add("Field " + field.owner() + "." + field.name() + " would be named " + field.newName()
+                            + ", like the field in " + className + ".");
+                    }
+                }
+            }
+        }
+
+        Map<String, String> methodNames = new LinkedHashMap<>();
+        Map<String, Set<String>> allFamilies = requested.methods().isEmpty() ? Map.of() : engine.methodFamilies(hierarchy);
+        List<Set<String>> families = new ArrayList<>();
+        // Families are shared sets, so each is checked for collisions once however many of its methods are listed.
+        Set<Set<String>> checkedFamilies = Collections.newSetFromMap(new IdentityHashMap<>());
+        List<RenameBatch.MemberRename> familyRequests = new ArrayList<>();
+        for (RenameBatch.MemberRename method : requested.methods()) {
+            ClassNode owner = hierarchy.get(method.owner());
+            MethodNode node = owner == null ? null : ClassHierarchy.findMethod(owner, method.name(), method.descriptor());
+            if (node == null) {
+                problems.add("Method " + method.owner() + "." + method.name() + method.descriptor() + " is not in the JAR.");
+                continue;
+            }
+            String label = method.owner() + "." + method.name() + method.descriptor();
+            if (method.name().startsWith("<") || method.newName().startsWith("<")) {
+                problems.add(label + ": constructors and class initializers cannot be renamed.");
+                continue;
+            }
+            String invalid = validateName(method.name(), method.newName(), false);
+            if (invalid != null) {
+                problems.add(label + ": " + invalid);
+                continue;
+            }
+            Set<String> family = allFamilies.get(memberKey(method.owner(), method.name(), method.descriptor()));
+            String outside = externalOverride(hierarchy, family, node);
+            if (outside != null) {
+                problems.add(label + " overrides a method of " + outside + ", which is outside this JAR.");
+                continue;
+            }
+            String conflict = null;
+            for (String member : family) {
+                String previous = methodNames.putIfAbsent(memberKey(member, method.name(), method.descriptor()), method.newName());
+                if (previous != null && !previous.equals(method.newName())) {
+                    conflict = previous;
+                }
+            }
+            if (conflict != null) {
+                problems.add(label + " is renamed to both " + conflict + " and " + method.newName()
+                    + " through the methods it overrides.");
+            }
+            if (conflict == null && checkedFamilies.add(family)) {
+                families.add(family);
+                familyRequests.add(method);
+            }
+        }
+        for (int index = 0; index < families.size(); index++) {
+            Set<String> family = families.get(index);
+            RenameBatch.MemberRename method = familyRequests.get(index);
+            String collision = methodCollision(hierarchy, family, method, methodNames);
+            if (collision != null) {
+                problems.add(collision);
+            }
+        }
+        List<RenameBatch.MemberRename> methods = new ArrayList<>();
+        methodNames.forEach((key, newName) -> {
+            int dot = key.indexOf('.');
+            int descriptor = key.indexOf('(', dot);
+            methods.add(new RenameBatch.MemberRename(
+                key.substring(0, dot), key.substring(dot + 1, descriptor), key.substring(descriptor), newName));
+        });
+
+        RenameBatch batch = new RenameBatch(requested.jarName(), requested.source(), classNames, fields, methods);
+        return new BatchPlan(batch, problems);
+    }
+
+    /**
+     * Apply a batch checked by {@link #planBatch}.
+     *
+     * @throws IllegalArgumentException if the batch no longer fits the JAR
+     */
+    public synchronized RenameResult applyBatch(List<ClassNode> classes, RenameBatch batch) {
+        BatchPlan plan = planBatch(classes, batch);
+        if (!plan.valid()) {
+            throw new IllegalArgumentException(plan.problems().getFirst());
+        }
+        RenameResult result = result("mapping", engine.renameBatch(classes, plan.batch(), true));
+        record(plan.batch());
+        return result;
+    }
+
     public synchronized Optional<RenameUndoResult> undoLast(Function<String, List<ClassNode>> classesProvider) {
         Objects.requireNonNull(classesProvider, "classesProvider");
         if (history.isEmpty()) {
             return Optional.empty();
         }
-        RenameOperation operation = history.get(history.size() - 1);
-        List<ClassNode> classes = classesProvider.apply(operation.jarName());
+        RenameStep step = history.get(history.size() - 1);
+        List<ClassNode> classes = classesProvider.apply(step.jarName());
         if (classes == null) {
-            throw new IllegalStateException("JAR is no longer loaded: " + operation.jarName());
+            throw new IllegalStateException("JAR is no longer loaded: " + step.jarName());
         }
+        if (step instanceof RenameBatch batch) {
+            RenameResult result = result("mapping", engine.renameBatch(classes, batch.inverse(), true));
+            history.remove(history.size() - 1);
+            dirtyJars.add(batch.jarName());
+            return Optional.of(new RenameUndoResult(batch, result, null));
+        }
+        RenameOperation operation = (RenameOperation) step;
 
         ClassNode affectedClass;
         RenameResult result;
@@ -140,22 +318,26 @@ public class RenameService {
     }
 
     public synchronized void replay(
-        List<RenameOperation> operations,
+        List<RenameStep> steps,
         Function<String, List<ClassNode>> classesProvider
     ) {
         clear();
-        for (RenameOperation operation : operations) {
-            List<ClassNode> classes = classesProvider.apply(operation.jarName());
+        for (RenameStep step : steps) {
+            List<ClassNode> classes = classesProvider.apply(step.jarName());
             if (classes == null) {
-                throw new IllegalStateException("JAR is not loaded: " + operation.jarName());
+                throw new IllegalStateException("JAR is not loaded: " + step.jarName());
             }
-            applyPersistedOperation(operation, classes);
-            history.add(operation);
-            dirtyJars.add(operation.jarName());
+            switch (step) {
+                case RenameOperation operation -> {
+                    applyPersistedOperation(operation, classes);
+                    record(operation);
+                }
+                case RenameBatch batch -> applyBatch(classes, batch);
+            }
         }
     }
 
-    public synchronized List<RenameOperation> getHistory() {
+    public synchronized List<RenameStep> getHistory() {
         return List.copyOf(history);
     }
 
@@ -176,8 +358,8 @@ public class RenameService {
      *
      * @param clean true when nothing was renamed since the JAR was written
      */
-    public synchronized void commitOverwrittenJar(String jarName, List<RenameOperation> written, boolean clean) {
-        history.removeIf(operation -> operation.jarName().equals(jarName) && written.contains(operation));
+    public synchronized void commitOverwrittenJar(String jarName, List<RenameStep> written, boolean clean) {
+        history.removeIf(step -> step.jarName().equals(jarName) && written.contains(step));
         if (clean) {
             dirtyJars.remove(jarName);
         }
@@ -354,8 +536,73 @@ public class RenameService {
         }
     }
 
-    private void record(RenameOperation operation) {
-        history.add(operation);
-        dirtyJars.add(operation.jarName());
+    private void record(RenameStep step) {
+        history.add(step);
+        dirtyJars.add(step.jarName());
+    }
+
+    private static String memberKey(String owner, String name, String descriptor) {
+        return owner + "." + name + descriptor;
+    }
+
+    /**
+     * The class outside the JAR whose method a family member overrides, or null. Such a method keeps its name.
+     */
+    private static String externalOverride(ClassHierarchy hierarchy, Set<String> family, MethodNode method) {
+        if (!ClassHierarchy.isOverridable(method)) {
+            return null;
+        }
+        for (String member : family) {
+            for (String ancestor : hierarchy.selfAndAncestors(member)) {
+                if (!hierarchy.contains(ancestor)
+                    && ExternalTypes.declaresOverridableMethod(ancestor, method.name, method.desc)) {
+                    return ancestor;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Why renaming the family would make it collide with another method, using the names after the batch, or null.
+     */
+    private static String methodCollision(
+        ClassHierarchy hierarchy,
+        Set<String> family,
+        RenameBatch.MemberRename method,
+        Map<String, String> methodNames
+    ) {
+        Set<String> visibleFrom = new LinkedHashSet<>();
+        for (String member : family) {
+            visibleFrom.addAll(hierarchy.selfAndDescendants(member));
+        }
+        Set<String> checked = new HashSet<>();
+        for (String className : visibleFrom) {
+            for (String ancestor : hierarchy.selfAndAncestors(className)) {
+                if (!checked.add(ancestor)) {
+                    continue;
+                }
+                ClassNode classNode = hierarchy.get(ancestor);
+                if (classNode == null) {
+                    if (ExternalTypes.declaresOverridableMethod(ancestor, method.newName(), method.descriptor())) {
+                        return method.owner() + "." + method.name() + " would be named " + method.newName()
+                            + ", which overrides " + ancestor + "." + method.newName() + method.descriptor() + ".";
+                    }
+                    continue;
+                }
+                for (MethodNode other : classNode.methods) {
+                    // A method that already shared the name, in this family or not, keeps the relation it had.
+                    if (other.name.equals(method.name()) || !other.desc.equals(method.descriptor())) {
+                        continue;
+                    }
+                    String otherName = methodNames.getOrDefault(memberKey(ancestor, other.name, other.desc), other.name);
+                    if (otherName.equals(method.newName())) {
+                        return method.owner() + "." + method.name() + method.descriptor() + " would be named "
+                            + method.newName() + ", like " + ancestor + "." + other.name + other.desc + ".";
+                    }
+                }
+            }
+        }
+        return null;
     }
 }

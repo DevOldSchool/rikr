@@ -4,10 +4,14 @@ import org.objectweb.asm.tree.ClassNode;
 
 import java.util.Objects;
 
-public record RenameUndoResult(RenameOperation operation, RenameResult result, ClassNode affectedClass) {
+/**
+ * What an undo reverted.
+ *
+ * @param affectedClass the class to show afterwards, or null when a whole batch was undone
+ */
+public record RenameUndoResult(RenameStep step, RenameResult result, ClassNode affectedClass) {
     public RenameUndoResult {
-        Objects.requireNonNull(operation, "operation");
+        Objects.requireNonNull(step, "step");
         Objects.requireNonNull(result, "result");
-        Objects.requireNonNull(affectedClass, "affectedClass");
     }
 }

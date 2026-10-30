@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.UnaryOperator;
 
 /**
  * Accepted and rejected class mappings between JARs. Each source class maps to at most one class of a target
@@ -113,18 +114,29 @@ public class MappingSet {
     public synchronized void renameClass(ClassRef ref, String newName) {
         Objects.requireNonNull(ref, "ref");
         Objects.requireNonNull(newName, "newName");
-        ClassRef renamed = ref.withClassName(newName);
-        if (renamed.equals(ref)) {
+        renameClasses(ref.jar(), Map.of(ref.className(), newName));
+    }
+
+    /**
+     * Follow several class renames of one JAR made at once, so names may move from one class to another.
+     *
+     * @param renames old class name to new class name
+     */
+    public synchronized void renameClasses(String jar, Map<String, String> renames) {
+        Objects.requireNonNull(jar, "jar");
+        if (renames.isEmpty()) {
             return;
         }
+        UnaryOperator<ClassRef> rename = value -> value.jar().equals(jar)
+            && renames.containsKey(value.className()) ? value.withClassName(renames.get(value.className())) : value;
 
         Map<Side, ClassMappingDecision> updatedAccepted = new LinkedHashMap<>();
         for (ClassMappingDecision mapping : accepted.values()) {
             ClassMappingDecision updated = new ClassMappingDecision(
                 mapping.sourceJar(),
                 mapping.targetJar(),
-                rename(source(mapping), ref, renamed).className(),
-                rename(target(mapping), ref, renamed).className(),
+                rename.apply(source(mapping)).className(),
+                rename.apply(target(mapping)).className(),
                 mapping.similarityPercent()
             );
             updatedAccepted.put(side(source(updated), updated.targetJar()), updated);
@@ -135,16 +147,12 @@ public class MappingSet {
         Set<Rejection> updatedRejected = new LinkedHashSet<>();
         for (Rejection rejection : rejected) {
             updatedRejected.add(new Rejection(
-                rename(rejection.source(), ref, renamed),
-                rename(rejection.target(), ref, renamed)
+                rename.apply(rejection.source()),
+                rename.apply(rejection.target())
             ));
         }
         rejected.clear();
         rejected.addAll(updatedRejected);
-    }
-
-    private static ClassRef rename(ClassRef value, ClassRef from, ClassRef to) {
-        return value.equals(from) ? to : value;
     }
 
     private static ClassRef source(ClassMappingDecision mapping) {

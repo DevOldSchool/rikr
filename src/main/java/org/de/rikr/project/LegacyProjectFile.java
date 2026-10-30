@@ -4,6 +4,7 @@ import org.de.rikr.bookmark.ProjectBookmark;
 import org.de.rikr.bookmark.ProjectBookmarkType;
 import org.de.rikr.mapping.ClassMappingDecision;
 import org.de.rikr.rename.RenameOperation;
+import org.de.rikr.rename.RenameStep;
 import org.de.rikr.rename.RenameType;
 
 import java.io.IOException;
@@ -67,9 +68,9 @@ final class LegacyProjectFile {
         return mappings;
     }
 
-    private static List<RenameOperation> readRenames(Properties properties) throws IOException {
+    private static List<RenameStep> readRenames(Properties properties) throws IOException {
         int count = readCount(properties, "rename.count");
-        List<RenameOperation> renames = new ArrayList<>(count);
+        List<RenameStep> renames = new ArrayList<>(count);
         for (int index = 0; index < count; index++) {
             String prefix = "rename." + index + ".";
             renames.add(new RenameOperation(

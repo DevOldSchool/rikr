@@ -173,6 +173,10 @@ public class MappingOperations {
         service.renameClass(jar, oldName, newName);
     }
 
+    void renameClasses(String jar, Map<String, String> renames) {
+        service.renameClasses(jar, renames);
+    }
+
     void removeClass(String jar, String className) {
         service.clearClass(jar, className);
     }
