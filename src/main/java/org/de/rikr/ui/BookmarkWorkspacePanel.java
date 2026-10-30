@@ -4,6 +4,7 @@ import org.de.rikr.Rikr;
 import org.de.rikr.bookmark.ProjectBookmark;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;
+import org.objectweb.asm.tree.ClassNode;
 
 import javax.swing.*;
 import java.awt.*;
@@ -20,6 +21,7 @@ public class BookmarkWorkspacePanel extends JPanel {
         "<html><div style='text-align:center'>No bookmarks yet.<br><br>Right-click a class, field or method "
             + "and choose Toggle Bookmark.</div></html>", SwingConstants.CENTER);
     private final CardLayout cards = new CardLayout();
+    private ClassNode openClass;
     private final JPanel content = new JPanel(cards);
 
     public BookmarkWorkspacePanel(Rikr controller) {
@@ -31,6 +33,24 @@ public class BookmarkWorkspacePanel extends JPanel {
         add(title, BorderLayout.NORTH);
 
         list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        list.getAccessibleContext().setAccessibleName("Bookmarks");
+        // Bookmarks in the class that is open are shown in bold, so the ones at hand stand out.
+        list.setCellRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> owner, Object value, int index, boolean selected,
+                                                          boolean focused) {
+                JLabel label = (JLabel) super.getListCellRendererComponent(owner, value, index, selected, focused);
+                if (value instanceof ProjectBookmark bookmark && openClass != null
+                    && bookmark.className().equals(openClass.name)
+                    && controller.jars().jarOf(openClass).map(bookmark.jarName()::equals).orElse(false)) {
+                    label.setFont(label.getFont().deriveFont(Font.BOLD));
+                    label.setToolTipText("In the open class");
+                } else {
+                    label.setToolTipText(null);
+                }
+                return label;
+            }
+        });
         list.addListSelectionListener(event -> updateButtons());
         emptyLabel.setBorder(BorderFactory.createEmptyBorder(0, 16, 0, 16));
         content.add(new JScrollPane(list), "list");
@@ -65,6 +85,11 @@ public class BookmarkWorkspacePanel extends JPanel {
         SettingsManager.addListener(settings -> applyTheme());
         applyTheme();
         showListOrEmptyState();
+    }
+
+    public void classOpened(ClassNode classNode) {
+        openClass = classNode;
+        list.repaint();
     }
 
     public void refresh() {

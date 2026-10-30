@@ -126,7 +126,8 @@ public class RenameActionHandler implements ActionListener {
     private void rename(RenameTarget target, boolean fromCode, int caret) {
         JFrame frame = controller.getUserInterface().getFrame();
         Object input = JOptionPane.showInputDialog(
-            frame, "Enter new name:", "Rename", JOptionPane.PLAIN_MESSAGE, null, null, target.currentName()
+            frame, "New name for " + target.currentName() + ":", "Rename", JOptionPane.PLAIN_MESSAGE, null, null,
+            target.currentName()
         );
         if (input == null || input.toString().trim().isEmpty()) {
             return;
@@ -139,20 +140,7 @@ public class RenameActionHandler implements ActionListener {
                 JOptionPane.WARNING_MESSAGE);
             return;
         }
-        String affectedClasses = preview.affectedClasses().isEmpty()
-            ? "None"
-            : String.join("\n  ", preview.affectedClasses());
-        String message = String.format(
-            "Rename %s to %s?%n%nAffected references: %d%nAffected classes: %d%n  %s",
-            preview.oldName(),
-            preview.newName(),
-            preview.referenceCount(),
-            preview.fileCount(),
-            affectedClasses
-        );
-        int confirmation = JOptionPane.showConfirmDialog(frame, message, "Preview Rename",
-            JOptionPane.OK_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
-        if (confirmation != JOptionPane.OK_OPTION) {
+        if (!confirm(frame, preview)) {
             return;
         }
 
@@ -173,6 +161,38 @@ public class RenameActionHandler implements ActionListener {
         if (fromCode) {
             contentPanel.restoreCaret(caret);
         }
+    }
+
+    /**
+     * Show what the rename changes and ask to go ahead. The class list scrolls, so the dialog fits the screen
+     * however many classes a widely used name touches.
+     */
+    private static boolean confirm(JFrame frame, RenamePreview preview) {
+        JPanel panel = new JPanel(new BorderLayout(0, 8));
+        int classes = preview.affectedClasses().size();
+        panel.add(new JLabel("<html><b>Rename " + escape(preview.oldName()) + " to " + escape(preview.newName())
+            + "?</b><br><br>" + plural(preview.referenceCount(), "reference") + " in "
+            + plural(preview.fileCount(), "class") + " change.</html>"), BorderLayout.NORTH);
+        if (classes > 0) {
+            JList<String> list = new JList<>(preview.affectedClasses().toArray(String[]::new));
+            list.setVisibleRowCount(Math.min(classes, 10));
+            list.getAccessibleContext().setAccessibleName("Classes that change");
+            JScrollPane scroll = new JScrollPane(list);
+            scroll.setPreferredSize(new Dimension(360, scroll.getPreferredSize().height));
+            panel.add(scroll, BorderLayout.CENTER);
+        }
+        Object[] options = {"Rename", "Cancel"};
+        int choice = JOptionPane.showOptionDialog(frame, panel, "Rename", JOptionPane.DEFAULT_OPTION,
+            JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
+        return choice == 0;
+    }
+
+    private static String plural(long count, String noun) {
+        return count + " " + noun + (count == 1 ? "" : noun.endsWith("s") ? "es" : "s");
+    }
+
+    private static String escape(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     private void warn(String message) {

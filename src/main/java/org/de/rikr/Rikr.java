@@ -33,6 +33,7 @@ import org.objectweb.asm.tree.ClassNode;
 import javax.swing.*;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -139,7 +140,11 @@ public class Rikr {
     public void loadFiles(List<File> files) {
         List<File> jarFiles = files.stream().filter(file -> file.getName().endsWith(".jar")).toList();
         List<File> classFiles = files.stream().filter(file -> file.getName().endsWith(".class")).toList();
+        List<File> otherFiles = files.stream()
+            .filter(file -> !jarFiles.contains(file) && !classFiles.contains(file))
+            .toList();
         if (jarFiles.isEmpty() && classFiles.isEmpty()) {
+            userInterface.showUnreadableFiles(otherFiles);
             return;
         }
         Project target = project;
@@ -147,8 +152,13 @@ public class Rikr {
         log("Loading " + files.stream().map(File::getName).toList() + "...");
         tasks.run(
             "Loading files",
-            () -> new LoadedFiles(jars.readJars(jarFiles), jars.readClassFiles(classFiles)),
+            () -> {
+                List<File> unreadable = new ArrayList<>(otherFiles);
+                return new LoadedFiles(jars.readJars(jarFiles, unreadable::add),
+                    jars.readClassFiles(classFiles, unreadable::add), unreadable);
+            },
             loaded -> {
+                userInterface.showUnreadableFiles(loaded.unreadable());
                 if (project != target) {
                     log("Did not add " + files.size() + " files because another project was opened.");
                     return;
@@ -309,7 +319,7 @@ public class Rikr {
         userInterface.refreshBookmarks();
     }
 
-    private record LoadedFiles(List<LoadedJar> jars, List<ClassNode> classes) {
+    private record LoadedFiles(List<LoadedJar> jars, List<ClassNode> classes, List<File> unreadable) {
     }
 
     private record OpenedProject(Project project, ProjectSession session) {

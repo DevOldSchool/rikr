@@ -89,7 +89,7 @@ The following items are listed in no particular order and are here as a todo lis
 - ~~Set theme.~~
 - ~~Set syntax highlight colors.~~
 
-#### Application icon
+#### ~~Application icon~~
 
 #### Documentation
 
@@ -107,6 +107,10 @@ project tree groups classes by package; each JAR shows how many classes it has.
 class, field or method by part of its name across every loaded JAR. With nothing
 typed it lists the classes opened most recently. **Navigate > Back** and
 **Forward** (`Cmd+[` and `Cmd+]`) move through the classes you opened.
+
+The bar above the code names the open class and its JAR, and the project tree
+selects it wherever it was opened from. With **View > Split Bytecode and Java**
+on, click inside a method in either view to show the same method in the other.
 
 **Edit > Find in Class...** (`Cmd+F`) searches the open class; **Find Next**
 and **Find Previous** are `Cmd+G` and `Shift+Cmd+G`. The status bar shows the
@@ -134,6 +138,12 @@ Load at least two JARs, then open **View > Cross-JAR Mappings** or press
 `Ctrl/Cmd+Shift+M`. Select source and target JARs to review ranked structural
 matches with side-by-side field, method, interface, and superclass details.
 
+The source list marks mapped classes and can be filtered by name or to the
+classes not yet mapped, with a count of how many are mapped. Members in the
+details with no member of the same shape in the other class are highlighted.
+Press `Enter` to accept the selected candidate and move to the next unmapped
+class, or `Delete` to reject it.
+
 Accepted mappings are one-to-one within a JAR pair. Rejected candidates are
 remembered for the current session, and **Auto-match unique** only accepts a
 source class when its highest-scoring available candidate is unambiguous.
@@ -148,7 +158,8 @@ callees. Results are grouped by the class they are in, with each member's
 parameter and return types and how it uses the target. Double-click a result,
 or select it and press Enter, to open and highlight the relevant member;
 double-click a class heading to open the class. **Find Extenders**, **Find
-Implementors** and **Find Matching Class Nodes** list their results here too. The reference index is rebuilt when JAR content
+Implementors** and **Find Matching Class Nodes** list their results here too.
+Tick **Follow the open class** to show the references of each class you open. The reference index is rebuilt when JAR content
 changes, so queries do not repeatedly scan every instruction.
 
 ## Project sessions
@@ -196,3 +207,8 @@ In a control flow graph, right-click a block to follow the methods it calls,
 and double-click it to see it in the bytecode view. **Back** retraces the path.
 A method's right-click menu in the project tree also has **Show Call Graph** and
 **Show Control Flow**.
+
+**Fit** shows the whole graph when its text stays readable; a larger graph is
+fitted to its width and opens at the top, with an overview in the corner to
+click or drag around. Type in **Find in graph** and press `Enter` to go to the
+next block or method containing that text.

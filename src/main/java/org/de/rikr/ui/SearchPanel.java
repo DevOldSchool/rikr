@@ -7,17 +7,25 @@ import org.de.rikr.search.SearchResult;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;
 import org.de.rikr.ui.model.SearchResultItem;
+import org.objectweb.asm.tree.ClassNode;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.lang.reflect.Modifier;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 public class SearchPanel extends JPanel {
     private final Rikr controller;
     private final JTextField searchField;
     private final JList<SearchResultItem> resultsList;
+    private final JLabel summary = new JLabel(" ");
     private final DefaultListModel<SearchResultItem> listModel;
     private final JButton matchCaseButton;
     private final JButton matchWordButton;
@@ -67,8 +75,14 @@ public class SearchPanel extends JPanel {
         scrollPane = new JScrollPane(resultsList);
         scrollPane.setBorder(null);
 
+        summary.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+        JPanel top = new JPanel(new BorderLayout());
+        top.setOpaque(false);
+        top.add(searchBarPanel, BorderLayout.NORTH);
+        top.add(summary, BorderLayout.SOUTH);
+
         // Add components to the panel
-        add(searchBarPanel, BorderLayout.NORTH);
+        add(top, BorderLayout.NORTH);
         add(scrollPane, BorderLayout.CENTER);
 
         defaultBackgroundColor = matchCaseButton.getBackground();
@@ -82,6 +96,8 @@ public class SearchPanel extends JPanel {
     private void applyTheme() {
         if (searchField != null) {
             SearchFields.applyTheme(searchField);
+            SearchFields.toggleIcon(matchCaseButton, "match-case", matchCase);
+            SearchFields.toggleIcon(matchWordButton, "match-word", matchWord);
         }
 
         if (buttonsPanel != null) {
@@ -171,8 +187,44 @@ public class SearchPanel extends JPanel {
         listModel.clear();
 
         SearchQuery query = new SearchQuery(searchField.getText(), matchCase, matchWord);
-        for (SearchResult result : controller.search(query)) {
-            listModel.addElement(toResultItem(result));
+        List<SearchResult> results = controller.search(query);
+        Map<String, List<ClassNode>> classesByJar = controller.jars().classesByJar();
+        Map<ClassNode, String> jarOf = new IdentityHashMap<>();
+        classesByJar.forEach((jar, classes) -> classes.forEach(classNode -> jarOf.put(classNode, jar)));
+
+        // Results arrive as a class followed by its matching members; keep each class's block under its JAR.
+        Map<String, List<SearchResultItem>> byJar = new TreeMap<>();
+        Map<String, Integer> matchesByJar = new HashMap<>();
+        int matches = 0;
+        int classes = 0;
+        for (SearchResult result : results) {
+            String jar = jarOf.getOrDefault(result.classNode(), "");
+            byJar.computeIfAbsent(jar, key -> new ArrayList<>()).add(toResultItem(result));
+            if (result.indentLevel() == 0) {
+                classes++;
+            }
+            if (result.selectable()) {
+                matches++;
+                matchesByJar.merge(jar, 1, Integer::sum);
+            }
+        }
+        boolean manyJars = byJar.size() > 1;
+        byJar.forEach((jar, items) -> {
+            if (manyJars) {
+                int count = matchesByJar.getOrDefault(jar, 0);
+                listModel.addElement(new SearchResultItem(jar + " · " + count + (count == 1 ? " match" : " matches"),
+                    null, null, null, null, 0, false));
+            }
+            items.forEach(listModel::addElement);
+        });
+
+        if (query.text().isEmpty()) {
+            summary.setText(" ");
+        } else if (matches == 0) {
+            summary.setText("No matches");
+        } else {
+            summary.setText(matches + (matches == 1 ? " match" : " matches") + " in " + classes
+                + (classes == 1 ? " class" : " classes") + (manyJars ? ", " + byJar.size() + " JARs" : ""));
         }
     }
 
@@ -203,6 +255,7 @@ public class SearchPanel extends JPanel {
     private void toggleButton(JButton button, boolean toggle) {
         // Screen readers hear the state the colour shows.
         button.getAccessibleContext().setAccessibleDescription(toggle ? "On" : "Off");
+        SearchFields.toggleIcon(button, button == matchCaseButton ? "match-case" : "match-word", toggle);
         if (toggle) {
             button.setBackground(Theme.SEARCH_BUTTON_SELECTED_COLOR);
         } else {

@@ -87,6 +87,7 @@ public class TreePanel extends JPanel {
         tree.setShowsRootHandles(true);
         tree.setCellRenderer(new IconTreeCellRenderer());
         tree.setBackground(Theme.BACKGROUND_COLOR);
+        tree.getAccessibleContext().setAccessibleName("Project classes");
         treeSelectionHandler = new TreeSelectionHandler(controller, tree);
         tree.addTreeSelectionListener(treeSelectionHandler);
 
@@ -109,6 +110,8 @@ public class TreePanel extends JPanel {
     private void applyTheme() {
         if (searchField != null) {
             SearchFields.applyTheme(searchField);
+            SearchFields.toggleIcon(matchCaseButton, "match-case", matchCase);
+            SearchFields.toggleIcon(matchWordButton, "match-word", matchWord);
         }
 
         if (searchBarPanel != null) {
@@ -302,6 +305,19 @@ public class TreePanel extends JPanel {
      *
      * @return false if the class is not in the tree
      */
+    /**
+     * Select the class in the tree without opening it again, unless the selection is already in that class, so the
+     * tree shows the class opened from search, references or code.
+     */
+    public void follow(ClassNode classNode) {
+        for (TreeNode node = treeSelectionHandler.getSelectedNode(); node != null; node = node.getParent()) {
+            if (node instanceof ClassMutableTreeNode classNodeInTree && classNodeInTree.getClassNode() == classNode) {
+                return;
+            }
+        }
+        treeSelectionHandler.selectQuietly(() -> reveal(classNode));
+    }
+
     public boolean reveal(ClassNode classNode) {
         Enumeration<TreeNode> nodes = ((DefaultMutableTreeNode) treeModel.getRoot()).depthFirstEnumeration();
         while (nodes.hasMoreElements()) {
@@ -538,6 +554,7 @@ public class TreePanel extends JPanel {
     private void toggleButton(JButton button, boolean toggle) {
         // Screen readers hear the state the colour shows.
         button.getAccessibleContext().setAccessibleDescription(toggle ? "On" : "Off");
+        SearchFields.toggleIcon(button, button == matchCaseButton ? "match-case" : "match-word", toggle);
         if (toggle) {
             button.setBackground(Theme.SEARCH_BUTTON_SELECTED_COLOR);
         } else {

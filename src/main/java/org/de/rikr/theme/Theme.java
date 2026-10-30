@@ -15,7 +15,8 @@ public class Theme {
 
     public static Color CONTENT_TEXT_COLOR = new Color(170, 170, 170);
     public static Color CONTENT_BORDER_COLOR = new Color(50, 50, 50);
-    public static Color CONTENT_HIGHLIGHT_TEXT_COLOR = new Color(80, 80, 80);
+    // Secondary text: at least 4.5:1 on the panel and content backgrounds (WCAG 2.2 SC 1.4.3).
+    public static Color CONTENT_HIGHLIGHT_TEXT_COLOR = new Color(150, 154, 161);
 
     public static Color SYNTAX_HIGHLIGHT_DEFAULT_COLOR = new Color(188, 190, 196);
     public static Color SYNTAX_HIGHLIGHT_KEYWORD_COLOR = new Color(207, 142, 109);
@@ -36,7 +37,7 @@ public class Theme {
 
     public static Color DARK_CONTENT_TEXT_COLOR = new Color(170, 170, 170);
     public static Color DARK_CONTENT_BORDER_COLOR = new Color(50, 50, 50);
-    public static Color DARK_CONTENT_HIGHLIGHT_TEXT_COLOR = new Color(80, 80, 80);
+    public static Color DARK_CONTENT_HIGHLIGHT_TEXT_COLOR = new Color(150, 154, 161);
 
     public static Color DARK_SYNTAX_HIGHLIGHT_DEFAULT_COLOR = new Color(188, 190, 196);
     public static Color DARK_SYNTAX_HIGHLIGHT_KEYWORD_COLOR = new Color(207, 142, 109);
@@ -57,7 +58,7 @@ public class Theme {
 
     public static Color LIGHT_CONTENT_TEXT_COLOR = new Color(0, 0, 0);
     public static Color LIGHT_CONTENT_BORDER_COLOR = new Color(230, 230, 230);
-    public static Color LIGHT_CONTENT_HIGHLIGHT_TEXT_COLOR = new Color(170, 170, 170);
+    public static Color LIGHT_CONTENT_HIGHLIGHT_TEXT_COLOR = new Color(100, 104, 110);
 
     public static Color LIGHT_SYNTAX_HIGHLIGHT_DEFAULT_COLOR = new Color(0, 0, 0);
     public static Color LIGHT_SYNTAX_HIGHLIGHT_KEYWORD_COLOR = new Color(52, 75, 182);

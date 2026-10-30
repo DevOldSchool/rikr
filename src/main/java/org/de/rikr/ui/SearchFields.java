@@ -1,5 +1,6 @@
 package org.de.rikr.ui;
 
+import org.de.rikr.resources.Images;
 import org.de.rikr.theme.Theme;
 
 import javax.swing.*;
@@ -20,6 +21,13 @@ final class SearchFields {
         field.putClientProperty("JTextField.placeholderText", hint);
         field.getAccessibleContext().setAccessibleName(hint);
         applyTheme(field);
+    }
+
+    /**
+     * A match option's icon: light on the accent colour when it is on, otherwise the theme's icon colour.
+     */
+    static void toggleIcon(JButton button, String icon, boolean on) {
+        button.setIcon(on ? Images.getImage(icon) : Images.getThemedImage(icon));
     }
 
     /**

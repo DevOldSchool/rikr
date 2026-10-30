@@ -11,6 +11,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +21,9 @@ import java.util.concurrent.ExecutionException;
 public class MappingWorkspacePanel extends JPanel {
     private static final int DEFAULT_MINIMUM_SIMILARITY = 50;
     private static final int MAXIMUM_CANDIDATES = 100;
+    private static final String SHOW_ALL = "All classes";
+    private static final String SHOW_UNMAPPED = "Unmapped";
+    private static final String SHOW_MAPPED = "Mapped";
 
     private final Rikr controller;
     private final JarPairSelector jars = new JarPairSelector(this::reloadSourceClasses);
@@ -40,6 +44,13 @@ public class MappingWorkspacePanel extends JPanel {
     private final JLabel statusLabel = new JLabel("Load at least two JARs to begin mapping.");
     private final JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT));
     private final JPanel decisionBar = new JPanel(new FlowLayout(FlowLayout.LEFT));
+    private final JPanel statusBar = new JPanel(new FlowLayout(FlowLayout.LEFT));
+    private final List<ClassNode> allSourceClasses = new ArrayList<>();
+    private final JTextField filterField = new JTextField(12);
+    private final JComboBox<String> showBox = new JComboBox<>(new String[]{SHOW_ALL, SHOW_UNMAPPED, SHOW_MAPPED});
+    private final JLabel progressLabel = new JLabel(" ");
+    private final JLabel differenceLegend = new JLabel(
+        "Highlighted members have no member of the same shape in the other class.");
 
     private int candidateRequestSequence;
 
@@ -70,6 +81,32 @@ public class MappingWorkspacePanel extends JPanel {
         });
         acceptButton.addActionListener(event -> acceptSelectedCandidate());
         rejectButton.addActionListener(event -> rejectSelectedCandidate());
+        filterField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            @Override
+            public void insertUpdate(javax.swing.event.DocumentEvent event) {
+                applyFilter();
+            }
+
+            @Override
+            public void removeUpdate(javax.swing.event.DocumentEvent event) {
+                applyFilter();
+            }
+
+            @Override
+            public void changedUpdate(javax.swing.event.DocumentEvent event) {
+                applyFilter();
+            }
+        });
+        showBox.addActionListener(event -> applyFilter());
+        // Decide from the keyboard: Enter accepts and moves to the next unmapped class, Delete rejects.
+        for (JList<?> list : List.of(sourceClassList, candidateList)) {
+            bind(list, KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ENTER, 0), "accept",
+                this::acceptSelectedCandidate);
+            bind(list, KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_DELETE, 0), "reject",
+                this::rejectSelectedCandidate);
+            bind(list, KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_BACK_SPACE, 0), "reject",
+                this::rejectSelectedCandidate);
+        }
         clearButton.addActionListener(event -> clearSelectedSourceDecisions());
         autoMatchButton.addActionListener(event -> autoMatchUniqueCandidates());
         exportButton.addActionListener(event -> exportMappings());
@@ -93,18 +130,55 @@ public class MappingWorkspacePanel extends JPanel {
         add(toolbar, BorderLayout.NORTH);
     }
 
+    private static void bind(JComponent component, KeyStroke key, String name, Runnable action) {
+        component.getInputMap(JComponent.WHEN_FOCUSED).put(key, name);
+        component.getActionMap().put(name, new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                action.run();
+            }
+        });
+    }
+
     private void buildWorkspace() {
         sourceClassList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         candidateList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        sourceClassList.getAccessibleContext().setAccessibleName("Source classes");
+        candidateList.getAccessibleContext().setAccessibleName("Ranked target candidates");
 
         JScrollPane sourceListScroll = titledScrollPane(sourceClassList, "Source classes");
+        SearchFields.style(filterField, "Filter classes");
+        showBox.setToolTipText("Show all source classes, or only those not yet mapped, or only mapped ones");
+        JPanel sourceFilter = new JPanel(new BorderLayout(6, 0));
+        sourceFilter.setOpaque(false);
+        sourceFilter.add(filterField, BorderLayout.CENTER);
+        sourceFilter.add(showBox, BorderLayout.EAST);
+        sourceFilter.add(progressLabel, BorderLayout.SOUTH);
+        progressLabel.setBorder(BorderFactory.createEmptyBorder(4, 2, 2, 2));
+        JPanel sourcePane = new JPanel(new BorderLayout(0, 4));
+        sourcePane.setOpaque(false);
+        sourcePane.add(sourceFilter, BorderLayout.NORTH);
+        sourcePane.add(sourceListScroll, BorderLayout.CENTER);
+
         JScrollPane candidateListScroll = titledScrollPane(candidateList, "Ranked target candidates");
-        JSplitPane lists = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, sourceListScroll, candidateListScroll);
+        acceptButton.setToolTipText("Accept this candidate and go to the next unmapped class (Enter)");
+        rejectButton.setToolTipText("Reject this candidate (Delete)");
+        decisionBar.add(acceptButton);
+        decisionBar.add(rejectButton);
+        decisionBar.add(clearButton);
+        JPanel candidatePane = new JPanel(new BorderLayout());
+        candidatePane.setOpaque(false);
+        candidatePane.add(candidateListScroll, BorderLayout.CENTER);
+        candidatePane.add(decisionBar, BorderLayout.SOUTH);
+        JSplitPane lists = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, sourcePane, candidatePane);
         lists.setResizeWeight(0.5);
         lists.setDividerSize(5);
 
         JScrollPane sourceDetailsScroll = titledScrollPane(sourceDetails, "Source details");
         JScrollPane candidateDetailsScroll = titledScrollPane(candidateDetails, "Candidate details");
+        // Equal preferred widths, so the long lines of one class do not squeeze the other side.
+        sourceDetailsScroll.setPreferredSize(new Dimension(300, 200));
+        candidateDetailsScroll.setPreferredSize(new Dimension(300, 200));
         JSplitPane details = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, sourceDetailsScroll, candidateDetailsScroll);
         details.setResizeWeight(0.5);
         details.setDividerSize(5);
@@ -114,18 +188,21 @@ public class MappingWorkspacePanel extends JPanel {
         workspace.setDividerSize(5);
         add(workspace, BorderLayout.CENTER);
 
-        decisionBar.add(acceptButton);
-        decisionBar.add(rejectButton);
-        decisionBar.add(clearButton);
-        decisionBar.add(Box.createHorizontalStrut(8));
-        decisionBar.add(statusLabel);
-        add(decisionBar, BorderLayout.SOUTH);
+        differenceLegend.setForeground(Theme.CONTENT_HIGHLIGHT_TEXT_COLOR);
+        JPanel bottom = new JPanel(new BorderLayout());
+        bottom.setOpaque(false);
+        bottom.add(differenceLegend, BorderLayout.NORTH);
+        statusBar.add(statusLabel);
+        bottom.add(statusBar, BorderLayout.SOUTH);
+        add(bottom, BorderLayout.SOUTH);
     }
 
     private void configureRenderers() {
         sourceClassList.setCellRenderer(new LabelRenderer<>(ClassNode.class, sourceClass ->
-            acceptedMapping(sourceClass).map(mapping -> "[Accepted " + mapping.similarityPercent() + "%] ").orElse("")
-                + sourceClass.name));
+            acceptedMapping(sourceClass)
+                .map(mapping -> "✓  " + sourceClass.name + "   → " + mapping.targetClassName() + "   "
+                    + mapping.similarityPercent() + "%")
+                .orElse("    " + sourceClass.name)));
         candidateList.setCellRenderer(new LabelRenderer<>(ClassMatch.class, candidate ->
             candidate.similarityPercent() + "%  " + candidate.classNode().name + candidateState(candidate)));
     }
@@ -137,8 +214,10 @@ public class MappingWorkspacePanel extends JPanel {
             .orElse(null);
         sourceClassModel.clear();
         candidateModel.clear();
+        allSourceClasses.clear();
 
         if (!hasJarPair()) {
+            updateProgress();
             sourceDetails.setText("");
             candidateDetails.setText("");
             updateDetailsAndControls();
@@ -149,8 +228,9 @@ public class MappingWorkspacePanel extends JPanel {
         if (classes != null) {
             classes.stream()
                 .sorted(Comparator.comparing(classNode -> classNode.name))
-                .forEach(sourceClassModel::addElement);
+                .forEach(allSourceClasses::add);
         }
+        fillSourceModel();
 
         int selectionIndex = findSourceIndex(previousClassName);
         if (selectionIndex < 0 && !sourceClassModel.isEmpty()) {
@@ -160,6 +240,61 @@ public class MappingWorkspacePanel extends JPanel {
             sourceClassList.setSelectedIndex(selectionIndex);
         }
         updateDetailsAndControls();
+    }
+
+    private void fillSourceModel() {
+        String filter = filterField.getText().strip().toLowerCase(java.util.Locale.ROOT);
+        String show = (String) showBox.getSelectedItem();
+        sourceClassModel.clear();
+        for (ClassNode classNode : allSourceClasses) {
+            boolean mapped = acceptedMapping(classNode).isPresent();
+            if (SHOW_UNMAPPED.equals(show) && mapped || SHOW_MAPPED.equals(show) && !mapped) {
+                continue;
+            }
+            if (!filter.isEmpty() && !classNode.name.toLowerCase(java.util.Locale.ROOT).contains(filter)) {
+                continue;
+            }
+            sourceClassModel.addElement(classNode);
+        }
+        updateProgress();
+    }
+
+    private void applyFilter() {
+        ClassNode selected = sourceClassList.getSelectedValue();
+        fillSourceModel();
+        int index = selected == null ? -1 : sourceClassModel.indexOf(selected);
+        if (index < 0 && !sourceClassModel.isEmpty()) {
+            index = 0;
+        }
+        if (index >= 0) {
+            sourceClassList.setSelectedIndex(index);
+            sourceClassList.ensureIndexIsVisible(index);
+        } else {
+            refreshCandidates();
+        }
+    }
+
+    private void updateProgress() {
+        if (!hasJarPair()) {
+            progressLabel.setText(" ");
+            return;
+        }
+        long mapped = controller.mappings().accepted(selectedSourceJar(), selectedTargetJar()).size();
+        java.text.NumberFormat format = java.text.NumberFormat.getIntegerInstance();
+        progressLabel.setText(format.format(mapped) + " of " + format.format(allSourceClasses.size())
+            + " classes mapped" + (sourceClassModel.size() == allSourceClasses.size() ? ""
+            : " · showing " + format.format(sourceClassModel.size())));
+    }
+
+    // After accepting, go to the next class not yet mapped, so a run of decisions needs no mouse.
+    private void selectNextUnmapped() {
+        for (int index = sourceClassList.getSelectedIndex() + 1; index < sourceClassModel.size(); index++) {
+            if (acceptedMapping(sourceClassModel.get(index)).isEmpty()) {
+                sourceClassList.setSelectedIndex(index);
+                sourceClassList.ensureIndexIsVisible(index);
+                return;
+            }
+        }
     }
 
     private void refreshCandidates() {
@@ -233,8 +368,18 @@ public class MappingWorkspacePanel extends JPanel {
 
         try {
             controller.mappings().accept(selectedSourceJar(), selectedTargetJar(), sourceClass, candidate);
-            statusLabel.setText("Accepted " + sourceClass.name + " -> " + candidate.classNode().name);
+            statusLabel.setText("Accepted " + sourceClass.name + " → " + candidate.classNode().name);
             repaintLists();
+            updateProgress();
+            if (SHOW_UNMAPPED.equals(showBox.getSelectedItem())) {
+                int index = sourceClassList.getSelectedIndex();
+                fillSourceModel();
+                if (!sourceClassModel.isEmpty()) {
+                    sourceClassList.setSelectedIndex(Math.min(index, sourceClassModel.size() - 1));
+                }
+            } else {
+                selectNextUnmapped();
+            }
             updateDetailsAndControls();
         } catch (IllegalArgumentException exception) {
             JOptionPane.showMessageDialog(
@@ -271,6 +416,7 @@ public class MappingWorkspacePanel extends JPanel {
         controller.mappings().clearDecisions(selectedSourceJar(), selectedTargetJar(), sourceClass);
         statusLabel.setText("Cleared decisions for " + sourceClass.name);
         repaintLists();
+        updateProgress();
         updateDetailsAndControls();
     }
 
@@ -297,6 +443,7 @@ public class MappingWorkspacePanel extends JPanel {
                     int added = get().size();
                     statusLabel.setText("Auto-matched " + added + " unique class" + (added == 1 ? "." : "es."));
                     repaintLists();
+                    updateProgress();
                     refreshCandidates();
                 } catch (InterruptedException exception) {
                     Thread.currentThread().interrupt();
@@ -346,6 +493,8 @@ public class MappingWorkspacePanel extends JPanel {
             candidate == null ? null : candidate.classNode(),
             candidate == null ? null : candidate.similarityPercent()
         ));
+        highlightDifferences(sourceDetails, sourceClass, candidate == null ? null : candidate.classNode());
+        highlightDifferences(candidateDetails, candidate == null ? null : candidate.classNode(), sourceClass);
         sourceDetails.setCaretPosition(0);
         candidateDetails.setCaretPosition(0);
 
@@ -372,6 +521,22 @@ public class MappingWorkspacePanel extends JPanel {
                 ),
                 () -> statusLabel.setText("Select a candidate to accept or reject.")
             );
+        }
+    }
+
+    private static void highlightDifferences(JTextArea area, ClassNode shown, ClassNode other) {
+        area.getHighlighter().removeAllHighlights();
+        if (shown == null || other == null) {
+            return;
+        }
+        javax.swing.text.Highlighter.HighlightPainter painter =
+            new javax.swing.text.DefaultHighlighter.DefaultHighlightPainter(Theme.SEARCH_HIGHLIGHT_COLOR);
+        for (int line : ClassDetails.unmatchedMembers(area.getText(), shown, other)) {
+            try {
+                area.getHighlighter().addHighlight(area.getLineStartOffset(line), area.getLineEndOffset(line), painter);
+            } catch (javax.swing.text.BadLocationException ignored) {
+                // The line came from this text, so it exists.
+            }
         }
     }
 
@@ -441,6 +606,8 @@ public class MappingWorkspacePanel extends JPanel {
         setBackground(Theme.BACKGROUND_COLOR);
         toolbar.setBackground(Theme.BACKGROUND_COLOR);
         decisionBar.setBackground(Theme.BACKGROUND_COLOR);
+        statusBar.setBackground(Theme.BACKGROUND_COLOR);
+        differenceLegend.setForeground(Theme.CONTENT_HIGHLIGHT_TEXT_COLOR);
         sourceClassList.setBackground(Theme.CONTENT_BACKGROUND_COLOR);
         candidateList.setBackground(Theme.CONTENT_BACKGROUND_COLOR);
         sourceDetails.setBackground(Theme.CONTENT_BACKGROUND_COLOR);

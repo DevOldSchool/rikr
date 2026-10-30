@@ -52,6 +52,12 @@ jobs:
           mkdir -p target/jpackage-input dist
           cp target/rikr-*.jar target/jpackage-input/rikr.jar
           cp target/lib/*.jar target/jpackage-input/
+          # Each platform takes its own icon format.
+          case "$RUNNER_OS" in
+            macOS) icon=packaging/icons/rikr.icns ;;
+            Windows) icon=packaging/icons/rikr.ico ;;
+            *) icon=packaging/icons/rikr.png ;;
+          esac
           for type in ${{ matrix.types }}; do
             # Linux installers also add a menu entry; the option is only valid for them.
             extra=""
@@ -61,7 +67,7 @@ jobs:
             jpackage --type "$type" --name Rikr --app-version "$version" \
               --vendor "Rikr" --description "A reverse engineering workbench for Java bytecode" \
               --input target/jpackage-input --main-jar rikr.jar --main-class org.de.rikr.Rikr \
-              $extra --dest dist
+              --icon "$icon" $extra --dest dist
           done
           # An app image is a folder with its own Java runtime: archive it so it can be attached to the release.
           if [ -d dist/Rikr ]; then

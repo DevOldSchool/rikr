@@ -15,8 +15,19 @@ public class SearchResultItemRenderer extends JLabel implements ListCellRenderer
     public Component getListCellRendererComponent(JList<? extends SearchResultItem> list, SearchResultItem value, int index, boolean isSelected, boolean cellHasFocus) {
         int indent = Math.max(0, value.getIndentLevel());
         setBorder(BorderFactory.createEmptyBorder(0, indent * 16, 0, 0));
-        String primary = toHex(Theme.CONTENT_TEXT_COLOR);
-        String secondary = toHex(Theme.CONTENT_HIGHLIGHT_TEXT_COLOR);
+        if (value.getClassNode() == null) {
+            // A JAR heading when results come from more than one JAR.
+            setBorder(BorderFactory.createEmptyBorder(8, 4, 2, 0));
+            setText("<html><b>" + value.getText() + "</b></html>");
+            setIcon(null);
+            setBackground(list.getBackground());
+            setForeground(list.getForeground());
+            setFont(list.getFont());
+            setOpaque(true);
+            return this;
+        }
+        String primary = isSelected ? toHex(list.getSelectionForeground()) : toHex(Theme.CONTENT_TEXT_COLOR);
+        String secondary = SecondaryText.color(list, isSelected);
         String html = "<html><span style='color:" + primary + "'>" + value.getText() + "</span> " +
             "<span style='color:" + secondary + "'>" + value.getClassNode().name + "</span></html>";
         setText(html);

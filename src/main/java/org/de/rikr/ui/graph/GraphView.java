@@ -22,6 +22,11 @@ public class GraphView extends JScrollPane {
     private static final int MAX_LINE_CHARS = 72;
     private static final double MIN_SCALE = 0.05;
     private static final double MAX_SCALE = 2.5;
+    // Fitting never shrinks text below this, so a large graph is fitted to its width and scrolled instead.
+    private static final double MIN_READABLE_SCALE = 0.5;
+    // Text is measured and drawn with fractional metrics, so its width scales exactly with the zoom and stays
+    // inside its box at every zoom level.
+    private static final java.awt.font.FontRenderContext TEXT = new java.awt.font.FontRenderContext(null, true, true);
 
     /**
      * What happens when a node is used.
@@ -40,6 +45,7 @@ public class GraphView extends JScrollPane {
     }
 
     private final Canvas canvas = new Canvas();
+    private final Overview overview = new Overview();
     private final Listener listener;
     private DrawnGraph graph;
     private GraphLayout.Result layout;
@@ -54,6 +60,7 @@ public class GraphView extends JScrollPane {
         getVerticalScrollBar().setUnitIncrement(24);
         getHorizontalScrollBar().setUnitIncrement(24);
         ToolTipManager.sharedInstance().registerComponent(canvas);
+        getViewport().addChangeListener(event -> overview.update());
         applyTheme();
         SettingsManager.addListener(settings -> {
             applyTheme();
@@ -90,6 +97,7 @@ public class GraphView extends JScrollPane {
             selected = -1;
         }
         FontMetrics metrics = canvas.getFontMetrics(font());
+        Font font = font();
         List<Dimension> sizes = new ArrayList<>();
         List<String[]> lines = new ArrayList<>();
         for (DrawnGraph.Node node : drawn.nodes()) {
@@ -99,8 +107,8 @@ public class GraphView extends JScrollPane {
             lines.add(text);
             int width = 0;
             for (int index = 0; index < text.length; index++) {
-                int extra = index == 0 && node.badge() != null ? metrics.stringWidth(node.badge()) + 2 * PADDING : 0;
-                width = Math.max(width, metrics.stringWidth(text[index]) + extra);
+                int extra = index == 0 && node.badge() != null ? textWidth(font, node.badge()) + 2 * PADDING : 0;
+                width = Math.max(width, textWidth(font, text[index]) + extra);
             }
             sizes.add(new Dimension(width + 2 * PADDING, text.length * metrics.getHeight() + 2 * PADDING));
         }
@@ -128,13 +136,68 @@ public class GraphView extends JScrollPane {
         canvas.repaint();
     }
 
+    /**
+     * Fit the graph to the window, or, when that would make its text too small to read, fit its width (but no
+     * smaller than half size) and show the top, where the graph starts.
+     */
     public void fit() {
         if (layout == null) {
             return;
         }
         Dimension view = getViewport().getExtentSize();
-        double fitted = Math.min((double) view.width / layout.width(), (double) view.height / layout.height());
-        zoomTo(Math.min(1, fitted), null);
+        double whole = Math.min((double) view.width / layout.width(), (double) view.height / layout.height());
+        if (whole >= MIN_READABLE_SCALE) {
+            zoomTo(Math.min(1, whole), null);
+            return;
+        }
+        double width = Math.max(MIN_READABLE_SCALE, Math.min(1, (double) view.width / layout.width()));
+        zoomTo(width, null);
+        Rectangle start = layout.boxes().isEmpty() ? new Rectangle() : layout.boxes().getFirst();
+        int x = (int) Math.round((start.x + start.width / 2.0) * width - view.width / 2.0);
+        getViewport().setViewPosition(new Point(Math.max(0, Math.min(x, canvas.getWidth() - view.width)), 0));
+    }
+
+    /**
+     * Select the next node, after the selected one, with a line containing {@code text}, ignoring case, and scroll
+     * to it.
+     *
+     * @return false if no node contains it
+     */
+    public boolean findNext(String text) {
+        if (graph == null || text.isBlank()) {
+            return false;
+        }
+        String wanted = text.strip().toLowerCase(java.util.Locale.ROOT);
+        int count = graph.nodes().size();
+        for (int step = 1; step <= count; step++) {
+            int node = Math.floorMod(selected + step, count);
+            boolean matches = graph.nodes().get(node).lines().stream()
+                .anyMatch(line -> line.toLowerCase(java.util.Locale.ROOT).contains(wanted));
+            if (matches) {
+                selected = node;
+                if (scale < MIN_READABLE_SCALE) {
+                    zoomTo(MIN_READABLE_SCALE, null);
+                }
+                Rectangle box = layout.boxes().get(node);
+                canvas.scrollRectToVisible(new Rectangle((int) (box.x * scale) - 40, (int) (box.y * scale) - 40,
+                    (int) (box.width * scale) + 80, (int) (box.height * scale) + 80));
+                canvas.repaint();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * A small map of the whole graph with the visible part outlined, shown while the graph is larger than the
+     * window. Click or drag in it to move there.
+     */
+    public JComponent overview() {
+        return overview;
+    }
+
+    private static int textWidth(Font font, String text) {
+        return (int) Math.ceil(font.getStringBounds(text, TEXT).getWidth());
     }
 
     public void zoomIn() {
@@ -163,6 +226,7 @@ public class GraphView extends JScrollPane {
         viewport.setViewPosition(new Point(Math.max(0, x), Math.max(0, y)));
         canvas.repaint();
         listener.zoomChanged(scale);
+        overview.update();
     }
 
     private Font font() {
@@ -197,7 +261,7 @@ public class GraphView extends JScrollPane {
         }
         FontMetrics metrics = canvas.getFontMetrics(font());
         Rectangle box = layout.boxes().get(node);
-        int width = metrics.stringWidth(badge) + PADDING;
+        int width = textWidth(font(), badge) + PADDING;
         return new Rectangle(box.x + box.width - width - PADDING / 2, box.y + PADDING / 2, width,
             metrics.getHeight());
     }
@@ -315,6 +379,7 @@ public class GraphView extends JScrollPane {
             }
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            g.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_ON);
             g.scale(scale, scale);
             g.setFont(font());
             for (int index = 0; index < graph.edges().size(); index++) {
@@ -394,6 +459,90 @@ public class GraphView extends JScrollPane {
 
         private Color withAlpha(Color color, int alpha) {
             return new Color(color.getRed(), color.getGreen(), color.getBlue(), alpha);
+        }
+    }
+
+    // A JPanel, since a bare JComponent has no accessible context to name.
+    private final class Overview extends JPanel {
+        private static final int SIZE = 180;
+
+        Overview() {
+            setOpaque(false);
+            setVisible(false);
+            setToolTipText("Overview: click or drag to move around the graph");
+            getAccessibleContext().setAccessibleName("Graph overview");
+            MouseAdapter mouse = new MouseAdapter() {
+                @Override
+                public void mousePressed(MouseEvent event) {
+                    centreOn(event.getPoint());
+                }
+
+                @Override
+                public void mouseDragged(MouseEvent event) {
+                    centreOn(event.getPoint());
+                }
+            };
+            addMouseListener(mouse);
+            addMouseMotionListener(mouse);
+        }
+
+        void update() {
+            boolean larger = layout != null
+                && (canvas.getWidth() > getViewport().getWidth() || canvas.getHeight() > getViewport().getHeight());
+            setVisible(larger);
+            repaint();
+        }
+
+        private double ratio() {
+            return Math.min((double) (SIZE - 8) / layout.width(), (double) (SIZE - 8) / layout.height());
+        }
+
+        private void centreOn(Point point) {
+            if (layout == null) {
+                return;
+            }
+            double ratio = ratio();
+            JViewport viewport = getViewport();
+            int x = (int) Math.round((point.x - 4) / ratio * scale - viewport.getWidth() / 2.0);
+            int y = (int) Math.round((point.y - 4) / ratio * scale - viewport.getHeight() / 2.0);
+            viewport.setViewPosition(new Point(
+                Math.max(0, Math.min(x, canvas.getWidth() - viewport.getWidth())),
+                Math.max(0, Math.min(y, canvas.getHeight() - viewport.getHeight()))));
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            return new Dimension(SIZE, SIZE);
+        }
+
+        @Override
+        public Dimension getMaximumSize() {
+            return getPreferredSize();
+        }
+
+        @Override
+        protected void paintComponent(Graphics graphics) {
+            if (layout == null) {
+                return;
+            }
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.setColor(Theme.BACKGROUND_COLOR);
+            g.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 8, 8);
+            g.setColor(Theme.CONTENT_HIGHLIGHT_TEXT_COLOR);
+            g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 8, 8);
+            double ratio = ratio();
+            for (int index = 0; index < layout.boxes().size(); index++) {
+                Rectangle box = layout.boxes().get(index);
+                g.setColor(index == selected ? Theme.SEARCH_BUTTON_SELECTED_COLOR : Theme.CONTENT_TEXT_COLOR);
+                g.fillRect(4 + (int) (box.x * ratio), 4 + (int) (box.y * ratio),
+                    Math.max(1, (int) (box.width * ratio)), Math.max(1, (int) (box.height * ratio)));
+            }
+            Rectangle visible = getViewport().getViewRect();
+            g.setColor(Theme.SEARCH_BUTTON_SELECTED_COLOR);
+            g.setStroke(new BasicStroke(1.5f));
+            g.drawRect(4 + (int) (visible.x / scale * ratio), 4 + (int) (visible.y / scale * ratio),
+                (int) (visible.width / scale * ratio), (int) (visible.height / scale * ratio));
+            g.dispose();
         }
     }
 }

@@ -98,7 +98,8 @@ final class GoToDialog {
                 JLabel label = (JLabel) super.getListCellRendererComponent(list, value, index, selected, focused);
                 if (value instanceof Target target) {
                     String jar = manyJars ? "   · " + target.jar() : "";
-                    label.setText("<html><b>" + escape(target.name()) + "</b>&nbsp;&nbsp;<span style='color:#9aa0a8'>"
+                    label.setText("<html><b>" + escape(target.name()) + "</b>&nbsp;&nbsp;<span style='color:"
+                        + SecondaryText.color(list, selected) + "'>"
                         + escape(target.detail() + jar) + "</span></html>");
                     label.setIcon(icon(target));
                 }

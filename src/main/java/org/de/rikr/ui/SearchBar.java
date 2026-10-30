@@ -230,6 +230,7 @@ public class SearchBar extends JPanel {
     private void toggleButton(JButton button, boolean toggle) {
         // Screen readers hear the state the colour shows.
         button.getAccessibleContext().setAccessibleDescription(toggle ? "On" : "Off");
+        SearchFields.toggleIcon(button, button == matchCaseButton ? "match-case" : "match-word", toggle);
         if (toggle) {
             button.setBackground(Theme.SEARCH_BUTTON_SELECTED_COLOR);
         } else {
@@ -242,6 +243,8 @@ public class SearchBar extends JPanel {
     private void applyTheme() {
         topPanel.setBackground(Theme.BACKGROUND_COLOR);
         SearchFields.applyTheme(searchField);
+        SearchFields.toggleIcon(matchCaseButton, "match-case", matchCase);
+        SearchFields.toggleIcon(matchWordButton, "match-word", matchWord);
         defaultBackgroundColor = matchCaseButton.getBackground();
         matchCaseButton.setBackground(matchCase ? Theme.SEARCH_BUTTON_SELECTED_COLOR : defaultBackgroundColor);
         matchWordButton.setBackground(matchWord ? Theme.SEARCH_BUTTON_SELECTED_COLOR : defaultBackgroundColor);

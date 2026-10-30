@@ -55,6 +55,7 @@ public class ContentPanel extends JScrollPane {
 
         contentPane = new ScrollableTextPane();
         contentPane.setEditable(false);
+        contentPane.getAccessibleContext().setAccessibleName(javaOnlyMode ? "Java" : "Bytecode");
         contentPane.setBackground(Theme.CONTENT_BACKGROUND_COLOR);
         contentPane.setBorder(BorderFactory.createEmptyBorder(10, 0, 10, 10));
         document = contentPane.getStyledDocument();

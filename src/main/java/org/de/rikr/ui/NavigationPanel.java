@@ -176,27 +176,22 @@ public class NavigationPanel extends JPanel {
 
     private void applyTheme() {
         setBackground(Theme.BACKGROUND_COLOR);
-        projectButton.setBackground(
-            selectedTab == SelectedTab.PROJECT ? Theme.NAVBAR_BUTTON_SELECTED_COLOR : Theme.BACKGROUND_COLOR
-        );
-        searchButton.setBackground(
-            selectedTab == SelectedTab.SEARCH ? Theme.NAVBAR_BUTTON_SELECTED_COLOR : Theme.BACKGROUND_COLOR
-        );
-        mappingButton.setBackground(
-            selectedTab == SelectedTab.MAPPING ? Theme.NAVBAR_BUTTON_SELECTED_COLOR : Theme.BACKGROUND_COLOR
-        );
-        referencesButton.setBackground(
-            selectedTab == SelectedTab.REFERENCES ? Theme.NAVBAR_BUTTON_SELECTED_COLOR : Theme.BACKGROUND_COLOR
-        );
-        bookmarksButton.setBackground(
-            selectedTab == SelectedTab.BOOKMARKS ? Theme.NAVBAR_BUTTON_SELECTED_COLOR : Theme.BACKGROUND_COLOR
-        );
-        controlFlowButton.setBackground(
-            selectedTab == SelectedTab.CONTROL_FLOW ? Theme.NAVBAR_BUTTON_SELECTED_COLOR : Theme.BACKGROUND_COLOR
-        );
+        style(projectButton, "folder", SelectedTab.PROJECT);
+        style(searchButton, "search", SelectedTab.SEARCH);
+        style(mappingButton, "mapping", SelectedTab.MAPPING);
+        style(referencesButton, "references", SelectedTab.REFERENCES);
+        style(bookmarksButton, "bookmarks", SelectedTab.BOOKMARKS);
+        style(controlFlowButton, "flow", SelectedTab.CONTROL_FLOW);
 
         revalidate();
         repaint();
+    }
+
+    // The selected button's background is the accent colour in both themes, so it keeps the light icon.
+    private void style(JButton button, String icon, SelectedTab tab) {
+        boolean selected = selectedTab == tab;
+        button.setBackground(selected ? Theme.NAVBAR_BUTTON_SELECTED_COLOR : Theme.BACKGROUND_COLOR);
+        button.setIcon(selected ? Images.getImage(icon) : Images.getThemedImage(icon));
     }
 
     private enum SelectedTab {

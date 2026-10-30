@@ -17,6 +17,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.Map;
 import java.util.Optional;
 import java.util.jar.JarFile;
@@ -53,6 +54,14 @@ public class JarOperations {
      * whose file name is already loaded, are logged and skipped.
      */
     public List<LoadedJar> readJars(List<File> jarFiles) {
+        return readJars(jarFiles, file -> {
+        });
+    }
+
+    /**
+     * Read JARs as {@link #readJars(List)} does, and also report each file that could not be read.
+     */
+    public List<LoadedJar> readJars(List<File> jarFiles, Consumer<File> unreadable) {
         List<LoadedJar> read = new ArrayList<>();
         for (File file : jarFiles) {
             if (workspace.contains(file.getName())) {
@@ -63,6 +72,7 @@ public class JarOperations {
                 read.add(loader.readJar(file, stripAnnotations));
             } catch (IOException e) {
                 logger.log("Error processing jar file: " + file.getName() + ": " + e.getMessage());
+                unreadable.accept(file);
             }
         }
         return read;
@@ -96,12 +106,21 @@ public class JarOperations {
      * read are logged and skipped.
      */
     public List<ClassNode> readClassFiles(List<File> classFiles) {
+        return readClassFiles(classFiles, file -> {
+        });
+    }
+
+    /**
+     * Read class files as {@link #readClassFiles(List)} does, and also report each file that could not be read.
+     */
+    public List<ClassNode> readClassFiles(List<File> classFiles, Consumer<File> unreadable) {
         List<ClassNode> read = new ArrayList<>();
         for (File file : classFiles) {
             try {
                 read.add(loader.readClass(file, stripAnnotations));
             } catch (IOException e) {
                 logger.log("Error processing class file: " + file.getName() + ": " + e.getMessage());
+                unreadable.accept(file);
             }
         }
         return read;

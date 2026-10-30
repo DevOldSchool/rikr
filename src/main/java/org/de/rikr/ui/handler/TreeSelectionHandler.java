@@ -16,6 +16,7 @@ public class TreeSelectionHandler implements TreeSelectionListener {
     private final Rikr controller;
     private final JTree tree;
     private DefaultMutableTreeNode selectedNode;
+    private boolean quiet;
 
     public TreeSelectionHandler(Rikr controller, JTree tree) {
         this.controller = controller;
@@ -25,6 +26,9 @@ public class TreeSelectionHandler implements TreeSelectionListener {
     @Override
     public void valueChanged(TreeSelectionEvent e) {
         selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
+        if (quiet) {
+            return;
+        }
 
         // Selects and highlights the nodes corresponding data in the document
         if (selectedNode instanceof ClassMutableTreeNode classMutableTreeNode) {
@@ -59,6 +63,18 @@ public class TreeSelectionHandler implements TreeSelectionListener {
                 MethodNode methodNode = methodNodeMutableTreeNode.getMethodNode();
                 controller.getUserInterface().getContentPanel().selectTextAfterPattern(ClassNodeUtil.getMethodNodePattern(methodNode), methodNode.name);
             });
+        }
+    }
+
+    /**
+     * Change the selection without opening what is selected, to show in the tree a class opened elsewhere.
+     */
+    public void selectQuietly(Runnable select) {
+        quiet = true;
+        try {
+            select.run();
+        } finally {
+            quiet = false;
         }
     }
 

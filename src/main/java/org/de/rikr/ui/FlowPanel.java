@@ -76,6 +76,7 @@ public class FlowPanel extends JPanel {
     private final JLabel zoomLabel = new JLabel("100%");
     private final JLabel title = new JLabel("Pick an entry point, or right-click a method in the project tree.");
     private final JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT));
+    private final JTextField find = new JTextField(14);
     private final Deque<View> history = new ArrayDeque<>();
     private final Map<String, CallGraph> callGraphs = new HashMap<>();
     private View current;
@@ -129,6 +130,16 @@ public class FlowPanel extends JPanel {
         zoomIn.addActionListener(event -> view.zoomIn());
         fit.addActionListener(event -> view.fit());
         back.addActionListener(event -> back());
+        back.setToolTipText("Back to the previous graph");
+        SearchFields.style(find, "Find in graph");
+        find.setToolTipText("Find the next block or method containing this text (Enter)");
+        find.addActionListener(event -> {
+            String text = find.getText();
+            if (!text.isBlank() && !view.findNext(text)) {
+                Toolkit.getDefaultToolkit().beep();
+                zoomLabel.setText("No match");
+            }
+        });
         back.setEnabled(false);
         jarBox.setToolTipText("The JAR to find entry points in");
         jarBox.addActionListener(event -> jarChosen());
@@ -149,6 +160,7 @@ public class FlowPanel extends JPanel {
         toolbar.add(zoomIn);
         toolbar.add(fit);
         toolbar.add(zoomLabel);
+        toolbar.add(find);
         toolbar.add(libraryCalls);
         toolbar.add(exceptionEdges);
         JPanel header = new JPanel(new BorderLayout());
@@ -157,7 +169,29 @@ public class FlowPanel extends JPanel {
         header.add(title, BorderLayout.SOUTH);
         header.setOpaque(false);
         add(header, BorderLayout.NORTH);
-        add(view, BorderLayout.CENTER);
+        // The overview floats over the graph's bottom-right corner.
+        JPanel stack = new JPanel() {
+            @Override
+            public boolean isOptimizedDrawingEnabled() {
+                return false;
+            }
+        };
+        stack.setLayout(new OverlayLayout(stack));
+        JComponent overview = view.overview();
+        overview.setAlignmentX(1f);
+        overview.setAlignmentY(1f);
+        view.setAlignmentX(1f);
+        view.setAlignmentY(1f);
+        JPanel corner = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        corner.setOpaque(false);
+        corner.setBorder(BorderFactory.createEmptyBorder(0, 0, 20, 20));
+        corner.add(overview);
+        corner.setAlignmentX(1f);
+        corner.setAlignmentY(1f);
+        corner.setMaximumSize(new Dimension(220, 220));
+        stack.add(corner);
+        stack.add(view);
+        add(stack, BorderLayout.CENTER);
         updateToggles();
         applyTheme();
         SettingsManager.addListener(settings -> applyTheme());

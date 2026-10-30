@@ -6,6 +6,7 @@ import org.de.rikr.bookmark.ProjectBookmark;
 import org.de.rikr.project.ProjectLayout;
 import org.de.rikr.mapping.SimilarClassReport;
 import org.de.rikr.reference.ReferenceKind;
+import org.de.rikr.resources.Images;
 import org.de.rikr.reference.ReferenceResult;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;
@@ -59,6 +60,12 @@ public class ClassViewer {
     public ClassViewer(Rikr controller) {
         this.controller = controller;
         frame = new JFrame("Rikr");
+        List<Image> icons = Images.appIcons();
+        frame.setIconImages(icons);
+        // A packaged app takes its Dock icon from the bundle; set it here too for runs from the build.
+        if (Taskbar.isTaskbarSupported() && Taskbar.getTaskbar().isSupported(Taskbar.Feature.ICON_IMAGE)) {
+            Taskbar.getTaskbar().setIconImage(SystemInfo.isMacOS ? Images.macAppIcon() : icons.getLast());
+        }
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setSize(1200, 800);
         frame.addWindowListener(new WindowAdapter() {
@@ -169,9 +176,11 @@ public class ClassViewer {
         panel.add(verticalSplitPane, BorderLayout.CENTER);
         statusBar = new StatusBar(() -> toggleLogVisibility(logPanel.isVisible()));
         panel.add(statusBar, BorderLayout.SOUTH);
-        // The decompiler's warnings and stack traces stay in the log; the status bar shows what Rikr itself reports.
+        // The decompiler's own messages and stack traces stay in the log; the status bar shows what Rikr itself
+        // reports.
         logPanel.addMessageListener(message -> {
-            if (!message.startsWith("[FernFlower]") && !message.contains("\tat ")) {
+            if (!message.startsWith("[FernFlower]") && !message.startsWith("[Decompiler]")
+                && !message.contains("\tat ")) {
                 statusBar.setMessage(message);
             }
         });
@@ -285,9 +294,32 @@ public class ClassViewer {
         });
     }
 
+    /**
+     * Say which dropped or chosen files could not be opened, in plain words; the reason is in the log.
+     */
+    public void showUnreadableFiles(List<File> files) {
+        if (files.isEmpty()) {
+            return;
+        }
+        String names = files.size() == 1 ? files.getFirst().getName() : files.size() + " files";
+        controller.log("Couldn't open " + names + ".");
+        Object[] options = {"OK", "Show Log"};
+        int choice = JOptionPane.showOptionDialog(frame,
+            "<html><b>Couldn't open " + names + "</b><br><br>"
+                + (files.size() == 1 ? "It isn't" : "They aren't") + " a JAR or class file Rikr can read, or "
+                + (files.size() == 1 ? "it's" : "they're") + " damaged. Choose a .jar or .class file.</html>",
+            "Open", JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE, null, options, options[0]);
+        if (choice == 1 && !logPanel.isVisible()) {
+            toggleLogVisibility(false);
+        }
+    }
+
     public void displayBytecode(ClassNode classNode) {
         history.visited(classNode);
         codeView.display(classNode);
+        treePanel.follow(classNode);
+        controller.jars().jarOf(classNode).ifPresent(jar -> referenceWorkspacePanel.classOpened(jar, classNode));
+        bookmarkWorkspacePanel.classOpened(classNode);
     }
 
     /**

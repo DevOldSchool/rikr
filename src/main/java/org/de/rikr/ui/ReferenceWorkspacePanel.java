@@ -30,11 +30,43 @@ public class ReferenceWorkspacePanel extends JPanel {
     private final JPanel header = new JPanel(new BorderLayout());
     private final JPanel footer = new JPanel(new BorderLayout());
     private final List<JList<Object>> resultLists = new ArrayList<>();
+    private final JCheckBox follow = new JCheckBox("Follow the open class");
+    private ClassNode classTarget;
+    // True while this panel opens one of its own results, which must not replace the results being browsed.
+    private boolean opening;
 
     /**
      * A row naming the class the results below it are in. Opening it opens the class.
      */
     private record ClassHeader(String className, ClassNode classNode, int count) {
+    }
+
+    /**
+     * One member of a class with every way it uses the target, so a method that names the target in its signature
+     * and in its code is one row.
+     */
+    record Row(ReferenceResult result, List<ReferenceKind> kinds) {
+        String kindsText() {
+            if (kinds.equals(List.of(ReferenceKind.METHOD_TYPE, ReferenceKind.INSTRUCTION_TYPE))) {
+                return "in signature and code";
+            }
+            return String.join(" and ", kinds.stream().map(ReferenceWorkspacePanel::kindText).toList());
+        }
+    }
+
+    /**
+     * Group results into rows, one per member of each class, keeping the order results arrive in.
+     */
+    static List<Row> rows(List<ReferenceResult> results) {
+        Map<String, List<ReferenceResult>> byMember = new LinkedHashMap<>();
+        for (ReferenceResult result : results) {
+            byMember.computeIfAbsent(ownerName(result) + "\u0000" + memberText(result), key -> new ArrayList<>())
+                .add(result);
+        }
+        return byMember.values().stream()
+            .map(same -> new Row(same.getFirst(),
+                same.stream().map(ReferenceResult::kind).distinct().sorted().toList()))
+            .toList();
     }
 
     public ReferenceWorkspacePanel(Rikr controller) {
@@ -46,6 +78,9 @@ public class ReferenceWorkspacePanel extends JPanel {
         title.setFont(title.getFont().deriveFont(Font.BOLD, title.getFont().getSize2D() + 2));
         header.add(title, BorderLayout.NORTH);
         header.add(targetLabel, BorderLayout.SOUTH);
+        follow.setToolTipText("Show the references of each class you open from the tree, search or code");
+        follow.setOpaque(false);
+        header.add(follow, BorderLayout.EAST);
         footer.add(statusLabel, BorderLayout.WEST);
 
         add(header, BorderLayout.NORTH);
@@ -57,7 +92,17 @@ public class ReferenceWorkspacePanel extends JPanel {
         SettingsManager.addListener(settings -> applyTheme());
     }
 
+    /**
+     * A class was opened elsewhere; when following, show its references.
+     */
+    public void classOpened(String jarName, ClassNode classNode) {
+        if (follow.isSelected() && !opening && classNode != classTarget) {
+            showClassReferences(jarName, classNode);
+        }
+    }
+
     public void showClassReferences(String jarName, ClassNode targetClass) {
+        classTarget = targetClass;
         targetLabel.setText("Type: " + targetClass.name + " in " + jarName);
         resetTabs();
         addResultsTab("Type references", controller.references().findTypeReferences(jarName, targetClass));
@@ -65,6 +110,7 @@ public class ReferenceWorkspacePanel extends JPanel {
     }
 
     public void showFieldReferences(String jarName, ClassNode owner, FieldNode field) {
+        classTarget = null;
         targetLabel.setText("Field: " + owner.name + "." + field.name + " " + field.desc + " in " + jarName);
         resetTabs();
         addResultsTab("Reads", controller.references().findFieldReads(jarName, owner, field));
@@ -73,6 +119,7 @@ public class ReferenceWorkspacePanel extends JPanel {
     }
 
     public void showMethodReferences(String jarName, ClassNode owner, MethodNode method) {
+        classTarget = null;
         targetLabel.setText("Method: " + owner.name + "." + method.name + method.desc + " in " + jarName);
         resetTabs();
         addResultsTab("Callers", controller.references().findMethodCallers(jarName, owner, method));
@@ -135,12 +182,12 @@ public class ReferenceWorkspacePanel extends JPanel {
      */
     private void addResultsTab(String title, List<ReferenceResult> results) {
         DefaultListModel<Object> model = new DefaultListModel<>();
-        Map<String, List<ReferenceResult>> byClass = new LinkedHashMap<>();
-        for (ReferenceResult result : results) {
-            byClass.computeIfAbsent(ownerName(result), name -> new ArrayList<>()).add(result);
+        Map<String, List<Row>> byClass = new LinkedHashMap<>();
+        for (Row row : rows(results)) {
+            byClass.computeIfAbsent(ownerName(row.result()), name -> new ArrayList<>()).add(row);
         }
         byClass.forEach((className, members) -> {
-            model.addElement(new ClassHeader(className, members.getFirst().navigationClass(), members.size()));
+            model.addElement(new ClassHeader(className, members.getFirst().result().navigationClass(), members.size()));
             members.forEach(model::addElement);
         });
         JList<Object> resultList = new JList<>(model);
@@ -177,7 +224,7 @@ public class ReferenceWorkspacePanel extends JPanel {
     private void selectFirstResult() {
         for (JList<Object> resultList : resultLists) {
             for (int index = 0; index < resultList.getModel().getSize(); index++) {
-                if (resultList.getModel().getElementAt(index) instanceof ReferenceResult) {
+                if (resultList.getModel().getElementAt(index) instanceof Row) {
                     resultList.setSelectedIndex(index);
                     return;
                 }
@@ -189,21 +236,32 @@ public class ReferenceWorkspacePanel extends JPanel {
         Object selected = resultList.getSelectedValue();
         if (selected instanceof ClassHeader header) {
             if (header.classNode() != null) {
-                controller.getUserInterface().openReferenceResult(new ReferenceResult(ReferenceKind.EXTENDS,
-                    header.className(), header.classNode(), ClassNodeUtil.getPattern(header.classNode(), null, null),
-                    header.classNode().name));
+                opening = true;
+                try {
+                    controller.getUserInterface().openReferenceResult(new ReferenceResult(ReferenceKind.EXTENDS,
+                        header.className(), header.classNode(),
+                        ClassNodeUtil.getPattern(header.classNode(), null, null), header.classNode().name));
+                } finally {
+                    opening = false;
+                }
             }
             return;
         }
-        if (!(selected instanceof ReferenceResult result)) {
+        if (!(selected instanceof Row row)) {
             return;
         }
+        ReferenceResult result = row.result();
         if (!result.isNavigable()) {
             Toolkit.getDefaultToolkit().beep();
             statusLabel.setText("The referenced class is not loaded in this JAR.");
             return;
         }
-        controller.getUserInterface().openReferenceResult(result);
+        opening = true;
+        try {
+            controller.getUserInterface().openReferenceResult(result);
+        } finally {
+            opening = false;
+        }
     }
 
     /**
@@ -238,6 +296,15 @@ public class ReferenceWorkspacePanel extends JPanel {
         }
         String member = text.substring(dot + 1);
         int open = member.indexOf('(');
+        int space = member.indexOf(' ');
+        if (open < 0 && space > 0) {
+            // A field with its descriptor, such as "b Lwab;".
+            try {
+                return member.substring(0, space) + " " + simpleType(Type.getType(member.substring(space + 1)));
+            } catch (RuntimeException exception) {
+                return member;
+            }
+        }
         if (open < 0) {
             return member;
         }
@@ -311,9 +378,10 @@ public class ReferenceWorkspacePanel extends JPanel {
                     + "</html>");
                 label.setToolTipText(header.classNode() == null ? null : "Open " + header.className());
                 label.setBorder(BorderFactory.createEmptyBorder(index == 0 ? 2 : 8, 6, 2, 6));
-            } else if (value instanceof ReferenceResult result) {
+            } else if (value instanceof Row row) {
+                ReferenceResult result = row.result();
                 label.setText("<html>" + escape(memberText(result)) + "&nbsp;&nbsp;&nbsp;<span style='color:"
-                    + (isSelected ? "#d8dbe0" : "#9aa0a8") + "'>" + kindText(result.kind()) + "</span></html>");
+                    + SecondaryText.color(list, isSelected) + "'>" + row.kindsText() + "</span></html>");
                 label.setToolTipText(result.isNavigable() ? result.text() : result.text() + " (class not loaded)");
                 label.setBorder(BorderFactory.createEmptyBorder(1, 24, 1, 6));
                 if (!result.isNavigable() && !isSelected) {
