@@ -115,6 +115,29 @@ class MemberMatcherTest {
     }
 
     @Test
+    void matchesMethodsWhenOnlyOneJarHasUnusedParametersAndMultipliers() {
+        // The old JAR passes an unused int to every method and multiplies its constants; the new one doesn't.
+        ClassNode source = classNode("a");
+        ClassNode target = classNode("b");
+        for (String text : List.of("one", "two", "three")) {
+            MethodNode obfuscated = staticReturning("o" + text, "(Ljava/lang/String;I)Ljava/lang/String;", text);
+            obfuscated.instructions.insert(new InsnNode(Opcodes.POP));
+            obfuscated.instructions.insert(new InsnNode(Opcodes.IMUL));
+            obfuscated.instructions.insert(new LdcInsnNode(1_234_567));
+            obfuscated.instructions.insert(new LdcInsnNode(7_654_321));
+            obfuscated.instructions.insert(new LdcInsnNode(3_141_593));
+            obfuscated.instructions.insert(new InsnNode(Opcodes.POP));
+            source.methods.add(obfuscated);
+            target.methods.add(staticReturning("n" + text, "(Ljava/lang/String;)Ljava/lang/String;", text));
+        }
+
+        MemberMatches matches = matcher.match(List.of(source), List.of(target), Map.of("a", "b"));
+
+        assertEquals("ntwo", method(matches, "otwo").orElseThrow().target().name());
+        assertEquals(3, matches.methods().size());
+    }
+
+    @Test
     void matchesFieldsByWhereTheirValuesComeFromAndGo() {
         ClassNode source = point("a", "x", "y");
         ClassNode target = point("b", "q", "p");

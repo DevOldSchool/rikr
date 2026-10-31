@@ -5,6 +5,7 @@ import org.de.rikr.behavioral.MethodComparator;
 import org.de.rikr.mapping.ClassMappingDecision;
 import org.de.rikr.mapping.ClassMappingService;
 import org.de.rikr.mapping.ClassMatch;
+import org.de.rikr.mapping.ClassVoting;
 import org.de.rikr.mapping.MemberMatcher;
 import org.de.rikr.mapping.MemberMatches;
 import org.de.rikr.mapping.SimilarClassReport;
@@ -147,6 +148,51 @@ public class MappingOperations {
             classMapping.put(decision.sourceClassName(), decision.targetClassName());
         }
         return () -> new MemberMatcher().match(sources, targets, classMapping);
+    }
+
+    /**
+     * Work that finds more class matches from the members of the classes matched so far (see {@link ClassVoting}),
+     * on copies of the classes taken now, so it can run on another thread. Apply the result with
+     * {@link #acceptVoted}.
+     */
+    public Callable<List<ClassVoting.VotedMatch>> voteClassesLater(String sourceJar, String targetJar) {
+        List<ClassNode> sourceClasses = workspace.classesSnapshot(sourceJar);
+        List<ClassNode> targetClasses = workspace.classesSnapshot(targetJar);
+        if (sourceClasses == null || targetClasses == null) {
+            return List::of;
+        }
+        List<ClassNode> sources = copies(sourceClasses);
+        List<ClassNode> targets = copies(targetClasses);
+        Map<String, String> classMapping = new LinkedHashMap<>();
+        for (ClassMappingDecision decision : accepted(sourceJar, targetJar)) {
+            classMapping.put(decision.sourceClassName(), decision.targetClassName());
+        }
+        return () -> new ClassVoting().match(sources, targets, classMapping);
+    }
+
+    /**
+     * Accept class matches found by {@link #voteClassesLater}. A match is skipped when either class was renamed,
+     * removed or matched otherwise in the meantime.
+     *
+     * @return the mappings accepted
+     */
+    public List<ClassMappingDecision> acceptVoted(String sourceJar, String targetJar,
+        List<ClassVoting.VotedMatch> matches) {
+        List<ClassMappingDecision> added = new ArrayList<>();
+        for (ClassVoting.VotedMatch match : matches) {
+            Optional<ClassNode> source = workspace.findClass(new ClassRef(sourceJar, match.source()));
+            Optional<ClassNode> target = workspace.findClass(new ClassRef(targetJar, match.target()));
+            if (source.isEmpty() || target.isEmpty() || accepted(sourceJar, targetJar, source.get()).isPresent()) {
+                continue;
+            }
+            try {
+                service.accept(sourceJar, targetJar, source.get(), new ClassMatch(target.get(), match.confidencePercent()));
+                accepted(sourceJar, targetJar, source.get()).ifPresent(added::add);
+            } catch (IllegalArgumentException alreadyMapped) {
+                // Another source class claimed this target meanwhile; the earlier decision stands.
+            }
+        }
+        return added;
     }
 
     private static List<ClassNode> copies(List<ClassNode> classes) {

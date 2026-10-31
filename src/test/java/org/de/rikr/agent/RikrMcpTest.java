@@ -204,6 +204,20 @@ class RikrMcpTest {
     }
 
     @Test
+    void autoMatchesClassesByShapeAndThenFromTheirMembers() throws Exception {
+        call("load_jars", paths(writeJar("old.jar", "a", "b"), writeJar("new.jar", "x", "y")));
+
+        String matched = text(call("auto_match_classes", args("source_jar", "old.jar", "target_jar", "new.jar")));
+        String byShapeOnly = text(call("auto_match_classes",
+            args("source_jar", "old.jar", "target_jar", "new.jar", "use_members", false)));
+
+        assertTrue(matched.matches("Accepted \\d+ unique matches of at least 90%\\. Accepted \\d+ more from their members\\."),
+            matched);
+        assertTrue(byShapeOnly.matches("Accepted \\d+ unique matches of at least 90%\\."), byShapeOnly);
+        assertTrue(text(call("list_class_mappings", new JsonObject())).contains("old.jar a -> new.jar x"));
+    }
+
+    @Test
     void matchesMembersAndCarriesNamesToAnotherVersion() throws Exception {
         Path oldJar = writeJar("old.jar", "a", "b");
         Path newJar = writeJar("new.jar", "x", "y");
@@ -226,8 +240,9 @@ class RikrMcpTest {
 
         String loadedToo = text(call("carry_names", args("source_jar", "old.jar", "target_jar", "new.jar",
             "include_loaded_names", true, "dry_run", true)));
-        // b, read's owner, kept its loaded name, which is carried only when asked: y is renamed to b as well.
-        assertTrue(loadedToo.startsWith("Would rename 2 classes, 1 fields and 1 methods"), loadedToo);
+        // b, read's owner, kept its loaded name, but one-letter class names are what this JAR's obfuscator gives,
+        // so b is not carried even when loaded names are.
+        assertTrue(loadedToo.startsWith("Would rename 1 classes, 1 fields and 1 methods"), loadedToo);
         String dryRun = text(call("carry_names",
             args("source_jar", "old.jar", "target_jar", "new.jar", "dry_run", true)));
         assertTrue(dryRun.startsWith("Would rename 1 classes, 1 fields and 1 methods"), dryRun);

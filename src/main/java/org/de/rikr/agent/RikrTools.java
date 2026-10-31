@@ -10,6 +10,7 @@ import org.de.rikr.flow.MethodRef;
 import org.de.rikr.jar.JarExportService;
 import org.de.rikr.mapping.ClassMappingDecision;
 import org.de.rikr.mapping.ClassMatch;
+import org.de.rikr.mapping.ClassVoting;
 import org.de.rikr.mapping.MemberMatch;
 import org.de.rikr.mapping.MemberMatches;
 import org.de.rikr.mapping.format.MappingFormat;
@@ -251,11 +252,14 @@ final class RikrTools implements AutoCloseable {
                 false, this::acceptClassMapping),
             tool("auto_match_classes", """
                     Accept every source class whose best match in the target JAR is unique and at least \
-                    min_similarity percent similar.""",
+                    min_similarity percent similar in shape. Then, unless use_members is false, match more classes \
+                    from their members: matched fields and methods vote for the classes of their types, which \
+                    works where a deobfuscator changed the classes' shape.""",
                 Schema.object()
                     .string("source_jar", "Source JAR.", true)
                     .string("target_jar", "Target JAR.", true)
-                    .integer("min_similarity", "Lowest similarity percentage to accept. Default 90."),
+                    .integer("min_similarity", "Lowest similarity percentage to accept. Default 90.")
+                    .bool("use_members", "Also match classes from their members. Default true; slower."),
                 false, this::autoMatch),
             tool("match_members", """
                     Match the fields and methods of the source JAR to the target JAR's, within the accepted class \
@@ -749,7 +753,18 @@ final class RikrTools implements AutoCloseable {
             throw new ToolException("min_similarity must be between 0 and 100.");
         }
         List<ClassMappingDecision> added = project.mappings().autoAcceptUnique(sourceJar, targetJar, minimum);
-        return "Accepted " + added.size() + " unique matches of at least " + minimum + "%.";
+        String result = "Accepted " + added.size() + " unique matches of at least " + minimum + "%.";
+        if (!arguments.bool("use_members", true)) {
+            return result;
+        }
+        List<ClassVoting.VotedMatch> voted;
+        try {
+            voted = project.mappings().voteClassesLater(sourceJar, targetJar).call();
+        } catch (Exception exception) {
+            throw new IllegalStateException(exception);
+        }
+        int fromMembers = project.mappings().acceptVoted(sourceJar, targetJar, voted).size();
+        return result + " Accepted " + fromMembers + " more from their members.";
     }
 
     private String matchMembers(Arguments arguments) throws ToolException {

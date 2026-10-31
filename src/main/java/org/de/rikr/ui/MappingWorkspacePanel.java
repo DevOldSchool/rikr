@@ -40,7 +40,7 @@ public class MappingWorkspacePanel extends JPanel {
     private final JButton acceptButton = new JButton("Accept ↩");
     private final JButton rejectButton = new JButton("Reject");
     private final JButton clearButton = new JButton("Clear source decisions");
-    private final JButton autoMatchButton = new JButton("Auto-match unique");
+    private final JButton autoMatchButton = new JButton("Auto-match");
     private final JButton exportButton = new JButton("Export JSON");
     private final JButton carryNamesButton = new JButton("Carry names…");
     private final JLabel statusLabel = new JLabel("Load at least two JARs to begin mapping.");
@@ -55,6 +55,9 @@ public class MappingWorkspacePanel extends JPanel {
         "Highlighted members have no member of the same shape in the other class.");
 
     private int candidateRequestSequence;
+    // Background matching in progress, whose button stays off until it finishes.
+    private boolean autoMatching;
+    private boolean carryingNames;
     // The outcome of the last workspace action, shown instead of the hint until another source class is selected.
     private String notice;
     private ClassNode noticeSource;
@@ -131,6 +134,8 @@ public class MappingWorkspacePanel extends JPanel {
         toolbar.add(jars.targetBox());
         toolbar.add(new JLabel("Minimum %"));
         toolbar.add(minimumSimilaritySpinner);
+        autoMatchButton.setToolTipText("Match every class whose best candidate is unique and at least the minimum "
+            + "similarity in shape, then match more from the fields and methods of the classes matched");
         toolbar.add(autoMatchButton);
         toolbar.add(exportButton);
         carryNamesButton.setToolTipText("Match fields and methods of the mapped classes, and give the target JAR the "
@@ -442,6 +447,7 @@ public class MappingWorkspacePanel extends JPanel {
         String sourceJar = selectedSourceJar();
         String targetJar = selectedTargetJar();
         int minimumSimilarity = (Integer) minimumSimilaritySpinner.getValue();
+        autoMatching = true;
         autoMatchButton.setEnabled(false);
         statusLabel.setText("Auto-matching unique candidates...");
 
@@ -453,30 +459,59 @@ public class MappingWorkspacePanel extends JPanel {
 
             @Override
             protected void done() {
-                autoMatchButton.setEnabled(true);
                 try {
-                    int added = get().size();
-                    showNotice("Auto-matched " + added + " unique class" + (added == 1 ? "." : "es."));
+                    int byShape = get().size();
                     repaintLists();
                     updateProgress();
                     refreshCandidates();
+                    showNotice("Matched " + byShape + " classes by shape. Matching more from their members...");
+                    matchFromMembers(sourceJar, targetJar, byShape);
                 } catch (InterruptedException exception) {
+                    finishAutoMatch();
                     Thread.currentThread().interrupt();
                     statusLabel.setText("Auto-match interrupted.");
                 } catch (ExecutionException exception) {
+                    finishAutoMatch();
                     showError("Auto-match failed", exception.getCause());
                 }
             }
         }.execute();
     }
 
+    // Classes whose shape changed, such as when a deobfuscator removed parameters, are found by their members.
+    private void matchFromMembers(String sourceJar, String targetJar, int byShape) {
+        controller.runInBackground(
+            "Matching classes of " + sourceJar + " and " + targetJar + " from their members",
+            controller.mappings().voteClassesLater(sourceJar, targetJar),
+            voted -> {
+                int fromMembers = controller.mappings().acceptVoted(sourceJar, targetJar, voted).size();
+                finishAutoMatch();
+                repaintLists();
+                updateProgress();
+                refreshCandidates();
+                showNotice("Auto-matched " + byShape + " classes by shape and " + fromMembers
+                    + " more from their members.");
+            },
+            exception -> {
+                finishAutoMatch();
+                showError("Auto-match failed", exception);
+            });
+    }
+
+    private void finishAutoMatch() {
+        autoMatching = false;
+        updateDetailsAndControls();
+    }
+
     private void carryNames() {
         if (!hasJarPair()) {
             return;
         }
+        carryingNames = true;
         carryNamesButton.setEnabled(false);
         statusLabel.setText("Matching fields and methods...");
         NameTransferAction.carry(controller, this, selectedSourceJar(), selectedTargetJar(), message -> {
+            carryingNames = false;
             showNotice(message);
             repaintLists();
         });
@@ -530,9 +565,9 @@ public class MappingWorkspacePanel extends JPanel {
         acceptButton.setEnabled(hasCandidate);
         rejectButton.setEnabled(hasCandidate);
         clearButton.setEnabled(hasSource);
-        autoMatchButton.setEnabled(hasJarPair());
+        autoMatchButton.setEnabled(hasJarPair() && !autoMatching);
         exportButton.setEnabled(hasJarPair());
-        carryNamesButton.setEnabled(hasJarPair()
+        carryNamesButton.setEnabled(hasJarPair() && !carryingNames
             && !controller.mappings().accepted(selectedSourceJar(), selectedTargetJar()).isEmpty());
 
         // Reloading the lists passes through no selection, which must not count as choosing another class.

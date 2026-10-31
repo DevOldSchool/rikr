@@ -58,6 +58,10 @@ public class MemberMatcher {
     private static final int STRING_WEIGHT = 4;
     private static final int REFERENCE_WEIGHT = 2;
     private static final int CALLER_WEIGHT = 3;
+    // Shares of methods ending in an int, short or byte parameter that tell a JAR with unused parameters from one
+    // without: about three in four against one in three in Old School RuneScape's clients.
+    private static final double HAS_UNUSED_PARAMETERS = 0.6;
+    private static final double LACKS_UNUSED_PARAMETERS = 0.4;
     private static final int ROUNDS = 2;
     private static final int NO_EVIDENCE = -1;
 
@@ -74,6 +78,20 @@ public class MemberMatcher {
         Set<String> matchedTargets = new HashSet<>(classMapping.values());
         Side source = new Side(sourceClasses, classMapping::get);
         Side target = new Side(targetClasses, name -> matchedTargets.contains(name) ? name : null);
+        // A deobfuscator may have removed the unused parameters and the multiplications from one JAR and not the
+        // other. Then the JAR that still has them drops the last small parameter to compare, and multiplications
+        // are left out on both sides.
+        double sourceUnused = source.shareEndingInSmallParameter();
+        double targetUnused = target.shareEndingInSmallParameter();
+        if (Math.max(sourceUnused, targetUnused) > HAS_UNUSED_PARAMETERS
+            && Math.min(sourceUnused, targetUnused) < LACKS_UNUSED_PARAMETERS) {
+            (sourceUnused > targetUnused ? source : target).parameters = Parameters.DROP_LAST;
+            (sourceUnused > targetUnused ? target : source).parameters = Parameters.EXACT;
+        }
+        if (source.hasMultipliers() != target.hasMultipliers()) {
+            source.ignoreMultipliers = true;
+            target.ignoreMultipliers = true;
+        }
 
         Map<String, Group<Member<MethodNode>>> methodGroups = new LinkedHashMap<>();
         Map<String, Group<Member<FieldNode>>> fieldGroups = new LinkedHashMap<>();
@@ -282,6 +300,8 @@ public class MemberMatcher {
         private final List<ClassNode> classes;
         private final Map<String, ClassNode> byName = new HashMap<>();
         private final Function<String, String> translate;
+        private Parameters parameters = Parameters.ANY_LAST_TYPE;
+        private boolean ignoreMultipliers;
         private final Remapper remapper = new Remapper() {
             @Override
             public String map(String internalName) {
@@ -323,16 +343,60 @@ public class MemberMatcher {
          */
         String methodKey(String descriptor) {
             String mapped = methodDescriptor(descriptor);
+            if (parameters == Parameters.EXACT || !endsWithSmallParameter(mapped)) {
+                return mapped;
+            }
             int close = mapped.indexOf(')');
-            if (close > 1 && "IBS".indexOf(mapped.charAt(close - 1)) >= 0) {
-                char before = mapped.charAt(close - 2);
-                // A trailing I of "[I" or of a class name such as "Lfoo/I;" is not an int parameter.
-                boolean partOfType = before == '[' || mapped.lastIndexOf('L', close - 1) > mapped.lastIndexOf(';', close - 1);
-                if (!partOfType) {
-                    return mapped.substring(0, close - 1) + "~" + mapped.substring(close);
+            return mapped.substring(0, close - 1) + (parameters == Parameters.DROP_LAST ? "" : "~")
+                + mapped.substring(close);
+        }
+
+        private static boolean endsWithSmallParameter(String descriptor) {
+            int close = descriptor.indexOf(')');
+            if (close <= 1 || "IBS".indexOf(descriptor.charAt(close - 1)) < 0) {
+                return false;
+            }
+            // A trailing I of "[I" or of a class name such as "Lfoo/I;" is not an int parameter.
+            return descriptor.charAt(close - 2) != '['
+                && descriptor.lastIndexOf('L', close - 1) <= descriptor.lastIndexOf(';', close - 1);
+        }
+
+        // Obfuscators that add an unused parameter add it to most methods; plain code ends few that way.
+        double shareEndingInSmallParameter() {
+            int methods = 0;
+            int ending = 0;
+            for (ClassNode owner : classes) {
+                for (MethodNode method : owner.methods) {
+                    if (!method.name.startsWith("<")) {
+                        methods++;
+                        if (endsWithSmallParameter(method.desc)) {
+                            ending++;
+                        }
+                    }
                 }
             }
-            return mapped;
+            return methods == 0 ? 0 : (double) ending / methods;
+        }
+
+        // Obfuscators that multiply fields by constants leave several of those constants in each method.
+        boolean hasMultipliers() {
+            int methods = 0;
+            int constants = 0;
+            for (ClassNode owner : classes) {
+                for (MethodNode method : owner.methods) {
+                    methods++;
+                    for (AbstractInsnNode instruction : method.instructions) {
+                        if (isMultiplierConstant(instruction)) {
+                            constants++;
+                        }
+                    }
+                }
+            }
+            return methods > 0 && constants > 2 * methods;
+        }
+
+        private static boolean isMultiplierConstant(AbstractInsnNode instruction) {
+            return instruction instanceof LdcInsnNode ldc && (ldc.cst instanceof Integer || ldc.cst instanceof Long);
         }
 
         // Members of library classes are compared by name too, since those names don't change.
@@ -352,7 +416,9 @@ public class MemberMatcher {
                     continue;
                 }
                 // Control flow obfuscation adds and removes jumps, so they say nothing about what the code does.
-                if (opcode != Opcodes.GOTO) {
+                boolean multiplication = ignoreMultipliers && (opcode == Opcodes.IMUL || opcode == Opcodes.LMUL
+                    || isMultiplierConstant(instruction));
+                if (opcode != Opcodes.GOTO && !multiplication) {
                     add(features, "op " + opcode, 1);
                 }
                 switch (instruction) {
@@ -555,6 +621,16 @@ public class MemberMatcher {
         private static void add(Map<String, Integer> features, String feature, int weight) {
             features.merge(feature, weight, Integer::sum);
         }
+    }
+
+    // How a method's parameters are written for comparison.
+    private enum Parameters {
+        // A last int, short or byte parameter is written as "~", since obfuscators pick its type anew.
+        ANY_LAST_TYPE,
+        // A last int, short or byte parameter is left out: this JAR has the unused parameters the other lacks.
+        DROP_LAST,
+        // As declared: the other JAR is the one with unused parameters.
+        EXACT
     }
 
     // Members of the source and target JARs that could match each other.

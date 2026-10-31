@@ -15,6 +15,19 @@ class GeneratedNamesTest {
     }
 
     @Test
+    void takesTheShortShapeMostOfAJarsNamesShareAsObfuscated() {
+        var obfuscated = GeneratedNames.obfuscatedIn(java.util.List.of("ao", "an", "bq", "zz", "x", "Node", "id"));
+        var named = GeneratedNames.obfuscatedIn(java.util.List.of("Node", "x", "y", "id", "remove", "next"));
+
+        assertTrue(obfuscated.test("ao"));
+        assertTrue(obfuscated.test("id"));
+        assertFalse(obfuscated.test("x"));
+        assertFalse(obfuscated.test("Node"));
+        assertFalse(named.test("id"));
+        assertFalse(named.test("x"));
+    }
+
+    @Test
     void keepsNamesAPersonChose() {
         for (String name : new String[]{"Node", "x", "mouseOverColor2", "item2", "classic", "methodName", "a/Field1x"}) {
             assertFalse(GeneratedNames.isGenerated(name), name);

@@ -23,11 +23,13 @@ import org.objectweb.asm.tree.MethodNode;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * Renaming classes and members, with undo and the record of which JARs have unsaved renames.
@@ -193,8 +195,11 @@ public class RenameOperations {
      * carrying the same name into one class, are left out and said why.
      *
      * @param includeLoadedNames carry the names the source JAR was loaded with too, for a JAR that was named
-     *                           before it was loaded, leaving out names a deobfuscator made up; otherwise only
-     *                           names given since it was loaded are carried
+     *                           before it was loaded; otherwise only names given since it was loaded are carried.
+     *                           Loaded names a deobfuscator made up are left out, and so are obfuscated ones:
+     *                           names of the short shape most of the source's names have, and names the target
+     *                           JAR was loaded with too, since obfuscators draw names such as "ao" from the same
+     *                           small set in every version, while names people choose rarely recur that way.
      */
     public NameTransfer planNameTransfer(
         String sourceJar,
@@ -206,13 +211,35 @@ public class RenameOperations {
         OriginalNames original = workspace.originalNames();
         Map<String, ClassNode> sources = byName(classes(sourceJar));
         Map<String, ClassNode> targets = byName(classes(targetJar));
+        Set<String> targetClassNames = new HashSet<>();
+        Set<String> targetFieldNames = new HashSet<>();
+        Set<String> targetMethodNames = new HashSet<>();
+        for (ClassNode classNode : targets.values()) {
+            String loaded = original.className(classNode);
+            targetClassNames.add(loaded.substring(loaded.lastIndexOf('/') + 1));
+            classNode.fields.forEach(field -> targetFieldNames.add(original.field(field).name()));
+            classNode.methods.forEach(method -> targetMethodNames.add(original.method(method).name()));
+        }
+        List<String> sourceClassNames = new ArrayList<>();
+        List<String> sourceMemberNames = new ArrayList<>();
+        for (ClassNode classNode : sources.values()) {
+            String loaded = original.className(classNode);
+            sourceClassNames.add(loaded.substring(loaded.lastIndexOf('/') + 1));
+            classNode.fields.forEach(field -> sourceMemberNames.add(original.field(field).name()));
+            classNode.methods.forEach(method -> sourceMemberNames.add(original.method(method).name()));
+        }
+        Predicate<String> obfuscatedClass = GeneratedNames.obfuscatedIn(sourceClassNames);
+        Predicate<String> obfuscatedMember = GeneratedNames.obfuscatedIn(sourceMemberNames);
+        Predicate<String> classShared = name -> obfuscatedClass.test(name) || targetClassNames.contains(name);
+        Predicate<String> fieldShared = name -> obfuscatedMember.test(name) || targetFieldNames.contains(name);
+        Predicate<String> methodShared = name -> obfuscatedMember.test(name) || targetMethodNames.contains(name);
         Map<String, String> classRenames = new LinkedHashMap<>();
         int alreadyNamed = 0;
         for (ClassMappingDecision mapping : classMappings) {
             ClassNode source = sources.get(mapping.sourceClassName());
             ClassNode target = targets.get(mapping.targetClassName());
             if (source == null || target == null || target.name.equals(source.name)
-                || !carries(original.className(source), source.name, includeLoadedNames)) {
+                || !carries(original.className(source), source.name, includeLoadedNames, classShared)) {
                 continue;
             }
             if (!original.className(target).equals(target.name)) {
@@ -226,7 +253,7 @@ public class RenameOperations {
             FieldNode source = field(sources, match.source());
             FieldNode target = field(targets, match.target());
             if (source == null || target == null || target.name.equals(source.name)
-                || !carries(original.field(source).name(), source.name, includeLoadedNames)) {
+                || !carries(original.field(source).name(), source.name, includeLoadedNames, fieldShared)) {
                 continue;
             }
             if (!original.field(target).name().equals(target.name)) {
@@ -240,7 +267,7 @@ public class RenameOperations {
             MethodNode source = method(sources, match.source());
             MethodNode target = method(targets, match.target());
             if (source == null || target == null || target.name.equals(source.name)
-                || !carries(original.method(source).name(), source.name, includeLoadedNames)) {
+                || !carries(original.method(source).name(), source.name, includeLoadedNames, methodShared)) {
                 continue;
             }
             if (!original.method(target).name().equals(target.name)) {
@@ -253,8 +280,13 @@ public class RenameOperations {
         return new NameTransfer(service.planBatchLeavingOutProblems(classes(targetJar), requested), alreadyNamed);
     }
 
-    private static boolean carries(String loadedName, String name, boolean includeLoadedNames) {
-        return !loadedName.equals(name) || includeLoadedNames && !GeneratedNames.isGenerated(name);
+    private static boolean carries(String loadedName, String name, boolean includeLoadedNames,
+        Predicate<String> obfuscated) {
+        if (!loadedName.equals(name)) {
+            return true;
+        }
+        return includeLoadedNames && !GeneratedNames.isGenerated(name)
+            && !obfuscated.test(name.substring(name.lastIndexOf('/') + 1));
     }
 
     /**
