@@ -126,11 +126,8 @@ public class ClassViewer {
         navigationPanel = new NavigationPanel(
             controller,
             e -> showWorkspace(projectPanel, rightPanel, projectPanel),
-            e -> showWorkspace(searchPanel, rightPanel, searchPanel),
-            e -> {
-                mappingWorkspacePanel.refreshJars(controller.jars().classesByJar());
-                showWorkspace(projectPanel, mappingWorkspacePanel, mappingWorkspacePanel);
-            },
+            e -> showWorkspace(searchPanel, rightPanel, searchPanel, searchColumnWidth()),
+            e -> showMappingWorkspace(),
             e -> showWorkspace(projectPanel, referenceWorkspacePanel, referenceWorkspacePanel),
             e -> {
                 bookmarkWorkspacePanel.refresh();
@@ -458,12 +455,31 @@ public class ClassViewer {
      * @param opened the workspace's own panel, whose theme may be out of date while it was hidden
      */
     private void showWorkspace(Component left, Component right, JComponent opened) {
+        showWorkspace(left, right, opened, 300);
+    }
+
+    /**
+     * @param dividerLocation how wide the navigation bar and {@code left} are together
+     */
+    private void showWorkspace(Component left, Component right, JComponent opened, int dividerLocation) {
         leftSplitPane.setRightComponent(left);
         mainSplitPane.setRightComponent(right);
-        mainSplitPane.setDividerLocation(300);
+        mainSplitPane.setDividerLocation(dividerLocation);
         SettingsManager.refreshThemeFor(opened);
         frame.revalidate();
         frame.repaint();
+    }
+
+    // Mapping compares two classes side by side and never uses the tree, so it gets the whole width.
+    private void showMappingWorkspace() {
+        mappingWorkspacePanel.refreshJars(controller.jars().classesByJar());
+        showWorkspace(null, mappingWorkspacePanel, mappingWorkspacePanel,
+            navigationPanel.getPreferredSize().width + leftSplitPane.getDividerSize());
+    }
+
+    // Search rows carry an opcode, owner and member, so they need more room than tree rows.
+    private int searchColumnWidth() {
+        return Math.max(300, Math.min(600, frame.getWidth() * 2 / 5));
     }
 
     private void openFileDialog() {

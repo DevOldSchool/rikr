@@ -20,16 +20,14 @@ public class SimulatorBar extends JPanel {
         setLayout(new BorderLayout());
 
         stepForwardsButton = new JButton("Step forwards");
-        stepForwardsButton.setBorderPainted(false);
         stepBackwardsButton = new JButton("Step backwards");
-        stepBackwardsButton.setBorderPainted(false);
         JButton closeButton = new JButton("Close");
-        closeButton.setBorderPainted(false);
         closeButton.addActionListener(closeListener);
 
+        // Left is earlier, as in debuggers and media players.
         topPanel = new JPanel();
-        topPanel.add(stepForwardsButton);
         topPanel.add(stepBackwardsButton);
+        topPanel.add(stepForwardsButton);
         topPanel.add(closeButton);
         topPanel.setBackground(Theme.BACKGROUND_COLOR);
 

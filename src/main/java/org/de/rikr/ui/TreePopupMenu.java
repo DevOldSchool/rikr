@@ -3,6 +3,7 @@ package org.de.rikr.ui;
 import org.de.rikr.Rikr;
 import org.de.rikr.mapping.SimilarClassReport;
 import org.de.rikr.reference.ReferenceKind;
+import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.symbol.Declaration;
 import org.de.rikr.ui.action.RenameMappingExport;
 import org.de.rikr.ui.action.RenameMappingImport;
@@ -16,6 +17,7 @@ import javax.swing.event.PopupMenuListener;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import java.lang.reflect.Modifier;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,7 +32,9 @@ import java.util.function.Function;
 public class TreePopupMenu extends JPopupMenu {
     private final Rikr controller;
     private final JTree tree;
-    private final JMenuItem renameItem = new JMenuItem("Rename");
+    // Every item, including those not in the menu right now; declared first so item() can add to it.
+    private final List<JMenuItem> items = new ArrayList<>();
+    private final JMenuItem renameItem = item("Rename");
     private final JMenuItem removeItem = item("Remove", this::remove);
     private final JMenuItem groupBySuperclass = item("Group by Superclass",
         node -> group(node, ClassNodeUtil::groupBySuperclass));
@@ -55,6 +59,12 @@ public class TreePopupMenu extends JPopupMenu {
         this.tree = tree;
         add(renameItem);
         add(removeItem);
+        // The menu is shown by hand and rebuilt each time it opens, so a theme switch reaches neither it nor the
+        // items it isn't holding; without this they keep the old theme's colours.
+        SettingsManager.addListener(s -> {
+            SwingUtilities.updateComponentTreeUI(this);
+            items.forEach(JMenuItem::updateUI);
+        });
     }
 
     public void init() {
@@ -361,13 +371,19 @@ public class TreePopupMenu extends JPopupMenu {
      * A menu item that runs its action on the selected node, if there is one.
      */
     private JMenuItem item(String label, Consumer<DefaultMutableTreeNode> action) {
-        JMenuItem item = new JMenuItem(label);
+        JMenuItem item = item(label);
         item.addActionListener(event -> {
             DefaultMutableTreeNode node = selectedNode();
             if (node != null) {
                 action.accept(node);
             }
         });
+        return item;
+    }
+
+    private JMenuItem item(String label) {
+        JMenuItem item = new JMenuItem(label);
+        items.add(item);
         return item;
     }
 }

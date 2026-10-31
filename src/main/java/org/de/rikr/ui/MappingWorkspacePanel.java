@@ -36,7 +36,7 @@ public class MappingWorkspacePanel extends JPanel {
     private final JList<ClassMatch> candidateList = new JList<>(candidateModel);
     private final JTextArea sourceDetails = createDetailArea();
     private final JTextArea candidateDetails = createDetailArea();
-    private final JButton acceptButton = new JButton("Accept");
+    private final JButton acceptButton = new JButton("Accept ↩");
     private final JButton rejectButton = new JButton("Reject");
     private final JButton clearButton = new JButton("Clear source decisions");
     private final JButton autoMatchButton = new JButton("Auto-match unique");
@@ -162,6 +162,12 @@ public class MappingWorkspacePanel extends JPanel {
 
         JScrollPane candidateListScroll = titledScrollPane(candidateList, "Ranked target candidates");
         acceptButton.setToolTipText("Accept this candidate and go to the next unmapped class (Enter)");
+        acceptButton.getAccessibleContext().setAccessibleName("Accept");
+        // Accept is the one main action here, so it looks like a default button. Enter is bound on the two lists
+        // rather than the window, so it never fires while the filter field has focus.
+        acceptButton.putClientProperty("FlatLaf.style", "background:$Button.default.background;"
+            + "foreground:$Button.default.foreground;borderColor:$Button.default.borderColor;"
+            + "focusedBorderColor:$Button.default.focusedBorderColor");
         rejectButton.setToolTipText("Reject this candidate (Delete)");
         decisionBar.add(acceptButton);
         decisionBar.add(rejectButton);
@@ -519,9 +525,17 @@ public class MappingWorkspacePanel extends JPanel {
                     "Accepted: " + mapping.sourceClassName() + " -> " + mapping.targetClassName()
                         + " (" + mapping.similarityPercent() + "%)"
                 ),
-                () -> statusLabel.setText("Select a candidate to accept or reject.")
+                () -> statusLabel.setText(candidatePrompt(sourceClass, candidate))
             );
         }
+    }
+
+    private static String candidatePrompt(ClassNode sourceClass, ClassMatch candidate) {
+        if (candidate == null) {
+            return "Select a candidate to accept or reject.";
+        }
+        return "Press Enter to accept " + candidate.classNode().name + " (" + candidate.similarityPercent()
+            + "%) as the match for " + sourceClass.name + ", or pick another candidate.";
     }
 
     private static void highlightDifferences(JTextArea area, ClassNode shown, ClassNode other) {

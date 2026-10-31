@@ -11,7 +11,7 @@ public class Theme {
     public static Color SEARCH_BUTTON_SELECTED_COLOR = new Color(50, 90, 170);
 
     public static Color CONTENT_SELECTED_HIGHLIGHT_COLOR = new Color(33, 66, 131);
-    public static Color SEARCH_HIGHLIGHT_COLOR = new Color(45, 84, 63);
+    public static Color SEARCH_HIGHLIGHT_COLOR = new Color(92, 74, 30);
 
     public static Color CONTENT_TEXT_COLOR = new Color(170, 170, 170);
     public static Color CONTENT_BORDER_COLOR = new Color(50, 50, 50);
@@ -33,7 +33,8 @@ public class Theme {
     public static Color DARK_SEARCH_BUTTON_SELECTED_COLOR = new Color(50, 90, 170);
 
     public static Color DARK_CONTENT_SELECTED_HIGHLIGHT_COLOR = new Color(33, 66, 131);
-    public static Color DARK_SEARCH_HIGHLIGHT_COLOR = new Color(45, 84, 63);
+    // Amber, as in the light theme: green would read as "matches" where mapping marks differences.
+    public static Color DARK_SEARCH_HIGHLIGHT_COLOR = new Color(92, 74, 30);
 
     public static Color DARK_CONTENT_TEXT_COLOR = new Color(170, 170, 170);
     public static Color DARK_CONTENT_BORDER_COLOR = new Color(50, 50, 50);
@@ -64,7 +65,8 @@ public class Theme {
     public static Color LIGHT_SYNTAX_HIGHLIGHT_KEYWORD_COLOR = new Color(52, 75, 182);
     public static Color LIGHT_SYNTAX_HIGHLIGHT_COMMENT_COLOR = new Color(112, 112, 112);
     public static Color LIGHT_SYNTAX_HIGHLIGHT_NUMBER_COLOR = new Color(55, 79, 228);
-    public static Color LIGHT_SYNTAX_HIGHLIGHT_STRING_COLOR = new Color(63, 136, 58);
-    public static Color LIGHT_SYNTAX_HIGHLIGHT_ANNOTATION_COLOR = new Color(161, 147, 54);
+    // Strings and annotations: at least 4.5:1 on the white content background (WCAG 2.2 SC 1.4.3).
+    public static Color LIGHT_SYNTAX_HIGHLIGHT_STRING_COLOR = new Color(0x2E, 0x7D, 0x32);
+    public static Color LIGHT_SYNTAX_HIGHLIGHT_ANNOTATION_COLOR = new Color(0x7A, 0x6A, 0x00);
 
 }

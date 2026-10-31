@@ -4,10 +4,13 @@ import org.de.rikr.Rikr;
 import org.de.rikr.resources.Images;
 import org.de.rikr.search.SearchQuery;
 import org.de.rikr.search.SearchResult;
+import org.de.rikr.search.SearchResultIcon;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;
 import org.de.rikr.ui.model.SearchResultItem;
 import org.objectweb.asm.tree.ClassNode;
+
+import com.formdev.flatlaf.FlatClientProperties;
 
 import javax.swing.*;
 import java.awt.*;
@@ -15,6 +18,7 @@ import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -28,6 +32,10 @@ public class SearchPanel extends JPanel {
     private final JLabel summary = new JLabel(" ");
     private final DefaultListModel<SearchResultItem> listModel;
     private final MatchOptions matchOptions;
+    private final Map<Kind, JToggleButton> kindChips = new EnumMap<>(Kind.class);
+    private Kind kind = Kind.ALL;
+    private List<SearchResult> lastResults = List.of();
+    private String lastQuery = "";
     private boolean matchCase;
     private boolean matchWord;
     private JPanel searchBarPanel;
@@ -43,7 +51,7 @@ public class SearchPanel extends JPanel {
         // Create the search bar
         searchBarPanel = new JPanel(new BorderLayout());
         searchField = new JTextField();
-        SearchFields.style(searchField, "Search names and instructions");
+        SearchFields.style(searchField, "Search names, strings and member references");
         matchOptions = new MatchOptions(searchField, options -> {
             matchCase = options.matchCase();
             matchWord = options.matchWord();
@@ -66,10 +74,29 @@ public class SearchPanel extends JPanel {
         scrollPane.setBorder(null);
 
         summary.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+        JPanel chips = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        chips.setOpaque(false);
+        ButtonGroup chipGroup = new ButtonGroup();
+        for (Kind each : Kind.values()) {
+            JToggleButton chip = new JToggleButton(each.label);
+            chip.putClientProperty(FlatClientProperties.BUTTON_TYPE, FlatClientProperties.BUTTON_TYPE_ROUND_RECT);
+            chip.setToolTipText("Show " + each.label.toLowerCase(java.util.Locale.ROOT) + " only");
+            chip.setSelected(each == kind);
+            chip.addActionListener(e -> {
+                kind = each;
+                showResults();
+            });
+            chipGroup.add(chip);
+            chips.add(chip);
+            kindChips.put(each, chip);
+        }
+        kindChips.get(Kind.ALL).setToolTipText("Show every match");
+
         JPanel top = new JPanel(new BorderLayout());
         top.setOpaque(false);
         top.add(searchBarPanel, BorderLayout.NORTH);
-        top.add(summary, BorderLayout.SOUTH);
+        top.add(summary, BorderLayout.CENTER);
+        top.add(chips, BorderLayout.SOUTH);
 
         // Add components to the panel
         add(top, BorderLayout.NORTH);
@@ -152,10 +179,27 @@ public class SearchPanel extends JPanel {
     }
 
     public void performSearch() {
+        SearchQuery query = new SearchQuery(searchField.getText(), matchCase, matchWord);
+        lastResults = controller.search(query);
+        lastQuery = query.text();
+        showResults();
+    }
+
+    // Lists the last results of the chosen kind, each under its class and, when there is more than one, its JAR.
+    private void showResults() {
         listModel.clear();
 
-        SearchQuery query = new SearchQuery(searchField.getText(), matchCase, matchWord);
-        List<SearchResult> results = controller.search(query);
+        Map<Kind, Integer> counts = new EnumMap<>(Kind.class);
+        for (SearchResult result : lastResults) {
+            if (result.selectable()) {
+                counts.merge(Kind.ALL, 1, Integer::sum);
+                counts.merge(Kind.of(result), 1, Integer::sum);
+            }
+        }
+        kindChips.forEach((each, chip) -> chip.setText(each.label + " " + String.format("%,d",
+            counts.getOrDefault(each, 0))));
+
+        List<SearchResult> shown = filter(lastResults, kind);
         Map<String, List<ClassNode>> classesByJar = controller.jars().classesByJar();
         Map<ClassNode, String> jarOf = new IdentityHashMap<>();
         classesByJar.forEach((jar, classes) -> classes.forEach(classNode -> jarOf.put(classNode, jar)));
@@ -165,13 +209,13 @@ public class SearchPanel extends JPanel {
         Map<String, Integer> matchesByJar = new HashMap<>();
         int matches = 0;
         int classes = 0;
-        for (SearchResult result : results) {
+        for (SearchResult result : shown) {
             String jar = jarOf.getOrDefault(result.classNode(), "");
             byJar.computeIfAbsent(jar, key -> new ArrayList<>()).add(toResultItem(result));
             if (result.indentLevel() == 0) {
                 classes++;
             }
-            if (result.selectable()) {
+            if (result.selectable() && (kind == Kind.ALL || Kind.of(result) == kind)) {
                 matches++;
                 matchesByJar.merge(jar, 1, Integer::sum);
             }
@@ -186,14 +230,54 @@ public class SearchPanel extends JPanel {
             items.forEach(listModel::addElement);
         });
 
-        if (query.text().isEmpty()) {
+        if (lastQuery.isEmpty()) {
             summary.setText(" ");
         } else if (matches == 0) {
-            summary.setText("No matches");
+            summary.setText(lastResults.isEmpty() ? "No matches" : "No matches of this kind");
         } else {
-            summary.setText(matches + (matches == 1 ? " match" : " matches") + " in " + classes
-                + (classes == 1 ? " class" : " classes") + (manyJars ? ", " + byJar.size() + " JARs" : ""));
+            summary.setText(String.format("%,d", matches) + (matches == 1 ? " match" : " matches") + " in "
+                + String.format("%,d", classes) + (classes == 1 ? " class" : " classes")
+                + (manyJars ? ", " + byJar.size() + " JARs" : ""));
         }
+    }
+
+    /**
+     * The results of one kind, each still under its class, and each instruction under the method that holds it.
+     */
+    static List<SearchResult> filter(List<SearchResult> results, Kind kind) {
+        if (kind == Kind.ALL) {
+            return results;
+        }
+        List<SearchResult> shown = new ArrayList<>();
+        SearchResult classRow = null;
+        SearchResult methodRow = null;
+        for (SearchResult result : results) {
+            if (result.indentLevel() == 0) {
+                classRow = result;
+                methodRow = null;
+                if (kind == Kind.CLASSES) {
+                    shown.add(result);
+                    classRow = null;
+                }
+                continue;
+            }
+            if (result.icon() == SearchResultIcon.METHOD) {
+                methodRow = result;
+            }
+            if (Kind.of(result) != kind) {
+                continue;
+            }
+            if (classRow != null) {
+                shown.add(classRow);
+                classRow = null;
+            }
+            if (kind == Kind.INSTRUCTIONS && methodRow != null) {
+                shown.add(methodRow);
+                methodRow = null;
+            }
+            shown.add(result);
+        }
+        return shown;
     }
 
     private SearchResultItem toResultItem(SearchResult result) {
@@ -241,5 +325,29 @@ public class SearchPanel extends JPanel {
         searchField.setCaretPosition(length);
         searchField.moveCaretPosition(length);
         searchField.requestFocusInWindow();
+    }
+
+    /**
+     * What a search result is, for the chips that narrow the list.
+     */
+    enum Kind {
+        ALL("All"),
+        CLASSES("Classes"),
+        MEMBERS("Members"),
+        INSTRUCTIONS("Instructions");
+
+        private final String label;
+
+        Kind(String label) {
+            this.label = label;
+        }
+
+        static Kind of(SearchResult result) {
+            return switch (result.icon()) {
+                case CLASS, INTERFACE -> CLASSES;
+                case FIELD, METHOD -> MEMBERS;
+                case INSTRUCTION -> INSTRUCTIONS;
+            };
+        }
     }
 }

@@ -26,7 +26,7 @@ final class SearchFields {
     static void style(JTextField field, String hint) {
         field.putClientProperty("JTextField.placeholderText", hint);
         field.getAccessibleContext().setAccessibleName(hint);
-        // The application removes text field borders and focus rings, so search fields draw their own.
+        // Search fields draw their own rounded edge; repaint so it follows focus.
         field.addFocusListener(new FocusAdapter() {
             @Override
             public void focusGained(FocusEvent event) {

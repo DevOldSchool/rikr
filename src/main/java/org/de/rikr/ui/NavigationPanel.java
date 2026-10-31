@@ -187,11 +187,11 @@ public class NavigationPanel extends JPanel {
         repaint();
     }
 
-    // The selected button's background is the accent colour in both themes, so it keeps the light icon.
+    // The selected button's background is the accent colour in both themes; a white icon keeps 3:1 against it.
     private void style(JButton button, String icon, SelectedTab tab) {
         boolean selected = selectedTab == tab;
         button.setBackground(selected ? Theme.NAVBAR_BUTTON_SELECTED_COLOR : Theme.BACKGROUND_COLOR);
-        button.setIcon(selected ? Images.getImage(icon) : Images.getThemedImage(icon));
+        button.setIcon(selected ? Images.getSelectedImage(icon) : Images.getThemedImage(icon));
     }
 
     private enum SelectedTab {

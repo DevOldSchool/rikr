@@ -11,6 +11,7 @@ import org.objectweb.asm.tree.LdcInsnNode;
 import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
 import org.objectweb.asm.tree.TypeInsnNode;
+import org.objectweb.asm.util.Printer;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -117,35 +118,47 @@ public class SearchService {
                 addLdcMatch(classNode, ldcInsnNode, query, instructionChildren);
             }
 
+            // The pattern is the line as the bytecode view prints it, so opening a result finds that instruction.
             if (abstractInsnNode instanceof TypeInsnNode typeInsnNode && matches(typeInsnNode.desc, query)) {
+                String opcode = opcode(typeInsnNode);
                 instructionChildren.add(SearchResult.instructionResult(
                     classNode,
+                    opcode + " " + simpleName(typeInsnNode.desc),
                     typeInsnNode.desc,
-                    typeInsnNode.desc,
-                    "NEW " + typeInsnNode.desc
+                    opcode + " " + typeInsnNode.desc
                 ));
             }
 
             if (abstractInsnNode instanceof FieldInsnNode fieldInsnNode && matches(fieldInsnNode.name, query)) {
+                String opcode = opcode(fieldInsnNode);
                 instructionChildren.add(SearchResult.instructionResult(
                     classNode,
+                    opcode + " " + simpleName(fieldInsnNode.owner) + "." + fieldInsnNode.name,
                     fieldInsnNode.name,
-                    fieldInsnNode.name,
-                    "GETSTATIC " + fieldInsnNode.owner + "." + fieldInsnNode.name
+                    opcode + " " + fieldInsnNode.owner + "." + fieldInsnNode.name
                 ));
             }
 
             if (abstractInsnNode instanceof MethodInsnNode methodInsnNode && matches(methodInsnNode.name, query)) {
+                String opcode = opcode(methodInsnNode);
                 instructionChildren.add(SearchResult.instructionResult(
                     classNode,
+                    opcode + " " + simpleName(methodInsnNode.owner) + "." + methodInsnNode.name,
                     methodInsnNode.name,
-                    methodInsnNode.name,
-                    "INVOKEINTERFACE " + methodInsnNode.owner + "." + methodInsnNode.name + " " + methodInsnNode.desc
+                    opcode + " " + methodInsnNode.owner + "." + methodInsnNode.name + " " + methodInsnNode.desc
                 ));
             }
         }
 
         return instructionChildren;
+    }
+
+    private static String opcode(AbstractInsnNode instruction) {
+        return Printer.OPCODES[instruction.getOpcode()];
+    }
+
+    private static String simpleName(String internalName) {
+        return internalName.substring(internalName.lastIndexOf('/') + 1);
     }
 
     private void addLdcMatch(

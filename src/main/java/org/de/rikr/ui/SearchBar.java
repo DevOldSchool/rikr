@@ -47,12 +47,9 @@ public class SearchBar extends JPanel {
         resultCounter = new JLabel(" ");
         upButton = new JButton("Previous");
         upButton.setToolTipText("Previous match (Shift+Cmd+G)");
-        upButton.setBorderPainted(false);
         downButton = new JButton("Next");
         downButton.setToolTipText("Next match (Cmd+G)");
-        downButton.setBorderPainted(false);
         JButton closeButton = new JButton("Close");
-        closeButton.setBorderPainted(false);
 
         closeButton.addActionListener(closeListener);
 

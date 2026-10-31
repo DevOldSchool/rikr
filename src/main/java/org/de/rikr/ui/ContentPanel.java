@@ -73,6 +73,8 @@ public class ContentPanel extends JScrollPane {
         contextMenu = new JPopupMenu();
         renameItem = new JMenuItem("Rename");
         contextMenu.add(renameItem);
+        // The menu is shown by hand, not attached to a component, so a theme switch doesn't reach it on its own.
+        SettingsManager.addListener(s -> SwingUtilities.updateComponentTreeUI(contextMenu));
 
         renameActionHandler = new RenameActionHandler(controller, this);
 

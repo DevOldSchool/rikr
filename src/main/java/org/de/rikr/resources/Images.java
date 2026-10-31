@@ -72,6 +72,14 @@ public class Images {
     // Dark enough for 3:1 against the light theme's panels (WCAG 2.2 SC 1.4.11).
     private static final Color LIGHT_THEME_ICON = new Color(0x4a, 0x4f, 0x57);
     private static final Map<String, ImageIcon> DARK_ICONS = new HashMap<>();
+    private static final Map<String, ImageIcon> WHITE_ICONS = new HashMap<>();
+
+    /**
+     * The icon in white, for a selected button whose background is the accent colour.
+     */
+    public static ImageIcon getSelectedImage(String imageName) {
+        return WHITE_ICONS.computeIfAbsent(imageName, name -> recolour(getImage(name), Color.WHITE));
+    }
 
     /**
      * The icon for the current theme. The interface icons are drawn light for the dark theme; on a light
