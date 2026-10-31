@@ -5,6 +5,8 @@ import org.de.rikr.behavioral.MethodComparator;
 import org.de.rikr.mapping.ClassMappingDecision;
 import org.de.rikr.mapping.ClassMappingService;
 import org.de.rikr.mapping.ClassMatch;
+import org.de.rikr.mapping.MemberMatcher;
+import org.de.rikr.mapping.MemberMatches;
 import org.de.rikr.mapping.SimilarClassReport;
 import org.de.rikr.model.ClassRef;
 import org.de.rikr.model.Workspace;
@@ -18,6 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Callable;
 
 /**
  * Comparing classes across JARs and recording which classes map to each other.
@@ -109,6 +112,51 @@ public class MappingOperations {
             targetClasses,
             minimumSimilarityPercent
         );
+    }
+
+    /**
+     * Match the fields and methods of the source JAR to the target JAR's, using the accepted class mappings
+     * between them. Reads the classes without changing them.
+     */
+    public MemberMatches matchMembers(String sourceJar, String targetJar) {
+        try {
+            return matchMembersLater(sourceJar, targetJar, false).call();
+        } catch (Exception exception) {
+            throw new IllegalStateException(exception);
+        }
+    }
+
+    /**
+     * {@link #matchMembers} as work that can run on another thread: it uses copies of the classes taken now, so
+     * renames made meanwhile don't change what it reads. The matches name members as they are now.
+     */
+    public Callable<MemberMatches> matchMembersLater(String sourceJar, String targetJar) {
+        return matchMembersLater(sourceJar, targetJar, true);
+    }
+
+    private Callable<MemberMatches> matchMembersLater(String sourceJar, String targetJar, boolean copy) {
+        List<ClassNode> sourceClasses = workspace.classesSnapshot(sourceJar);
+        List<ClassNode> targetClasses = workspace.classesSnapshot(targetJar);
+        if (sourceClasses == null || targetClasses == null) {
+            return () -> new MemberMatches(List.of(), List.of(), 0, 0);
+        }
+        List<ClassNode> sources = copy ? copies(sourceClasses) : sourceClasses;
+        List<ClassNode> targets = copy ? copies(targetClasses) : targetClasses;
+        Map<String, String> classMapping = new LinkedHashMap<>();
+        for (ClassMappingDecision decision : accepted(sourceJar, targetJar)) {
+            classMapping.put(decision.sourceClassName(), decision.targetClassName());
+        }
+        return () -> new MemberMatcher().match(sources, targets, classMapping);
+    }
+
+    private static List<ClassNode> copies(List<ClassNode> classes) {
+        List<ClassNode> copies = new ArrayList<>(classes.size());
+        for (ClassNode classNode : classes) {
+            ClassNode copy = new ClassNode();
+            classNode.accept(copy);
+            copies.add(copy);
+        }
+        return copies;
     }
 
     public void export(File destination, String sourceJar, String targetJar) throws IOException {

@@ -36,6 +36,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.Callable;
 import java.util.function.Consumer;
 
 public class Rikr {
@@ -92,6 +93,16 @@ public class Rikr {
 
     public List<SearchResult> search(SearchQuery query) {
         return project.search(query);
+    }
+
+    /**
+     * Run slow work that doesn't touch the project in the background, and act on its result on the event thread.
+     *
+     * @param onFailure called on the event thread if the work or {@code onSuccess} throws
+     */
+    public <T> void runInBackground(String name, Callable<T> work, Consumer<T> onSuccess,
+        Consumer<Exception> onFailure) {
+        tasks.run(name, work, onSuccess, onFailure);
     }
 
     public void undoLastRename() {

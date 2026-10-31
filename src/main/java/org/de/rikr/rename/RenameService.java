@@ -112,14 +112,57 @@ public class RenameService {
     /**
      * The result of checking a batch: the batch to apply, with every overridden method's family filled in, and
      * the problems that stop it from being applied.
+     *
+     * @param refusedClasses requested class renames, by old name, that caused a problem
+     * @param refusedMembers requested field and method renames that caused a problem
      */
-    public record BatchPlan(RenameBatch batch, List<String> problems) {
+    public record BatchPlan(
+        RenameBatch batch,
+        List<String> problems,
+        Set<String> refusedClasses,
+        Set<RenameBatch.MemberRename> refusedMembers
+    ) {
         public BatchPlan {
             problems = List.copyOf(problems);
+            refusedClasses = Set.copyOf(refusedClasses);
+            refusedMembers = Set.copyOf(refusedMembers);
         }
 
         public boolean valid() {
             return problems.isEmpty();
+        }
+    }
+
+    /**
+     * A batch with the renames that can't be made left out.
+     *
+     * @param leftOut why each left-out rename can't be made
+     */
+    public record PartialPlan(BatchPlan plan, List<String> leftOut) {
+        public PartialPlan {
+            leftOut = List.copyOf(leftOut);
+        }
+    }
+
+    /**
+     * Check a batch like {@link #planBatch}, leaving out each rename that causes a problem instead of refusing the
+     * whole batch. Leaving one out can resolve another's problem, such as two names colliding, so the rest is
+     * checked again until it is valid.
+     */
+    public PartialPlan planBatchLeavingOutProblems(List<ClassNode> classes, RenameBatch requested) {
+        List<String> leftOut = new ArrayList<>();
+        RenameBatch remaining = requested;
+        while (true) {
+            BatchPlan plan = planBatch(classes, remaining);
+            if (plan.valid() || plan.refusedClasses().isEmpty() && plan.refusedMembers().isEmpty()) {
+                return new PartialPlan(plan, leftOut);
+            }
+            leftOut.addAll(plan.problems());
+            Map<String, String> classNames = new LinkedHashMap<>(remaining.classes());
+            classNames.keySet().removeAll(plan.refusedClasses());
+            remaining = new RenameBatch(remaining.jarName(), remaining.source(), classNames,
+                remaining.fields().stream().filter(field -> !plan.refusedMembers().contains(field)).toList(),
+                remaining.methods().stream().filter(method -> !plan.refusedMembers().contains(method)).toList());
         }
     }
 
@@ -130,17 +173,21 @@ public class RenameService {
      */
     public BatchPlan planBatch(List<ClassNode> classes, RenameBatch requested) {
         List<String> problems = new ArrayList<>();
+        Set<String> refusedClasses = new HashSet<>();
+        Set<RenameBatch.MemberRename> refusedMembers = new HashSet<>();
         ClassHierarchy hierarchy = new ClassHierarchy(classes);
 
         Map<String, String> classNames = new LinkedHashMap<>();
         requested.classes().forEach((oldName, newName) -> {
             if (!hierarchy.contains(oldName)) {
                 problems.add("Class " + oldName + " is not in the JAR.");
+                refusedClasses.add(oldName);
                 return;
             }
             String invalid = validateName(oldName, newName, true);
             if (invalid != null) {
                 problems.add(oldName + ": " + invalid);
+                refusedClasses.add(oldName);
                 return;
             }
             classNames.put(oldName, newName);
@@ -151,6 +198,11 @@ public class RenameService {
             String other = finalClassNames.putIfAbsent(finalName, classNode.name);
             if (other != null) {
                 problems.add("Classes " + other + " and " + classNode.name + " would both be named " + finalName + ".");
+                for (String className : List.of(other, classNode.name)) {
+                    if (classNames.containsKey(className)) {
+                        refusedClasses.add(className);
+                    }
+                }
             }
         }
 
@@ -160,11 +212,13 @@ public class RenameService {
             ClassNode owner = hierarchy.get(field.owner());
             if (owner == null || ClassHierarchy.findField(owner, field.name(), field.descriptor()) == null) {
                 problems.add("Field " + field.owner() + "." + field.name() + " is not in the JAR.");
+                refusedMembers.add(field);
                 continue;
             }
             String invalid = validateName(field.name(), field.newName(), false);
             if (invalid != null) {
                 problems.add(field.owner() + "." + field.name() + ": " + invalid);
+                refusedMembers.add(field);
                 continue;
             }
             fieldNames.put(memberKey(field.owner(), field.name(), field.descriptor()), field.newName());
@@ -190,6 +244,7 @@ public class RenameService {
                     if (otherName.equals(field.newName()) && (sameClass || other.desc.equals(field.descriptor()))) {
                         problems.add("Field " + field.owner() + "." + field.name() + " would be named " + field.newName()
                             + ", like the field in " + className + ".");
+                    refusedMembers.add(field);
                     }
                 }
             }
@@ -206,22 +261,26 @@ public class RenameService {
             MethodNode node = owner == null ? null : ClassHierarchy.findMethod(owner, method.name(), method.descriptor());
             if (node == null) {
                 problems.add("Method " + method.owner() + "." + method.name() + method.descriptor() + " is not in the JAR.");
+                refusedMembers.add(method);
                 continue;
             }
             String label = method.owner() + "." + method.name() + method.descriptor();
             if (method.name().startsWith("<") || method.newName().startsWith("<")) {
                 problems.add(label + ": constructors and class initializers cannot be renamed.");
+                refusedMembers.add(method);
                 continue;
             }
             String invalid = validateName(method.name(), method.newName(), false);
             if (invalid != null) {
                 problems.add(label + ": " + invalid);
+                refusedMembers.add(method);
                 continue;
             }
             Set<String> family = allFamilies.get(memberKey(method.owner(), method.name(), method.descriptor()));
             String outside = externalOverride(hierarchy, family, node);
             if (outside != null) {
                 problems.add(label + " overrides a method of " + outside + ", which is outside this JAR.");
+                refusedMembers.add(method);
                 continue;
             }
             String conflict = null;
@@ -234,6 +293,7 @@ public class RenameService {
             if (conflict != null) {
                 problems.add(label + " is renamed to both " + conflict + " and " + method.newName()
                     + " through the methods it overrides.");
+                refusedMembers.add(method);
             }
             if (conflict == null && checkedFamilies.add(family)) {
                 families.add(family);
@@ -246,6 +306,7 @@ public class RenameService {
             String collision = methodCollision(hierarchy, family, method, methodNames);
             if (collision != null) {
                 problems.add(collision);
+                refusedMembers.add(method);
             }
         }
         List<RenameBatch.MemberRename> methods = new ArrayList<>();
@@ -257,7 +318,7 @@ public class RenameService {
         });
 
         RenameBatch batch = new RenameBatch(requested.jarName(), requested.source(), classNames, fields, methods);
-        return new BatchPlan(batch, problems);
+        return new BatchPlan(batch, problems, refusedClasses, refusedMembers);
     }
 
     /**

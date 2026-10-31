@@ -6,8 +6,10 @@ import org.de.rikr.jar.JarExportService;
 import org.de.rikr.jar.LoadedJar;
 import org.de.rikr.mapping.ClassMappingDecision;
 import org.de.rikr.mapping.ClassMatch;
+import org.de.rikr.mapping.MemberMatches;
 import org.de.rikr.mapping.SimilarClassReport;
 import org.de.rikr.mapping.format.NameMappings;
+import org.de.rikr.rename.RenameBatch;
 import org.de.rikr.rename.RenameOperation;
 import org.de.rikr.rename.RenameStep;
 import org.junit.jupiter.api.AfterEach;
@@ -15,10 +17,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.FieldInsnNode;
 import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.InsnNode;
 import org.objectweb.asm.tree.IntInsnNode;
 import org.objectweb.asm.tree.MethodNode;
+import org.objectweb.asm.tree.VarInsnNode;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -244,6 +248,80 @@ class ProjectTest {
         assertEquals("f", owner.fields.getFirst().name);
         assertEquals("Renamed", project.mappings().allAccepted().getFirst().sourceClassName());
         assertEquals("f", project.bookmarks().all().getFirst().memberName());
+    }
+
+    @Test
+    void carriesGivenNamesToMatchedClassesAndMembersOfAnotherJarAsOneUndoableStep() throws Exception {
+        project.jars().loadJars(new File[]{
+            writeJar("old", "old.jar", player("a", "hp", "getHp", "armor")),
+            writeJar("new", "new.jar", player("b", "q", "m", "r"))
+        });
+        ClassNode source = project.jars().classes("old.jar").getFirst();
+        ClassNode target = project.jars().classes("new.jar").getFirst();
+        project.mappings().accept("old.jar", "new.jar", source, new ClassMatch(target, 100));
+        project.renames().renameClass("old.jar", source, "game/Player");
+        project.renames().renameField("old.jar", source, source.fields.get(0), "health");
+        project.renames().renameField("old.jar", source, source.fields.get(1), "armour");
+        project.renames().renameMethod("old.jar", source, source.methods.getFirst(), "getHealth");
+        project.renames().renameField("new.jar", target, target.fields.get(1), "defence");
+
+        MemberMatches matches = project.mappings().matchMembersLater("old.jar", "new.jar").call();
+        RenameOperations.NameTransfer transfer = project.renames().planNameTransfer("old.jar", "new.jar",
+            project.mappings().accepted("old.jar", "new.jar"), matches, false);
+        project.renames().applyBatch(transfer.batch());
+
+        assertEquals(1, transfer.alreadyNamed());
+        assertEquals(List.of(), transfer.leftOut());
+        assertEquals("game/Player", target.name);
+        assertEquals(List.of("health", "defence"), target.fields.stream().map(field -> field.name).toList());
+        assertEquals("getHealth", target.methods.getFirst().name);
+        assertEquals("names from old.jar", ((RenameBatch) project.renames().history().getLast()).source());
+        assertEquals("game/Player", project.mappings().allAccepted().getFirst().targetClassName());
+
+        project.renames().undoLast();
+
+        assertEquals("b", target.name);
+        assertEquals("q", target.fields.getFirst().name);
+    }
+
+    @Test
+    void carriesTheNamesAJarWasLoadedWithOnlyWhenAskedAndNotMadeUpOnes() throws Exception {
+        ClassNode named = player("game/Player", "health", "getHealth", "field7");
+        project.jars().loadJars(new File[]{
+            writeJar("old", "old.jar", named),
+            writeJar("new", "new.jar", player("b", "q", "m", "r"))
+        });
+        ClassNode source = project.jars().classes("old.jar").getFirst();
+        ClassNode target = project.jars().classes("new.jar").getFirst();
+        project.mappings().accept("old.jar", "new.jar", source, new ClassMatch(target, 100));
+        MemberMatches matches = project.mappings().matchMembers("old.jar", "new.jar");
+        List<ClassMappingDecision> classMappings = project.mappings().accepted("old.jar", "new.jar");
+
+        RenameOperations.NameTransfer given = project.renames().planNameTransfer("old.jar", "new.jar",
+            classMappings, matches, false);
+        RenameOperations.NameTransfer loaded = project.renames().planNameTransfer("old.jar", "new.jar",
+            classMappings, matches, true);
+
+        assertEquals(0, given.batch().size());
+        assertEquals(java.util.Map.of("b", "game/Player"), loaded.batch().classes());
+        assertEquals(List.of("health"), loaded.batch().fields().stream().map(RenameBatch.MemberRename::newName).toList());
+        assertEquals(List.of("getHealth"),
+            loaded.batch().methods().stream().map(RenameBatch.MemberRename::newName).toList());
+    }
+
+    // An int field with a getter, and a long field that nothing uses.
+    private static ClassNode player(String name, String field, String getter, String unused) {
+        ClassNode classNode = classNode(name);
+        classNode.fields.add(new FieldNode(Opcodes.ACC_PUBLIC, field, "I", null, null));
+        classNode.fields.add(new FieldNode(Opcodes.ACC_PUBLIC, unused, "J", null, null));
+        MethodNode method = new MethodNode(Opcodes.ACC_PUBLIC, getter, "()I", null, null);
+        method.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        method.instructions.add(new FieldInsnNode(Opcodes.GETFIELD, name, field, "I"));
+        method.instructions.add(new InsnNode(Opcodes.IRETURN));
+        method.maxStack = 1;
+        method.maxLocals = 1;
+        classNode.methods.add(method);
+        return classNode;
     }
 
     private static ProjectLayout layout() {

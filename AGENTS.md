@@ -38,7 +38,7 @@ Code is grouped by feature under `src/main/java/org/de/rikr`, with tests in the 
 | `symbol` | Symbols recorded while printing bytecode, so a click resolves to a class, field or method. |
 | `flow` | Following code: `EntryPoints` (where a JAR starts, including obfuscated applets), `CallGraph` (calls with override dispatch), `ControlFlowBuilder` (basic blocks and edges), and `GraphLayout` (layered layout). Drawn by `ui/FlowPanel` with `ui/graph/GraphView`. |
 | `behavioral` | Simulating a method without running it: `MethodSimulator` steps through it (with undo), `Interpreter` gives each opcode its exact stack effect, and values it can't know are a typed `SimulatedValue.Unknown`, never a guess. `MethodComparator` runs two methods side by side for class matching. Calls aren't followed. |
-| `mapping` | Class matching between JARs (`MappingSet`, `ClassMappingService`) and `mapping/format` for tiny v2, Enigma and ProGuard files. |
+| `mapping` | Class matching between JARs (`MappingSet`, `ClassMappingService`), member matching within matched classes (`MemberMatcher`, used to carry names to a new version through `RenameOperations.planNameTransfer`, which skips made-up names such as `class12` via `GeneratedNames`), and `mapping/format` for tiny v2, Enigma and ProGuard files. |
 | `jar` | Reading JARs and class files, and `JarExportService` for safe export. |
 | `reference`, `search`, `decompiler`, `bookmark` | The features their names say. The decompiler is JetBrains FernFlower. |
 | `task` | `TaskRunner`: background work with results delivered on the Swing event thread. |
@@ -90,7 +90,8 @@ request, as the specification's dual-era rules describe.
 
 The tools: `load_jars`, `remove_jar`, `list_jars`, `list_classes`, `describe_class`, `get_bytecode`, `decompile`,
 `search`, `find_references`, `list_entry_points`, `get_call_graph`, `get_control_flow`, `rename`, `undo`, `rename_history`, `import_mappings`, `export_mappings`, `export_jar`,
-`overwrite_original_jar`, `match_classes`, `accept_class_mapping`, `auto_match_classes`, `list_class_mappings`,
+`overwrite_original_jar`, `match_classes`, `accept_class_mapping`, `auto_match_classes`, `match_members`,
+`carry_names`, `list_class_mappings`,
 `open_project` and `save_project`. Class names are internal (`a/b/C`); dotted names are accepted too. Renames and
 imports take `dry_run`. Nothing on disk changes until a save or export tool is called.
 

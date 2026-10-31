@@ -1,5 +1,9 @@
 package org.de.rikr.project;
 
+import org.de.rikr.mapping.ClassMappingDecision;
+import org.de.rikr.mapping.GeneratedNames;
+import org.de.rikr.mapping.MemberMatch;
+import org.de.rikr.mapping.MemberMatches;
 import org.de.rikr.mapping.format.NameMappings;
 import org.de.rikr.model.OriginalNames;
 import org.de.rikr.model.Workspace;
@@ -164,10 +168,126 @@ public class RenameOperations {
         if (!plan.problems().isEmpty()) {
             throw new IllegalArgumentException(plan.problems().getFirst());
         }
-        RenameBatch batch = plan.batch();
+        return applyBatch(plan.batch());
+    }
+
+    /**
+     * Names from one JAR checked against another JAR whose classes and members were matched to them.
+     *
+     * @param plan         the renames, with those that can't be made left out
+     * @param alreadyNamed matched classes and members of the target that were renamed already, so keep their names
+     */
+    public record NameTransfer(RenameService.PartialPlan plan, int alreadyNamed) {
+        public RenameBatch batch() {
+            return plan.plan().batch();
+        }
+
+        public List<String> leftOut() {
+            return plan.leftOut();
+        }
+    }
+
+    /**
+     * Plan giving each matched class and member of the target JAR the name its match has in the source JAR. A name
+     * onto a target that was renamed already is not carried, and renames that can't be made, such as two matches
+     * carrying the same name into one class, are left out and said why.
+     *
+     * @param includeLoadedNames carry the names the source JAR was loaded with too, for a JAR that was named
+     *                           before it was loaded, leaving out names a deobfuscator made up; otherwise only
+     *                           names given since it was loaded are carried
+     */
+    public NameTransfer planNameTransfer(
+        String sourceJar,
+        String targetJar,
+        List<ClassMappingDecision> classMappings,
+        MemberMatches members,
+        boolean includeLoadedNames
+    ) {
+        OriginalNames original = workspace.originalNames();
+        Map<String, ClassNode> sources = byName(classes(sourceJar));
+        Map<String, ClassNode> targets = byName(classes(targetJar));
+        Map<String, String> classRenames = new LinkedHashMap<>();
+        int alreadyNamed = 0;
+        for (ClassMappingDecision mapping : classMappings) {
+            ClassNode source = sources.get(mapping.sourceClassName());
+            ClassNode target = targets.get(mapping.targetClassName());
+            if (source == null || target == null || target.name.equals(source.name)
+                || !carries(original.className(source), source.name, includeLoadedNames)) {
+                continue;
+            }
+            if (!original.className(target).equals(target.name)) {
+                alreadyNamed++;
+                continue;
+            }
+            classRenames.put(target.name, source.name);
+        }
+        List<RenameBatch.MemberRename> fields = new ArrayList<>();
+        for (MemberMatch match : members.fields()) {
+            FieldNode source = field(sources, match.source());
+            FieldNode target = field(targets, match.target());
+            if (source == null || target == null || target.name.equals(source.name)
+                || !carries(original.field(source).name(), source.name, includeLoadedNames)) {
+                continue;
+            }
+            if (!original.field(target).name().equals(target.name)) {
+                alreadyNamed++;
+                continue;
+            }
+            fields.add(new RenameBatch.MemberRename(match.target().owner(), target.name, target.desc, source.name));
+        }
+        List<RenameBatch.MemberRename> methods = new ArrayList<>();
+        for (MemberMatch match : members.methods()) {
+            MethodNode source = method(sources, match.source());
+            MethodNode target = method(targets, match.target());
+            if (source == null || target == null || target.name.equals(source.name)
+                || !carries(original.method(source).name(), source.name, includeLoadedNames)) {
+                continue;
+            }
+            if (!original.method(target).name().equals(target.name)) {
+                alreadyNamed++;
+                continue;
+            }
+            methods.add(new RenameBatch.MemberRename(match.target().owner(), target.name, target.desc, source.name));
+        }
+        RenameBatch requested = new RenameBatch(targetJar, "names from " + sourceJar, classRenames, fields, methods);
+        return new NameTransfer(service.planBatchLeavingOutProblems(classes(targetJar), requested), alreadyNamed);
+    }
+
+    private static boolean carries(String loadedName, String name, boolean includeLoadedNames) {
+        return !loadedName.equals(name) || includeLoadedNames && !GeneratedNames.isGenerated(name);
+    }
+
+    /**
+     * Apply a batch of renames checked by {@link #planImport} or {@link #planNameTransfer}. Undo reverts all of it.
+     *
+     * @throws IllegalArgumentException if the batch no longer fits the JAR
+     */
+    public RenameResult applyBatch(RenameBatch batch) {
         RenameResult result = service.applyBatch(classes(batch.jarName()), batch);
         publish(batch, false, result);
         return result;
+    }
+
+    private static Map<String, ClassNode> byName(List<ClassNode> classes) {
+        Map<String, ClassNode> byName = new HashMap<>();
+        for (ClassNode classNode : classes) {
+            byName.put(classNode.name, classNode);
+        }
+        return byName;
+    }
+
+    private static FieldNode field(Map<String, ClassNode> classes, MemberMatch.MemberRef ref) {
+        ClassNode owner = classes.get(ref.owner());
+        return owner == null ? null : owner.fields.stream()
+            .filter(field -> field.name.equals(ref.name()) && field.desc.equals(ref.descriptor()))
+            .findFirst().orElse(null);
+    }
+
+    private static MethodNode method(Map<String, ClassNode> classes, MemberMatch.MemberRef ref) {
+        ClassNode owner = classes.get(ref.owner());
+        return owner == null ? null : owner.methods.stream()
+            .filter(method -> method.name.equals(ref.name()) && method.desc.equals(ref.descriptor()))
+            .findFirst().orElse(null);
     }
 
     public Optional<RenameUndoResult> undoLast() {

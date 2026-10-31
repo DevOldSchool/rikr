@@ -197,6 +197,32 @@ class RenameServiceTest {
         throw new AssertionError("No call in " + method.name);
     }
 
+    @Test
+    void partialPlanLeavesOutRenamesWithProblemsAndKeepsTheRest() {
+        ClassNode first = classNode("a/First");
+        first.fields.add(new FieldNode(Opcodes.ACC_PUBLIC, "good", "I", null, null));
+        first.fields.add(new FieldNode(Opcodes.ACC_PUBLIC, "bad", "I", null, null));
+        MethodNode constructor = new MethodNode(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
+        first.methods.add(constructor);
+        ClassNode second = classNode("a/Second");
+        RenameBatch requested = new RenameBatch("app.jar", "test",
+            java.util.Map.of("a/First", "a/Same", "a/Second", "a/Same"),
+            List.of(new RenameBatch.MemberRename("a/First", "good", "I", "health"),
+                new RenameBatch.MemberRename("a/First", "bad", "I", "not a name"),
+                new RenameBatch.MemberRename("a/First", "missing", "I", "gone")),
+            List.of(new RenameBatch.MemberRename("a/First", "<init>", "()V", "create")));
+
+        RenameService.PartialPlan partial = new RenameService().planBatchLeavingOutProblems(List.of(first, second),
+            requested);
+
+        assertTrue(partial.plan().valid(), partial.plan().problems().toString());
+        assertEquals(java.util.Map.of(), partial.plan().batch().classes());
+        assertEquals(List.of(new RenameBatch.MemberRename("a/First", "good", "I", "health")),
+            partial.plan().batch().fields());
+        assertEquals(List.of(), partial.plan().batch().methods());
+        assertEquals(4, partial.leftOut().size(), partial.leftOut().toString());
+    }
+
     private ClassNode classNode(String name) {
         ClassNode classNode = new ClassNode();
         classNode.version = Opcodes.V21;

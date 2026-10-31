@@ -10,6 +10,8 @@ import org.de.rikr.flow.MethodRef;
 import org.de.rikr.jar.JarExportService;
 import org.de.rikr.mapping.ClassMappingDecision;
 import org.de.rikr.mapping.ClassMatch;
+import org.de.rikr.mapping.MemberMatch;
+import org.de.rikr.mapping.MemberMatches;
 import org.de.rikr.mapping.format.MappingFormat;
 import org.de.rikr.mapping.format.MappingReader;
 import org.de.rikr.mapping.format.NameMappings;
@@ -255,6 +257,30 @@ final class RikrTools implements AutoCloseable {
                     .string("target_jar", "Target JAR.", true)
                     .integer("min_similarity", "Lowest similarity percentage to accept. Default 90."),
                 false, this::autoMatch),
+            tool("match_members", """
+                    Match the fields and methods of the source JAR to the target JAR's, within the accepted class \
+                    mappings between them, by what their code does and how they are used. Static members are \
+                    matched across the whole JAR, since obfuscators move them between classes. Ties are left \
+                    unmatched. Changes nothing.""",
+                Schema.object()
+                    .string("source_jar", "Source JAR.", true)
+                    .string("target_jar", "Target JAR.", true)
+                    .integer("limit", "How many matches to list. Default 200."),
+                true, this::matchMembers),
+            tool("carry_names", """
+                    Give the classes, fields and methods of the target JAR the names given to their matches in the \
+                    source JAR, as one rename that undo reverts. Uses the accepted class mappings and match_members. \
+                    Only names given since the source JAR was loaded are carried, unless include_loaded_names is set. \
+                    Targets that were renamed already keep their names. Renames that can't be made, such as two \
+                    matches carrying one name into a class, are left out.""",
+                Schema.object()
+                    .string("source_jar", "JAR whose names are carried, usually the older version.", true)
+                    .string("target_jar", "JAR that gets the names.", true)
+                    .bool("include_loaded_names", """
+                        Also carry the names the source JAR was loaded with, for a JAR named before loading, such \
+                        as a deobfuscated build. Made-up names such as class12 or field34 are not carried.""")
+                    .bool("dry_run", "Only report what would be renamed."),
+                false, this::carryNames),
             tool("list_class_mappings", "List the accepted class mappings between JARs.",
                 Schema.object(), true, arguments -> listClassMappings()),
             tool("open_project", "Open a saved .rikr project: its JARs, renames, class mappings and bookmarks.",
@@ -724,6 +750,63 @@ final class RikrTools implements AutoCloseable {
         }
         List<ClassMappingDecision> added = project.mappings().autoAcceptUnique(sourceJar, targetJar, minimum);
         return "Accepted " + added.size() + " unique matches of at least " + minimum + "%.";
+    }
+
+    private String matchMembers(Arguments arguments) throws ToolException {
+        String sourceJar = jar(arguments, "source_jar");
+        String targetJar = jar(arguments, "target_jar");
+        int limit = arguments.integer("limit", 200);
+        if (project.mappings().accepted(sourceJar, targetJar).isEmpty()) {
+            throw new ToolException("No classes of " + sourceJar + " are mapped to " + targetJar
+                + ". Accept class mappings first, with auto_match_classes or accept_class_mapping.");
+        }
+        MemberMatches matches = project.mappings().matchMembers(sourceJar, targetJar);
+        List<String> lines = new ArrayList<>();
+        for (MemberMatch match : matches.methods()) {
+            lines.add(describe("method", match));
+        }
+        for (MemberMatch match : matches.fields()) {
+            lines.add(describe("field", match));
+        }
+        return String.format("Matched %d of %d methods and %d of %d fields of %s to %s:%n", matches.methods().size(),
+            matches.sourceMethods(), matches.fields().size(), matches.sourceFields(), sourceJar, targetJar)
+            + String.join("\n", limitList(lines, limit));
+    }
+
+    private static String describe(String kind, MemberMatch match) {
+        return "  " + kind + " " + match.source() + " -> " + match.target() + "  (" + match.confidencePercent() + "%, "
+            + match.reason().description() + ")";
+    }
+
+    private String carryNames(Arguments arguments) throws ToolException {
+        String sourceJar = jar(arguments, "source_jar");
+        String targetJar = jar(arguments, "target_jar");
+        List<ClassMappingDecision> classMappings = project.mappings().accepted(sourceJar, targetJar);
+        if (classMappings.isEmpty()) {
+            throw new ToolException("No classes of " + sourceJar + " are mapped to " + targetJar
+                + ". Accept class mappings first, with auto_match_classes or accept_class_mapping.");
+        }
+        MemberMatches matches = project.mappings().matchMembers(sourceJar, targetJar);
+        RenameOperations.NameTransfer transfer = project.renames().planNameTransfer(sourceJar, targetJar,
+            classMappings, matches, arguments.bool("include_loaded_names", false));
+        RenameBatch batch = transfer.batch();
+        String counts = String.format("%d classes, %d fields and %d methods (including overrides) of %s",
+            batch.classes().size(), batch.fields().size(), batch.methods().size(), targetJar);
+        StringBuilder notes = new StringBuilder();
+        if (transfer.alreadyNamed() > 0) {
+            notes.append("\n").append(transfer.alreadyNamed()).append(" matches were renamed already and keep their names.");
+        }
+        if (!transfer.leftOut().isEmpty()) {
+            notes.append("\n").append(transfer.leftOut().size()).append(" left out:\n")
+                .append(String.join("\n", limitList(transfer.leftOut(), 30)));
+        }
+        if (arguments.bool("dry_run", false) || batch.size() == 0) {
+            return (batch.size() == 0 ? "Nothing to rename in " + targetJar + "." : "Would rename " + counts + ".")
+                + notes;
+        }
+        RenameResult result = project.renames().applyBatch(batch);
+        return "Renamed " + counts + ", changing " + result.referenceCount() + " references in " + result.fileCount()
+            + " classes. undo reverts all of it." + notes;
     }
 
     private String listClassMappings() {

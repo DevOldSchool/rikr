@@ -203,25 +203,66 @@ class RikrMcpTest {
         assertTrue(text(imported).startsWith("Renamed 0 classes, 1 fields"), text(imported));
     }
 
+    @Test
+    void matchesMembersAndCarriesNamesToAnotherVersion() throws Exception {
+        Path oldJar = writeJar("old.jar", "a", "b");
+        Path newJar = writeJar("new.jar", "x", "y");
+        call("load_jars", paths(oldJar, newJar));
+        JsonObject unmapped = call("carry_names", args("source_jar", "old.jar", "target_jar", "new.jar"));
+        assertTrue(unmapped.get("isError").getAsBoolean());
+        assertTrue(text(unmapped).contains("Accept class mappings first"), text(unmapped));
+
+        call("rename", args("jar", "old.jar", "class", "a", "new_name", "game.Player"));
+        call("rename", args("jar", "old.jar", "class", "game/Player", "field", "hp", "new_name", "health"));
+        call("rename", args("jar", "old.jar", "class", "b", "method", "read", "new_name", "readHealth"));
+        call("accept_class_mapping", args("source_jar", "old.jar", "target_jar", "new.jar",
+            "class", "game/Player", "target_class", "x"));
+        call("accept_class_mapping", args("source_jar", "old.jar", "target_jar", "new.jar",
+            "class", "b", "target_class", "y"));
+
+        String matched = text(call("match_members", args("source_jar", "old.jar", "target_jar", "new.jar")));
+        assertTrue(matched.startsWith("Matched 2 of 2 methods and 1 of 1 fields"), matched);
+        assertTrue(matched.contains("field game/Player.health:I -> x.hp:I"), matched);
+
+        String loadedToo = text(call("carry_names", args("source_jar", "old.jar", "target_jar", "new.jar",
+            "include_loaded_names", true, "dry_run", true)));
+        // b, read's owner, kept its loaded name, which is carried only when asked: y is renamed to b as well.
+        assertTrue(loadedToo.startsWith("Would rename 2 classes, 1 fields and 1 methods"), loadedToo);
+        String dryRun = text(call("carry_names",
+            args("source_jar", "old.jar", "target_jar", "new.jar", "dry_run", true)));
+        assertTrue(dryRun.startsWith("Would rename 1 classes, 1 fields and 1 methods"), dryRun);
+        String carried = text(call("carry_names", args("source_jar", "old.jar", "target_jar", "new.jar")));
+        assertTrue(carried.startsWith("Renamed 1 classes, 1 fields and 1 methods"), carried);
+        String described = text(call("describe_class", args("jar", "new.jar", "class", "y")));
+        assertTrue(described.contains("readHealth(Lgame/Player;)I"), described);
+        assertTrue(text(call("describe_class", args("jar", "new.jar", "class", "game/Player")))
+            .contains("private health I"));
+    }
+
     private Path writeJar() throws Exception {
-        ClassNode a = classNode("a");
+        return writeJar("game.jar", "a", "b");
+    }
+
+    private Path writeJar(String fileName, String player, String reader) throws Exception {
+        ClassNode a = classNode(player);
         a.fields.add(new FieldNode(Opcodes.ACC_PRIVATE, "hp", "I", null, null));
-        ClassNode b = classNode("b");
-        MethodNode read = new MethodNode(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "read", "(La;)I", null, null);
+        ClassNode b = classNode(reader);
+        MethodNode read = new MethodNode(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "read", "(L" + player + ";)I",
+            null, null);
         read.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
-        read.instructions.add(new FieldInsnNode(Opcodes.GETFIELD, "a", "hp", "I"));
+        read.instructions.add(new FieldInsnNode(Opcodes.GETFIELD, player, "hp", "I"));
         read.instructions.add(new InsnNode(Opcodes.IRETURN));
         read.maxStack = 1;
         read.maxLocals = 1;
         b.methods.add(read);
         MethodNode make = new MethodNode(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "make", "()V", null, null);
         make.instructions.add(new InsnNode(Opcodes.ACONST_NULL));
-        make.instructions.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "b", "read", "(La;)I", false));
+        make.instructions.add(new MethodInsnNode(Opcodes.INVOKESTATIC, reader, "read", "(L" + player + ";)I", false));
         make.instructions.add(new InsnNode(Opcodes.POP));
         make.instructions.add(new InsnNode(Opcodes.RETURN));
         make.maxStack = 1;
         b.methods.add(make);
-        Path jar = tempDir.resolve("game.jar");
+        Path jar = tempDir.resolve(fileName);
         JarExportService exporter = new JarExportService();
         exporter.writeJar(null, jar.toFile(), exporter.toEntries(List.of(a, b)));
         return jar;

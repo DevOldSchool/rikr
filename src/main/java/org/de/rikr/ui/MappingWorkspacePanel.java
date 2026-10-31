@@ -5,6 +5,7 @@ import org.de.rikr.mapping.ClassMappingDecision;
 import org.de.rikr.mapping.ClassMatch;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;
+import org.de.rikr.ui.action.NameTransferAction;
 import org.objectweb.asm.tree.ClassNode;
 
 import javax.swing.*;
@@ -41,6 +42,7 @@ public class MappingWorkspacePanel extends JPanel {
     private final JButton clearButton = new JButton("Clear source decisions");
     private final JButton autoMatchButton = new JButton("Auto-match unique");
     private final JButton exportButton = new JButton("Export JSON");
+    private final JButton carryNamesButton = new JButton("Carry names…");
     private final JLabel statusLabel = new JLabel("Load at least two JARs to begin mapping.");
     private final JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT));
     private final JPanel decisionBar = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -53,6 +55,9 @@ public class MappingWorkspacePanel extends JPanel {
         "Highlighted members have no member of the same shape in the other class.");
 
     private int candidateRequestSequence;
+    // The outcome of the last workspace action, shown instead of the hint until another source class is selected.
+    private String notice;
+    private ClassNode noticeSource;
 
     public MappingWorkspacePanel(Rikr controller) {
         this.controller = controller;
@@ -110,6 +115,7 @@ public class MappingWorkspacePanel extends JPanel {
         clearButton.addActionListener(event -> clearSelectedSourceDecisions());
         autoMatchButton.addActionListener(event -> autoMatchUniqueCandidates());
         exportButton.addActionListener(event -> exportMappings());
+        carryNamesButton.addActionListener(event -> carryNames());
         updateDetailsAndControls();
     }
 
@@ -127,6 +133,9 @@ public class MappingWorkspacePanel extends JPanel {
         toolbar.add(minimumSimilaritySpinner);
         toolbar.add(autoMatchButton);
         toolbar.add(exportButton);
+        carryNamesButton.setToolTipText("Match fields and methods of the mapped classes, and give the target JAR the "
+            + "names given in the source JAR");
+        toolbar.add(carryNamesButton);
         add(toolbar, BorderLayout.NORTH);
     }
 
@@ -447,7 +456,7 @@ public class MappingWorkspacePanel extends JPanel {
                 autoMatchButton.setEnabled(true);
                 try {
                     int added = get().size();
-                    statusLabel.setText("Auto-matched " + added + " unique class" + (added == 1 ? "." : "es."));
+                    showNotice("Auto-matched " + added + " unique class" + (added == 1 ? "." : "es."));
                     repaintLists();
                     updateProgress();
                     refreshCandidates();
@@ -459,6 +468,18 @@ public class MappingWorkspacePanel extends JPanel {
                 }
             }
         }.execute();
+    }
+
+    private void carryNames() {
+        if (!hasJarPair()) {
+            return;
+        }
+        carryNamesButton.setEnabled(false);
+        statusLabel.setText("Matching fields and methods...");
+        NameTransferAction.carry(controller, this, selectedSourceJar(), selectedTargetJar(), message -> {
+            showNotice(message);
+            repaintLists();
+        });
     }
 
     private void exportMappings() {
@@ -511,8 +532,16 @@ public class MappingWorkspacePanel extends JPanel {
         clearButton.setEnabled(hasSource);
         autoMatchButton.setEnabled(hasJarPair());
         exportButton.setEnabled(hasJarPair());
+        carryNamesButton.setEnabled(hasJarPair()
+            && !controller.mappings().accepted(selectedSourceJar(), selectedTargetJar()).isEmpty());
 
-        if (!hasJarPair()) {
+        // Reloading the lists passes through no selection, which must not count as choosing another class.
+        if (sourceClass != null && sourceClass != noticeSource || !hasJarPair()) {
+            notice = null;
+        }
+        if (notice != null) {
+            statusLabel.setText(notice);
+        } else if (!hasJarPair()) {
             statusLabel.setText("Load at least two JARs to begin mapping.");
         } else if (sourceClass == null) {
             statusLabel.setText("Select a source class.");
@@ -528,6 +557,12 @@ public class MappingWorkspacePanel extends JPanel {
                 () -> statusLabel.setText(candidatePrompt(sourceClass, candidate))
             );
         }
+    }
+
+    private void showNotice(String message) {
+        notice = message;
+        noticeSource = sourceClassList.getSelectedValue();
+        updateDetailsAndControls();
     }
 
     private static String candidatePrompt(ClassNode sourceClass, ClassMatch candidate) {
