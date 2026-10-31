@@ -101,6 +101,15 @@ public class ReferenceWorkspacePanel extends JPanel {
         }
     }
 
+    /**
+     * A method was chosen elsewhere; when following, show its callers and callees.
+     */
+    public void methodOpened(String jarName, ClassNode owner, MethodNode method) {
+        if (follow.isSelected() && !opening) {
+            showMethodReferences(jarName, owner, method);
+        }
+    }
+
     public void showClassReferences(String jarName, ClassNode targetClass) {
         classTarget = targetClass;
         targetLabel.setText("Type: " + targetClass.name + " in " + jarName);

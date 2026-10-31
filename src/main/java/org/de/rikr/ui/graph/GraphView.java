@@ -24,6 +24,9 @@ public class GraphView extends JScrollPane {
     private static final double MAX_SCALE = 2.5;
     // Fitting never shrinks text below this, so a large graph is fitted to its width and scrolled instead.
     private static final double MIN_READABLE_SCALE = 0.5;
+    // Below this many pixels per line of text on screen, blocks show their title only, drawn large enough to read.
+    private static final double MIN_TEXT_PIXELS = 9;
+    private static final double TITLE_ONLY_PIXELS = 11;
     // Text is measured and drawn with fractional metrics, so its width scales exactly with the zoom and stays
     // inside its box at every zoom level.
     private static final java.awt.font.FontRenderContext TEXT = new java.awt.font.FontRenderContext(null, true, true);
@@ -386,13 +389,14 @@ public class GraphView extends JScrollPane {
                 paintEdge(g, index);
             }
             FontMetrics metrics = g.getFontMetrics();
+            boolean titlesOnly = scale * metrics.getHeight() < MIN_TEXT_PIXELS;
             for (int index = 0; index < layout.boxes().size(); index++) {
-                paintNode(g, index, metrics);
+                paintNode(g, index, metrics, titlesOnly);
             }
             g.dispose();
         }
 
-        private void paintNode(Graphics2D g, int index, FontMetrics metrics) {
+        private void paintNode(Graphics2D g, int index, FontMetrics metrics, boolean titlesOnly) {
             Rectangle box = layout.boxes().get(index);
             DrawnGraph.Node node = graph.nodes().get(index);
             g.setColor(Theme.BACKGROUND_COLOR);
@@ -406,6 +410,11 @@ public class GraphView extends JScrollPane {
                 : new BasicStroke(1f));
             g.drawRoundRect(box.x, box.y, box.width, box.height, 8, 8);
             String[] lines = shownLines.get(index);
+            Rectangle badge = badgeBounds(index);
+            if (titlesOnly) {
+                paintTitleOnly(g, box, node, lines[0]);
+                return;
+            }
             int y = box.y + PADDING + metrics.getAscent();
             for (int line = 0; line < lines.length; line++) {
                 g.setColor(line == 0 ? node.titleColor()
@@ -413,13 +422,36 @@ public class GraphView extends JScrollPane {
                 g.drawString(lines[line], box.x + PADDING, y);
                 y += metrics.getHeight();
             }
-            Rectangle badge = badgeBounds(index);
             if (badge != null) {
-                g.setColor(Theme.NAVBAR_BUTTON_SELECTED_COLOR);
+                g.setColor(Theme.CONTENT_SELECTED_HIGHLIGHT_COLOR);
                 g.fillRoundRect(badge.x, badge.y, badge.width, badge.height, 6, 6);
                 g.setColor(Theme.SYNTAX_HIGHLIGHT_DEFAULT_COLOR);
                 g.drawString(node.badge(), badge.x + PADDING / 2, badge.y + metrics.getAscent());
             }
+        }
+
+        /**
+         * Zoomed out until the text would be unreadable, a block shows its title alone, at a size that reads on
+         * screen, so the graph stays a map rather than a picture.
+         */
+        private void paintTitleOnly(Graphics2D g, Rectangle box, DrawnGraph.Node node, String title) {
+            Font base = g.getFont();
+            Font large = base.deriveFont((float) (TITLE_ONLY_PIXELS / scale));
+            FontMetrics metrics = g.getFontMetrics(large);
+            int room = box.width - 2 * PADDING;
+            // A box narrower than the readable size holds the word at its own width instead.
+            if (metrics.getHeight() > box.height || metrics.stringWidth("W") > room) {
+                large = base.deriveFont((float) Math.max(base.getSize2D(),
+                    Math.min(box.height, room / 3) * 0.8));
+                metrics = g.getFontMetrics(large);
+            }
+            String text = elide(title, metrics, room);
+            g.setFont(large);
+            g.setColor(node.titleColor());
+            int x = box.x + (box.width - metrics.stringWidth(text)) / 2;
+            int y = box.y + (box.height - metrics.getHeight()) / 2 + metrics.getAscent();
+            g.drawString(text, Math.max(box.x + PADDING / 2, x), y);
+            g.setFont(base);
         }
 
         private void paintEdge(Graphics2D g, int index) {
@@ -443,6 +475,45 @@ public class GraphView extends JScrollPane {
                 Point at = route.get(route.size() - 2);
                 g.drawString(edge.label(), at.x + 4, at.y - 3);
             }
+            if (edge.startLabel() != null && route.size() >= 2) {
+                paintStartLabel(g, edge.startLabel(), route.get(0), route.get(1));
+            }
+        }
+
+        // The outcome a branch edge stands for, where it leaves its block, on a patch of background so the lines
+        // around it don't cut through the letter. Colour alone would say nothing to a colour-blind reader.
+        private void paintStartLabel(Graphics2D g, String text, Point from, Point next) {
+            double dx = next.x - from.x;
+            double dy = next.y - from.y;
+            double length = Math.max(1, Math.hypot(dx, dy));
+            Font base = g.getFont();
+            Font bold = base.deriveFont(Font.BOLD);
+            FontMetrics metrics = g.getFontMetrics(bold);
+            // A little way along the edge, offset to the right of its direction.
+            double along = Math.min(14, length / 2);
+            int x = (int) Math.round(from.x + dx / length * along - dy / length * 7);
+            int y = (int) Math.round(from.y + dy / length * along + dx / length * 7);
+            int width = metrics.stringWidth(text);
+            int height = metrics.getAscent();
+            Color line = g.getColor();
+            g.setColor(Theme.CONTENT_BACKGROUND_COLOR);
+            g.fillRoundRect(x - width / 2 - 2, y - height / 2 - 1, width + 4, height + 2, 4, 4);
+            g.setColor(line);
+            g.setFont(bold);
+            g.drawString(text, x - width / 2, y + height / 2 - 1);
+            g.setFont(base);
+        }
+
+        // A title too long for its box ends in an ellipsis, so a cut word is never mistaken for a whole one.
+        private String elide(String text, FontMetrics metrics, int room) {
+            if (metrics.stringWidth(text) <= room) {
+                return text;
+            }
+            int end = text.length();
+            while (end > 1 && metrics.stringWidth(text.substring(0, end) + "…") > room) {
+                end--;
+            }
+            return text.substring(0, end) + "…";
         }
 
         private void paintArrowHead(Graphics2D g, Point from, Point to) {

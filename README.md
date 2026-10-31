@@ -136,7 +136,7 @@ to show the full log.
 | `Cmd+F`, `Cmd+G`, `Shift+Cmd+G` | Find in class, next and previous match |
 | `Cmd+K` | Go to class or member |
 | `Cmd+[` / `Cmd+]` | Back / forward |
-| `Shift+Cmd+E`, `F`, `M`, `R`, `B`, `C` | Project, Search, Cross-JAR Mappings, References, Bookmarks, Entry Points and Flow |
+| `Shift+Cmd+E`, `F`, `M`, `R`, `C`, `B` | Project, Search, Cross-JAR Mappings, References, Entry Points and Flow, Bookmarks |
 | `Shift+Cmd+J` | Split bytecode and Java |
 | `Cmd+L` | Show or hide the log |
 

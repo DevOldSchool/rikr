@@ -110,6 +110,7 @@ public class ClassViewer {
         referenceWorkspacePanel = new ReferenceWorkspacePanel(controller);
         bookmarkWorkspacePanel = new BookmarkWorkspacePanel(controller);
         flowPanel = new FlowPanel(controller, this::openInBytecode);
+        flowPanel.setViewListener(this::updateStatusContext);
         methodSimulatorPanel = new MethodSimulatorPanel(controller);
         simulatorBar = new SimulatorBar(controller, e -> {
             methodSimulatorPanel.stop();
@@ -322,6 +323,43 @@ public class ClassViewer {
         treePanel.follow(classNode);
         controller.jars().jarOf(classNode).ifPresent(jar -> referenceWorkspacePanel.classOpened(jar, classNode));
         bookmarkWorkspacePanel.classOpened(classNode);
+        updateStatusContext();
+    }
+
+    /**
+     * The person chose a method, in the tree, Go to or a graph. It becomes the current method: the heading and
+     * status bar name it, and the References and Flow workspaces follow it when set to.
+     */
+    public void methodSelected(ClassNode owner, MethodNode method) {
+        noteMethod(owner, method);
+        controller.jars().jarOf(owner).ifPresent(jar -> flowPanel.methodOpened(jar, owner, method));
+    }
+
+    private void noteMethod(ClassNode owner, MethodNode method) {
+        if (codeView.displayedClass() != owner) {
+            displayBytecode(owner);
+        }
+        codeView.showMethod(method);
+        controller.jars().jarOf(owner).ifPresent(jar -> referenceWorkspacePanel.methodOpened(jar, owner, method));
+        updateStatusContext();
+    }
+
+    // The status bar's left slot says what is on screen; log lines borrow it for a few seconds.
+    private void updateStatusContext() {
+        ClassNode shown = codeView.displayedClass();
+        MethodNode method = codeView.shownMethod();
+        String subject = shown == null ? null
+            : method == null ? shown.name.replace('/', '.') : MemberText.describe(shown, method);
+        String context = switch (navigationPanel.getSelectedTabId()) {
+            case "SEARCH" -> "Search";
+            case "MAPPING" -> "Cross-JAR mappings";
+            case "BOOKMARKS" -> "Bookmarks";
+            case "REFERENCES" -> subject == null ? "References" : "References · " + subject;
+            case "CONTROL_FLOW" -> flowPanel.describeView() == null ? "Entry points and flow"
+                : flowPanel.describeView();
+            default -> subject == null ? "" : "Bytecode · " + subject;
+        };
+        statusBar.setContext(context);
     }
 
     /**
@@ -356,6 +394,7 @@ public class ClassViewer {
                 SwingUtilities.invokeLater(() -> getContentPanel().selectTextAfterPattern(
                     ClassNodeUtil.getFieldNodePattern(target.field()), target.field().name));
             } else if (target.method() != null) {
+                methodSelected(target.owner(), target.method());
                 SwingUtilities.invokeLater(() -> getContentPanel().selectTextAfterPattern(
                     ClassNodeUtil.getMethodNodePattern(target.method()), target.method().name));
             }
@@ -411,6 +450,7 @@ public class ClassViewer {
      */
     public void showControlFlow(ClassNode owner, MethodNode method) {
         controller.jars().jarOf(owner).ifPresent(jar -> {
+            noteMethod(owner, method);
             navigationPanel.selectControlFlowTab();
             flowPanel.showControlFlow(jar, owner, method);
         });
@@ -421,6 +461,7 @@ public class ClassViewer {
      */
     public void showCallGraph(ClassNode owner, MethodNode method) {
         controller.jars().jarOf(owner).ifPresent(jar -> {
+            noteMethod(owner, method);
             navigationPanel.selectControlFlowTab();
             flowPanel.showCallGraph(jar, owner, method);
         });
@@ -473,6 +514,10 @@ public class ClassViewer {
         SettingsManager.refreshThemeFor(opened);
         frame.revalidate();
         frame.repaint();
+        if (opened == flowPanel) {
+            flowPanel.showPending();
+        }
+        updateStatusContext();
     }
 
     // Mapping compares two classes side by side and never uses the tree, so it gets the whole width.

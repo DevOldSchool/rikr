@@ -39,6 +39,8 @@ public class CodeView extends JPanel {
     private final Rikr controller;
     // Which class is open, and from which JAR, since the tree selection may be elsewhere.
     private final JLabel heading = new JLabel(" ");
+    // The method the person is working on, after the class, or null for the class alone.
+    private MethodNode shownMethod;
     private final JPanel body = new JPanel(new BorderLayout());
 
     public CodeView(Rikr controller, EmptyStatePanel emptyState) {
@@ -80,10 +82,15 @@ public class CodeView extends JPanel {
         String jar = controller.jars().jarOf(displayedClass).orElse("");
         String path = jar + (slash < 0 ? "" : "  ›  " + name.substring(0, slash).replace('/', '.'));
         Color secondary = Theme.CONTENT_HIGHLIGHT_TEXT_COLOR;
-        heading.setText(String.format("<html><span style='color:#%02x%02x%02x'>%s  ›  </span><b>%s</b></html>",
-            secondary.getRed(), secondary.getGreen(), secondary.getBlue(), escape(path),
-            escape(name.substring(slash + 1))));
-        heading.setToolTipText(jar + " · " + name);
+        String colour = String.format("#%02x%02x%02x", secondary.getRed(), secondary.getGreen(), secondary.getBlue());
+        String separator = "<span style='color:" + colour + "'>  ›  </span>";
+        String simple = escape(name.substring(slash + 1));
+        String crumbs = shownMethod == null ? "<b>" + simple + "</b>"
+            : simple + separator + "<b>" + escape(MemberText.signature(shownMethod)) + "</b>";
+        heading.setText("<html><span style='color:" + colour + "'>" + escape(path) + "</span>" + separator + crumbs
+            + "</html>");
+        heading.setToolTipText(jar + " · " + name + (shownMethod == null ? "" : "." + shownMethod.name
+            + shownMethod.desc));
     }
 
     private static String escape(String text) {
@@ -148,6 +155,9 @@ public class CodeView extends JPanel {
     }
 
     public void display(ClassNode classNode) {
+        if (classNode != displayedClass) {
+            shownMethod = null;
+        }
         displayedClass = classNode;
         updateHeading();
         cards.show(this, CODE);
@@ -166,7 +176,23 @@ public class CodeView extends JPanel {
         }
     }
 
+    /**
+     * Name the method the person chose in the heading, after its class; the class stays on screen.
+     */
+    public void showMethod(MethodNode method) {
+        shownMethod = method;
+        updateHeading();
+    }
+
+    /**
+     * The method named in the heading, or null.
+     */
+    public MethodNode shownMethod() {
+        return shownMethod;
+    }
+
     public void clear() {
+        shownMethod = null;
         displayedClass = null;
         bytecodePanel.clear();
         javaPanel.clear();

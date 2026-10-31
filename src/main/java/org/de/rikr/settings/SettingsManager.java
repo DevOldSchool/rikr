@@ -6,6 +6,9 @@ import org.de.rikr.theme.ThemePalette;
 import org.de.rikr.theme.ThemeProvider;
 import org.de.rikr.theme.ThemeRegistry;
 import org.de.rikr.theme.laf.LafDefaults;
+import org.de.rikr.theme.SystemAppearance;
+import org.de.rikr.theme.providers.SystemThemeProvider;
+import com.formdev.flatlaf.FlatLaf;
 
 import javax.swing.*;
 import java.awt.*;
@@ -54,6 +57,25 @@ public class SettingsManager {
         }
 
         LafDefaults.apply();
+    }
+
+    /**
+     * While the theme is "Match system", apply the other theme when the system appearance changes. Polled every
+     * few seconds: Java gives no event for it, and a poll of the appearance is cheap.
+     */
+    public static void watchSystemAppearance() {
+        Timer timer = new Timer(5000, event -> {
+            if (!SystemThemeProvider.ID.equals(current.getThemeId())) {
+                return;
+            }
+            boolean dark = SystemAppearance.isDark();
+            if (dark != FlatLaf.isLafDark()) {
+                applyThemeLaf(null);
+                notifyListeners();
+            }
+        });
+        timer.setRepeats(true);
+        timer.start();
     }
 
     public static void applyThemeLaf(Component anyComponentInApp) {

@@ -94,6 +94,32 @@ public class Images {
         return DARK_ICONS.computeIfAbsent(imageName, name -> recolour(getImage(name), LIGHT_THEME_ICON));
     }
 
+    // The instruction glyph is drawn red for a light panel; on the dark panel that red is 1.6:1, so it is lifted.
+    private static final Color DARK_THEME_INSTRUCTION = new Color(0xE0, 0x6C, 0x6C);
+    private static ImageIcon darkInstruction;
+
+    /**
+     * The icon marking an instruction (a bytecode) match, in a colour that keeps 3:1 on the current theme's panel.
+     */
+    public static ImageIcon getInstructionImage() {
+        Color background = Theme.BACKGROUND_COLOR;
+        boolean light = background.getRed() + background.getGreen() + background.getBlue() > 3 * 128;
+        if (light) {
+            return getImage("instruction");
+        }
+        if (darkInstruction == null) {
+            darkInstruction = recolour(getImage("instruction"), DARK_THEME_INSTRUCTION);
+        }
+        return darkInstruction;
+    }
+
+    /**
+     * The colour the instruction icon takes on the dark theme, for the contrast test.
+     */
+    public static Color darkThemeInstructionColour() {
+        return DARK_THEME_INSTRUCTION;
+    }
+
     private static ImageIcon recolour(ImageIcon icon, Color color) {
         Image image = icon.getImage();
         if (image instanceof MultiResolutionImage variants) {

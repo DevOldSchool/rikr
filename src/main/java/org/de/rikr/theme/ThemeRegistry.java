@@ -2,6 +2,7 @@ package org.de.rikr.theme;
 
 import org.de.rikr.theme.providers.DarkThemeProvider;
 import org.de.rikr.theme.providers.LightThemeProvider;
+import org.de.rikr.theme.providers.SystemThemeProvider;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -19,6 +20,7 @@ public final class ThemeRegistry {
         // Register built-in themes
         register(new DarkThemeProvider());
         register(new LightThemeProvider());
+        register(new SystemThemeProvider());
     }
 
     private ThemeRegistry() {

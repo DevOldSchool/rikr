@@ -21,6 +21,10 @@ public final class LafDefaults {
     public static final Color LIGHT_CONTROL_BORDER = new Color(0x8C, 0x8F, 0x94);
     public static final Color DARK_CONTROL_BORDER = new Color(0x7A, 0x7E, 0x85);
 
+    // Tree expand arrows: FlatLaf's light default is 2:1 against the panel (SC 1.4.11 asks 3:1).
+    public static final Color LIGHT_TREE_ARROW = new Color(0x76, 0x76, 0x76);
+    public static final Color DARK_TREE_ARROW = new Color(0xAE, 0xAE, 0xAE);
+
     // The focus ring is the accent colour, as SearchFields draws it.
     public static final Color LIGHT_FOCUS = new Color(0x35, 0x74, 0xF0);
     public static final Color DARK_FOCUS = new Color(0x54, 0x8A, 0xF7);
@@ -57,6 +61,10 @@ public final class LafDefaults {
         UIManager.put("Component.focusedBorderColor", focus);
         UIManager.put("Button.focusedBorderColor", focus);
         UIManager.put("CheckBox.icon.focusedBorderColor", focus);
+
+        Color arrow = dark ? DARK_TREE_ARROW : LIGHT_TREE_ARROW;
+        UIManager.put("Tree.icon.expandedColor", arrow);
+        UIManager.put("Tree.icon.collapsedColor", arrow);
 
         // Code views and lists sit edge to edge in their panels.
         UIManager.put("ScrollPane.border", BorderFactory.createEmptyBorder());

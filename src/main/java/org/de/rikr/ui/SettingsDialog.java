@@ -35,6 +35,8 @@ final class SettingsDialog {
             dialog.dispose();
         });
         cancel.addActionListener(e -> dialog.dispose());
+        // Return applies and closes, as on every other macOS dialog.
+        dialog.getRootPane().setDefaultButton(ok);
 
         JPanel content = new JPanel(new BorderLayout());
         content.add(panel, BorderLayout.CENTER);

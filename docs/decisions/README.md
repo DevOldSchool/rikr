@@ -14,3 +14,4 @@ a new record and mark the old one as replaced.
 | [0006](0006-symbols-recorded-while-printing.md) | The bytecode view records symbols while printing |
 | [0007](0007-mcp-server-over-stdio.md) | Agents use Rikr through its own MCP server over stdio |
 | [0008](0008-entry-points-by-heuristics.md) | Entry points are found by heuristics, most likely first |
+| [0009](0009-current-method-shared-by-workspaces.md) | The chosen method is current for every workspace |

@@ -91,6 +91,10 @@ public final class RenameEngine {
 
             @Override
             public String mapInvokeDynamicMethodName(String methodName, String methodDescriptor) {
+                // A dynamic constant passes its field descriptor here; its name is no method's.
+                if (!methodDescriptor.startsWith("(")) {
+                    return methodName;
+                }
                 // A lambda's invokedynamic name is the functional interface method it implements.
                 Type produced = Type.getReturnType(methodDescriptor);
                 if (methodName.equals(name) && produced.getSort() == Type.OBJECT) {
@@ -151,6 +155,9 @@ public final class RenameEngine {
 
             @Override
             public String mapInvokeDynamicMethodName(String methodName, String methodDescriptor) {
+                if (!methodDescriptor.startsWith("(")) {
+                    return methodName;
+                }
                 Type produced = Type.getReturnType(methodDescriptor);
                 if (produced.getSort() == Type.OBJECT) {
                     for (String type : hierarchy.selfAndAncestors(produced.getInternalName())) {

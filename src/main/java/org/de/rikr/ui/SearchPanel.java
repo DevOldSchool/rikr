@@ -74,7 +74,9 @@ public class SearchPanel extends JPanel {
         scrollPane.setBorder(null);
 
         summary.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
-        JPanel chips = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        // Long counts push the last chip onto a second row; a plain FlowLayout would report one row and clip it.
+        JPanel chips = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 2));
+        WrapLayout.followWidth(chips);
         chips.setOpaque(false);
         ButtonGroup chipGroup = new ButtonGroup();
         for (Kind each : Kind.values()) {
@@ -300,7 +302,7 @@ public class SearchPanel extends JPanel {
             case INTERFACE -> ClassNodeImages.getImage("interface");
             case FIELD -> ClassNodeImages.getFieldNodeImage(result.fieldNode());
             case METHOD -> ClassNodeImages.getMethodNodeImage(result.methodNode());
-            case INSTRUCTION -> Images.getImage("instruction");
+            case INSTRUCTION -> Images.getInstructionImage();
         };
     }
 

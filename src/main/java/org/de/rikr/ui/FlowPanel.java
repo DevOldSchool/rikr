@@ -9,6 +9,7 @@ import org.de.rikr.flow.MethodRef;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;
 import org.de.rikr.ui.graph.DrawnGraph;
+import org.de.rikr.ui.graph.GraphLegend;
 import org.de.rikr.ui.graph.GraphView;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.ClassNode;
@@ -76,6 +77,10 @@ public class FlowPanel extends JPanel {
     private final JLabel zoomLabel = new JLabel("100%");
     private final JLabel title = new JLabel("Pick an entry point, or right-click a method in the project tree.");
     private final JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT));
+    private final GraphLegend legend = new GraphLegend();
+    private Runnable viewListener = () -> {
+    };
+    private FlowView pending;
     private final JTextField find = new JTextField(14);
     private final Deque<View> history = new ArrayDeque<>();
     private final Map<String, CallGraph> callGraphs = new HashMap<>();
@@ -166,7 +171,11 @@ public class FlowPanel extends JPanel {
         JPanel header = new JPanel(new BorderLayout());
         header.add(toolbar, BorderLayout.NORTH);
         title.setBorder(BorderFactory.createEmptyBorder(0, 8, 4, 8));
-        header.add(title, BorderLayout.SOUTH);
+        JPanel caption = new JPanel(new BorderLayout());
+        caption.setOpaque(false);
+        caption.add(title, BorderLayout.CENTER);
+        caption.add(legend, BorderLayout.EAST);
+        header.add(caption, BorderLayout.SOUTH);
         header.setOpaque(false);
         add(header, BorderLayout.NORTH);
         // The overview floats over the graph's bottom-right corner.
@@ -243,7 +252,70 @@ public class FlowPanel extends JPanel {
         view.clear();
         back.setEnabled(false);
         title.setText("Pick an entry point, or right-click a method in the project tree.");
+        legend.show(List.of());
+        pending = null;
         updateToggles();
+        viewListener.run();
+    }
+
+    /**
+     * What the panel shows, in words for the status bar: the kind of graph and its method, or null when empty.
+     */
+    public String describeView() {
+        return switch (current) {
+            case CallView state -> "Calls from " + describe(state.owner(), state.method());
+            case FlowView state -> "Control flow of " + describe(state.owner(), state.method());
+            case null -> null;
+        };
+    }
+
+    /**
+     * A method as people read it: {@code ar.no(nm, int)}, not {@code ar.no(Lnm;I)V}.
+     */
+    public static String describe(ClassNode owner, MethodNode method) {
+        return MemberText.describe(owner, method);
+    }
+
+    private static String describe(MethodRef method) {
+        return method.owner().replace('/', '.') + "." + MemberText.signature(method.name(), method.descriptor());
+    }
+
+    /**
+     * Be told whenever the graph shown changes, by navigation here or from elsewhere.
+     */
+    public void setViewListener(Runnable listener) {
+        viewListener = listener;
+    }
+
+    /**
+     * A method was chosen elsewhere, in the tree or Go to. A control-flow graph follows it: at once while this
+     * panel is on screen, or when it is next shown, so a graph is not built for every click in another workspace.
+     * A call graph is left alone: it is something the person built by expanding calls.
+     */
+    public void methodOpened(String jar, ClassNode owner, MethodNode method) {
+        if (!(current instanceof FlowView)) {
+            return;
+        }
+        if (current instanceof FlowView shown && shown.owner() == owner && shown.method() == method) {
+            return;
+        }
+        if (isShowing()) {
+            pending = null;
+            showControlFlow(jar, owner, method);
+        } else {
+            pending = new FlowView(jar, owner, method);
+        }
+    }
+
+    /**
+     * Show the method chosen while this panel was hidden, if any.
+     */
+    public void showPending() {
+        if (pending != null) {
+            FlowView next = pending;
+            pending = null;
+            go(next);
+        }
     }
 
     private void jarChosen() {
@@ -285,6 +357,7 @@ public class FlowPanel extends JPanel {
         back.setEnabled(!history.isEmpty());
         updateToggles();
         render(false);
+        viewListener.run();
     }
 
     private void back() {
@@ -295,6 +368,7 @@ public class FlowPanel extends JPanel {
         back.setEnabled(!history.isEmpty());
         updateToggles();
         render(false);
+        viewListener.run();
     }
 
     private void updateToggles() {
@@ -374,7 +448,11 @@ public class FlowPanel extends JPanel {
         }
         drawnFlow = null;
         view.show(new DrawnGraph(nodes, edges), keepView, CALLS_PER_ROW);
-        title.setText("Calls from " + root + ": " + nodes.size() + " methods"
+        legend.show(List.of(
+            new GraphLegend.Item(Theme.CONTENT_TEXT_COLOR, false, "call"),
+            new GraphLegend.Item(SWITCH_COLOR, true, "override"),
+            new GraphLegend.Item(LAMBDA_COLOR, true, "lambda")));
+        title.setText("Calls from " + describe(root) + ": " + nodes.size() + " methods"
             + (truncated ? ", stopped at " + MAX_CALL_GRAPH_NODES : ""));
     }
 
@@ -425,14 +503,24 @@ public class FlowPanel extends JPanel {
                 case JUMP, FALLTHROUGH -> Theme.CONTENT_TEXT_COLOR;
             };
             String label = edge.label() == null ? null : edge.label().substring(edge.label().lastIndexOf('/') + 1);
+            String outcome = switch (edge.kind()) {
+                case TRUE -> "T";
+                case FALSE -> "F";
+                default -> null;
+            };
             edges.add(new DrawnGraph.Edge(edge.from(), edge.to(), color,
-                edge.kind() == ControlFlowGraph.EdgeKind.EXCEPTION, label));
+                edge.kind() == ControlFlowGraph.EdgeKind.EXCEPTION, label, outcome));
         }
         drawnFlow = graph;
         drawnMethods = List.of();
         view.show(new DrawnGraph(nodes, edges), keepView);
         long unreachable = graph.blocks().stream().filter(block -> !block.reachable()).count();
-        title.setText("Control flow of " + ref(state.owner(), state.method()) + ": " + graph.blocks().size()
+        legend.show(List.of(
+            new GraphLegend.Item(TRUE_COLOR, false, "T  branch taken"),
+            new GraphLegend.Item(FALSE_COLOR, false, "F  not taken"),
+            new GraphLegend.Item(SWITCH_COLOR, false, "switch case"),
+            new GraphLegend.Item(EXCEPTION_COLOR, true, "exception handler")));
+        title.setText("Control flow of " + describe(state.owner(), state.method()) + ": " + graph.blocks().size()
             + " blocks, " + graph.edges().size() + " edges" + (unreachable == 0 ? "" : ", " + unreachable
             + " unreachable"));
     }

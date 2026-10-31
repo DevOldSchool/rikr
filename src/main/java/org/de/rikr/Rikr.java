@@ -349,6 +349,7 @@ public class Rikr {
 
         SwingUtilities.invokeLater(() -> {
             SettingsManager.applyThemeStartup();
+            SettingsManager.watchSystemAppearance();
             Rikr rikr = new Rikr();
             rikr.start();
         });

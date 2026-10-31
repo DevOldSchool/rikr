@@ -1,5 +1,6 @@
 package org.de.rikr.theme;
 
+import org.de.rikr.resources.Images;
 import org.de.rikr.theme.laf.LafDefaults;
 import org.de.rikr.theme.providers.DarkThemeProvider;
 import org.de.rikr.theme.providers.LightThemeProvider;
@@ -27,6 +28,18 @@ class ThemeContrastTest {
     @Test
     void lightThemeMeetsContrastMinimums() {
         assertPairs(new LightThemeProvider().palette(), LafDefaults.LIGHT_CONTROL_BORDER, LafDefaults.LIGHT_FOCUS);
+    }
+
+    @Test
+    void treeArrowsAndInstructionIconMeetNonTextContrast() {
+        List<String> failures = new ArrayList<>();
+        check(failures, "light tree arrow", LafDefaults.LIGHT_TREE_ARROW,
+            new LightThemeProvider().palette().BACKGROUND_COLOR, NON_TEXT);
+        check(failures, "dark tree arrow", LafDefaults.DARK_TREE_ARROW,
+            new DarkThemeProvider().palette().BACKGROUND_COLOR, NON_TEXT);
+        check(failures, "dark instruction icon", Images.darkThemeInstructionColour(),
+            new DarkThemeProvider().palette().BACKGROUND_COLOR, NON_TEXT);
+        assertTrue(failures.isEmpty(), String.join("\n", failures));
     }
 
     @Test
@@ -58,6 +71,9 @@ class ThemeContrastTest {
         check(failures, "control edge on panel", controlBorder, panel, NON_TEXT);
         check(failures, "focus ring on panel", focus, panel, NON_TEXT);
         check(failures, "selected navigation icon", Color.WHITE, palette.NAVBAR_BUTTON_SELECTED_COLOR, NON_TEXT);
+        check(failures, "selected navigation fill on panel", palette.NAVBAR_BUTTON_SELECTED_COLOR, panel, NON_TEXT);
+        check(failures, "graph badge text", palette.SYNTAX_HIGHLIGHT_DEFAULT_COLOR,
+            palette.CONTENT_SELECTED_HIGHLIGHT_COLOR, TEXT);
 
         assertTrue(failures.isEmpty(), String.join("\n", failures));
     }

@@ -93,7 +93,7 @@ public class JarOperations {
             }
             workspace.addJar(jar.jarName(), jar.classes(), jar.originalFile());
             added.add(jar.jarName());
-            logger.log("Loaded " + jar.classes().size() + " classes from " + jar.jarName());
+            logger.log(String.format("Loaded %,d classes from %s", jar.classes().size(), jar.jarName()));
         }
         if (!added.isEmpty()) {
             events.publish(new ProjectEvent.JarsLoaded(added));

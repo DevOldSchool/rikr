@@ -32,6 +32,13 @@ public record DrawnGraph(List<Node> nodes, List<Edge> edges) {
         }
     }
 
-    public record Edge(int from, int to, Color color, boolean dashed, String label) {
+    /**
+     * @param label      text at the arrow's end, such as the exception type a handler catches, or null
+     * @param startLabel short text where the edge leaves its block, such as T or F for a branch, or null
+     */
+    public record Edge(int from, int to, Color color, boolean dashed, String label, String startLabel) {
+        public Edge(int from, int to, Color color, boolean dashed, String label) {
+            this(from, to, color, dashed, label, null);
+        }
     }
 }

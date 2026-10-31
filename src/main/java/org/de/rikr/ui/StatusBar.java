@@ -18,9 +18,13 @@ public class StatusBar extends JPanel {
     private final JLabel busyLabel = new JLabel("Working…");
     private final JLabel summary = new JLabel("No JARs loaded");
     private final JButton logButton = new JButton("Log");
+    // What the window is showing, kept while log messages come and go.
+    private String context = "";
+    private final Timer messageExpiry = new Timer(8000, event -> showContext());
 
     public StatusBar(Runnable toggleLog) {
         super(new BorderLayout(12, 0));
+        messageExpiry.setRepeats(false);
         setBorder(BorderFactory.createEmptyBorder(3, 10, 3, 6));
         message.setToolTipText("Show the log");
         message.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -50,12 +54,30 @@ public class StatusBar extends JPanel {
     }
 
     /**
-     * Show the latest log message, on one line.
+     * Show the latest log message, on one line. After a few seconds the context takes its place again, so a
+     * message about something that happened earlier does not stay beside a different view.
      */
     public void setMessage(String text) {
         String line = text.lines().findFirst().orElse("");
         message.setText(line);
         message.setToolTipText(text.length() > line.length() ? text + "\n\nClick to show the log" : "Show the log");
+        messageExpiry.restart();
+    }
+
+    /**
+     * Name what the window shows, such as the open class or the graph on screen. Shown whenever no recent log
+     * message is.
+     */
+    public void setContext(String text) {
+        context = text == null ? "" : text;
+        if (!messageExpiry.isRunning()) {
+            showContext();
+        }
+    }
+
+    private void showContext() {
+        message.setText(context.isEmpty() ? " " : context);
+        message.setToolTipText("Show the log");
     }
 
     public void setBusy(boolean working) {

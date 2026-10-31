@@ -95,8 +95,8 @@ public class MenuBar extends JMenuBar {
         viewMenu.add(item("Search", KeyEvent.VK_F, view, actions.showSearch()));
         viewMenu.add(item("Cross-JAR Mappings", KeyEvent.VK_M, view, actions.showMapping()));
         viewMenu.add(item("References and Call Hierarchy", KeyEvent.VK_R, view, actions.showReferences()));
-        viewMenu.add(item("Bookmarks", KeyEvent.VK_B, view, actions.showBookmarks()));
         viewMenu.add(item("Entry Points and Flow", KeyEvent.VK_C, view, actions.showFlow()));
+        viewMenu.add(item("Bookmarks", KeyEvent.VK_B, view, actions.showBookmarks()));
         viewMenu.addSeparator();
         viewMenu.add(groupBySuperclassItem);
         viewMenu.add(groupByInterfaceItem);

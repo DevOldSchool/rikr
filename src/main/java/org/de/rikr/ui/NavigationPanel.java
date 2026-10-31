@@ -38,42 +38,42 @@ public class NavigationPanel extends JPanel {
         projectButton.setToolTipText("Project");
         projectButton.getAccessibleContext().setAccessibleName("Project");
         projectButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-        projectButton.setBorderPainted(false);
+        projectButton.setBorder(new FocusRingBorder());
         projectButton.addActionListener(projectAction);
 
         searchButton = new JButton(Images.getImage("search"));
         searchButton.setToolTipText("Search");
         searchButton.getAccessibleContext().setAccessibleName("Search");
         searchButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-        searchButton.setBorderPainted(false);
+        searchButton.setBorder(new FocusRingBorder());
         searchButton.addActionListener(searchAction);
 
         mappingButton = new JButton(Images.getImage("mapping"));
         mappingButton.setToolTipText("Cross-JAR mappings");
         mappingButton.getAccessibleContext().setAccessibleName("Cross-JAR mappings");
         mappingButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-        mappingButton.setBorderPainted(false);
+        mappingButton.setBorder(new FocusRingBorder());
         mappingButton.addActionListener(mappingAction);
 
         referencesButton = new JButton(Images.getImage("references"));
         referencesButton.setToolTipText("References and call hierarchy");
         referencesButton.getAccessibleContext().setAccessibleName("References and call hierarchy");
         referencesButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-        referencesButton.setBorderPainted(false);
+        referencesButton.setBorder(new FocusRingBorder());
         referencesButton.addActionListener(referencesAction);
 
         bookmarksButton = new JButton(Images.getImage("bookmarks"));
         bookmarksButton.setToolTipText("Bookmarks");
         bookmarksButton.getAccessibleContext().setAccessibleName("Bookmarks");
         bookmarksButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-        bookmarksButton.setBorderPainted(false);
+        bookmarksButton.setBorder(new FocusRingBorder());
         bookmarksButton.addActionListener(bookmarksAction);
 
         controlFlowButton = new JButton(Images.getImage("flow"));
         controlFlowButton.setToolTipText("Entry points, call graphs and control flow");
         controlFlowButton.getAccessibleContext().setAccessibleName("Entry points, call graphs and control flow");
         controlFlowButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-        controlFlowButton.setBorderPainted(false);
+        controlFlowButton.setBorder(new FocusRingBorder());
         controlFlowButton.addActionListener(controlFlowAction);
 
         add(Box.createRigidArea(new Dimension(36, 5)));
@@ -85,9 +85,10 @@ public class NavigationPanel extends JPanel {
         add(Box.createRigidArea(new Dimension(36, 5)));
         add(referencesButton);
         add(Box.createRigidArea(new Dimension(36, 5)));
-        add(bookmarksButton);
-        add(Box.createRigidArea(new Dimension(36, 5)));
         add(controlFlowButton);
+        add(Box.createRigidArea(new Dimension(36, 5)));
+        // Bookmarks last: the workspaces above it follow the code; bookmarks are a list the person keeps.
+        add(bookmarksButton);
         add(Box.createRigidArea(new Dimension(36, 5)));
 
         applyTheme();
@@ -192,6 +193,8 @@ public class NavigationPanel extends JPanel {
         boolean selected = selectedTab == tab;
         button.setBackground(selected ? Theme.NAVBAR_BUTTON_SELECTED_COLOR : Theme.BACKGROUND_COLOR);
         button.setIcon(selected ? Images.getSelectedImage(icon) : Images.getThemedImage(icon));
+        // The ring is white on the accent fill, so it shows on the selected button too.
+        button.setBorder(new FocusRingBorder(selected));
     }
 
     private enum SelectedTab {

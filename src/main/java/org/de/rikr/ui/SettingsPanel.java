@@ -29,7 +29,7 @@ public class SettingsPanel extends JPanel {
         gridBagConstraints.anchor = GridBagConstraints.WEST;
         gridBagConstraints.insets = new Insets(6, 6, 6, 6);
 
-        add(label("Editor Font"), gridBagConstraints);
+        add(label("Editor font"), gridBagConstraints);
         gridBagConstraints.gridx = 1;
         String[] families = GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames();
         fontFamilyCombo = new JComboBox<>(families);
@@ -38,7 +38,7 @@ public class SettingsPanel extends JPanel {
 
         gridBagConstraints.gridx = 0;
         gridBagConstraints.gridy++;
-        add(label("Font Size"), gridBagConstraints);
+        add(label("Font size"), gridBagConstraints);
         gridBagConstraints.gridx = 1;
         fontSizeSpinner = new JSpinner(new SpinnerNumberModel(settings.getFontSize(), 8, 48, 1));
         add(fontSizeSpinner, gridBagConstraints);

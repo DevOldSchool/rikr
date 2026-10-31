@@ -58,6 +58,8 @@ public class TreeSelectionHandler implements TreeSelectionListener {
         } else if (selectedNode instanceof MethodNodeMutableTreeNode methodNodeMutableTreeNode) {
             ClassMutableTreeNode classMutableTreeNode = (ClassMutableTreeNode) selectedNode.getParent().getParent();
             controller.getUserInterface().displayBytecode(classMutableTreeNode.getClassNode());
+            controller.getUserInterface().methodSelected(classMutableTreeNode.getClassNode(),
+                methodNodeMutableTreeNode.getMethodNode());
 
             SwingUtilities.invokeLater(() -> {
                 MethodNode methodNode = methodNodeMutableTreeNode.getMethodNode();

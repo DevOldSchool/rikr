@@ -42,6 +42,8 @@ public class MappingWorkspacePanel extends JPanel {
     private final JButton clearButton = new JButton("Clear source decisions");
     private final JButton autoMatchButton = new JButton("Auto-match");
     private final JButton exportButton = new JButton("Export JSON");
+    private static final String CARRY_NAMES_TOOLTIP =
+        "Match fields and methods of the mapped classes, and give the target JAR the names given in the source JAR";
     private final JButton carryNamesButton = new JButton("Carry names…");
     private final JLabel statusLabel = new JLabel("Load at least two JARs to begin mapping.");
     private final JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -138,8 +140,7 @@ public class MappingWorkspacePanel extends JPanel {
             + "similarity in shape, then match more from the fields and methods of the classes matched");
         toolbar.add(autoMatchButton);
         toolbar.add(exportButton);
-        carryNamesButton.setToolTipText("Match fields and methods of the mapped classes, and give the target JAR the "
-            + "names given in the source JAR");
+        carryNamesButton.setToolTipText(CARRY_NAMES_TOOLTIP);
         toolbar.add(carryNamesButton);
         add(toolbar, BorderLayout.NORTH);
     }
@@ -567,8 +568,13 @@ public class MappingWorkspacePanel extends JPanel {
         clearButton.setEnabled(hasSource);
         autoMatchButton.setEnabled(hasJarPair() && !autoMatching);
         exportButton.setEnabled(hasJarPair());
-        carryNamesButton.setEnabled(hasJarPair() && !carryingNames
-            && !controller.mappings().accepted(selectedSourceJar(), selectedTargetJar()).isEmpty());
+        boolean anyAccepted = hasJarPair()
+            && !controller.mappings().accepted(selectedSourceJar(), selectedTargetJar()).isEmpty();
+        carryNamesButton.setEnabled(hasJarPair() && !carryingNames && anyAccepted);
+        // A greyed button says nothing on its own; the tooltip and the status line say what makes it available.
+        carryNamesButton.setToolTipText(hasJarPair() && !anyAccepted
+            ? "Accept at least one class mapping first, then carry names"
+            : CARRY_NAMES_TOOLTIP);
 
         // Reloading the lists passes through no selection, which must not count as choosing another class.
         if (sourceClass != null && sourceClass != noticeSource || !hasJarPair()) {
@@ -592,6 +598,14 @@ public class MappingWorkspacePanel extends JPanel {
                 () -> statusLabel.setText(candidatePrompt(sourceClass, candidate))
             );
         }
+        if (notice == null && hasJarPair() && !anyAccepted && !carryingNames) {
+            statusLabel.setText("<html>" + escape(statusLabel.getText())
+                + "<br>Carry names… needs at least one accepted class mapping.</html>");
+        }
+    }
+
+    private static String escape(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     private void showNotice(String message) {

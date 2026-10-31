@@ -29,7 +29,9 @@ public class Theme {
     public static Color DARK_BACKGROUND_COLOR = new Color(43, 45, 48);
     public static Color DARK_CONTENT_BACKGROUND_COLOR = new Color(30, 31, 34);
 
-    public static Color DARK_NAVBAR_BUTTON_SELECTED_COLOR = new Color(74, 75, 78);
+    // The accent, as in the light theme: a grey fill was 1.6:1 against the panel, so the open workspace was hard
+    // to tell apart (WCAG 2.2 SC 1.4.11 asks 3:1 for state).
+    public static Color DARK_NAVBAR_BUTTON_SELECTED_COLOR = new Color(0x54, 0x8A, 0xF7);
     public static Color DARK_SEARCH_BUTTON_SELECTED_COLOR = new Color(50, 90, 170);
 
     public static Color DARK_CONTENT_SELECTED_HIGHLIGHT_COLOR = new Color(33, 66, 131);

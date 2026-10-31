@@ -141,6 +141,29 @@ class RenameEngineTest {
     }
 
     @Test
+    void renamesClassesThatLoadDynamicConstants() {
+        // RuneLite's client loads constants through bootstrap methods, whose descriptors are field descriptors.
+        ClassNode owner = classNode("a", "java/lang/Object", Opcodes.ACC_PUBLIC);
+        MethodNode method = new MethodNode(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "m", "()Ljava/lang/Object;", null, null);
+        org.objectweb.asm.Handle bootstrap = new org.objectweb.asm.Handle(Opcodes.H_INVOKESTATIC,
+            "java/lang/invoke/ConstantBootstraps", "nullConstant",
+            "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/Object;", false);
+        method.instructions.add(new org.objectweb.asm.tree.LdcInsnNode(
+            new org.objectweb.asm.ConstantDynamic("value", "Ljava/lang/Object;", bootstrap)));
+        method.instructions.add(new org.objectweb.asm.tree.InsnNode(Opcodes.ARETURN));
+        owner.methods.add(method);
+        List<ClassNode> classes = new ArrayList<>(List.of(owner));
+
+        engine.renameBatch(classes, new RenameBatch("app.jar", "test", Map.of("a", "Renamed"), List.of(),
+            List.of(new RenameBatch.MemberRename("a", "m", "()Ljava/lang/Object;", "make"))), true);
+        engine.renameClass(classes, "Renamed", "Again", true);
+        engine.renameMethod(classes, "Again", "make", "()Ljava/lang/Object;", "build", true);
+
+        assertEquals("Again", owner.name);
+        assertEquals("build", owner.methods.getFirst().name);
+    }
+
+    @Test
     void privateAndStaticMethodsAreRenamedAlone() {
         ClassNode base = classNode("p", "java/lang/Object", Opcodes.ACC_PUBLIC);
         base.methods.add(new MethodNode(Opcodes.ACC_PRIVATE, "x", "()V", null, null));
