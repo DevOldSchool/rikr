@@ -23,6 +23,13 @@ import java.util.zip.ZipInputStream;
  */
 public class JetBrainsDecompilerService {
 
+    /**
+     * The longest FernFlower may spend on one method, in seconds; the method is left out of the source after that,
+     * so code FernFlower can't finish doesn't hold up the class. Large classes of obfuscated programs take tens of
+     * seconds in all, but no single method comes near this. FernFlower checks the limit only now and then.
+     */
+    private static final int MAX_SECONDS_PER_METHOD = 15;
+
     private final org.de.rikr.Logger logger;
 
     public JetBrainsDecompilerService() {
@@ -106,17 +113,6 @@ public class JetBrainsDecompilerService {
             }
             log("[Decompiler] Created temp JAR: " + jarFile);
 
-            // === Configure FernFlower ===
-            Map<String, Object> options = new HashMap<>();
-            options.put("dgs", "1"); // decompile generic signatures
-            options.put("asc", "1"); // encode non-ASCII
-            options.put("rsy", "1"); // retain synthetic
-            options.put("lit", "1"); // use 'final' for literals
-            // Mark each line with the class file's line numbers; OriginalLines takes them out again. The marks need
-            // the bytecode-to-source mapping turned on too.
-            options.put("bsm", "1");
-            options.put("__dump_original_lines__", "1");
-
             IFernflowerLogger fernLogger = new IFernflowerLogger() {
                 @Override
                 public void writeMessage(String message, Severity severity) {
@@ -130,7 +126,7 @@ public class JetBrainsDecompilerService {
             };
 
             // === Run the decompiler ===
-            ConsoleDecompiler decompiler = new ConsoleDecompiler(outputDir.toFile(), options, fernLogger);
+            ConsoleDecompiler decompiler = new ConsoleDecompiler(outputDir.toFile(), options(), fernLogger);
             decompiler.addSource(jarFile.toFile());
             decompiler.decompileContext();
             log("[Decompiler] Decompilation completed.");
@@ -190,6 +186,20 @@ public class JetBrainsDecompilerService {
         }
     }
 
+    private static Map<String, Object> options() {
+        Map<String, Object> options = new HashMap<>();
+        options.put("dgs", "1"); // decompile generic signatures
+        options.put("asc", "1"); // encode non-ASCII
+        options.put("rsy", "1"); // retain synthetic
+        options.put("lit", "1"); // use 'final' for literals
+        // Mark each line with the class file's line numbers; OriginalLines takes them out again. The marks need
+        // the bytecode-to-source mapping turned on too.
+        options.put("bsm", "1");
+        options.put("__dump_original_lines__", "1");
+        options.put("mpm", String.valueOf(MAX_SECONDS_PER_METHOD));
+        return options;
+    }
+
     /**
      * Extracts all entries from a JAR/ZIP file into a target directory.
      */
@@ -226,104 +236,6 @@ public class JetBrainsDecompilerService {
                     } catch (IOException ignored) {
                     }
                 });
-        }
-    }
-
-    /**
-     * Decompile an entire JAR and return a map from ASM internal class name (e.g., com/foo/Bar)
-     * to the resulting Java source code.
-     */
-    public Map<String, String> decompileJarSources(File jarFile) {
-        Path tempRoot = null;
-        try {
-            if (jarFile == null || !jarFile.exists()) {
-                log("[Decompiler] decompileJarSources: input jar is null or does not exist");
-                return java.util.Collections.emptyMap();
-            }
-
-            tempRoot = Files.createTempDirectory("rikr_ff_jar");
-            Path outputDir = tempRoot.resolve("output");
-            Files.createDirectories(outputDir);
-
-            Map<String, Object> options = new HashMap<>();
-            options.put("dgs", "1");
-            options.put("asc", "1");
-            options.put("rsy", "1");
-            options.put("lit", "1");
-            options.put("bsm", "1");
-            options.put("__dump_original_lines__", "1");
-
-            IFernflowerLogger fernLogger = new IFernflowerLogger() {
-                @Override
-                public void writeMessage(String message, Severity severity) {
-                    log("[FernFlower][" + severity + "] " + message);
-                }
-
-                @Override
-                public void writeMessage(String message, Severity severity, Throwable t) {
-                    log("[FernFlower][" + severity + "] " + message, t);
-                }
-            };
-
-            ConsoleDecompiler decompiler = new ConsoleDecompiler(outputDir.toFile(), options, fernLogger);
-            decompiler.addSource(jarFile);
-            decompiler.decompileContext();
-
-            // Find output jar produced by FernFlower
-            Path outputJar = null;
-            try (var stream = Files.list(outputDir)) {
-                outputJar = stream.filter(p -> p.toString().endsWith(".jar")).findFirst().orElse(null);
-            }
-
-            if (outputJar == null || !Files.exists(outputJar)) {
-                log("[Decompiler] decompileJarSources: no output jar produced for " + jarFile.getName());
-                return java.util.Collections.emptyMap();
-            }
-
-            Path extractDir = outputDir.resolve("extracted");
-            Files.createDirectories(extractDir);
-            extractJar(outputJar.toFile(), extractDir.toFile());
-
-            Map<String, String> result = new HashMap<>();
-            try (var stream = Files.walk(extractDir)) {
-                stream.filter(p -> p.toString().endsWith(".java")).forEach(p -> {
-                    try {
-                        String src = Files.readString(p, StandardCharsets.UTF_8);
-                        String internal = toInternalName(extractDir, p);
-                        if (internal != null && !internal.isEmpty()) {
-                            result.put(internal, src);
-                        }
-                    } catch (IOException e) {
-                        log("[Decompiler] Failed reading java file: " + p + " -> " + e.getMessage());
-                    }
-                });
-            }
-
-            try {
-                Files.deleteIfExists(outputJar);
-            } catch (IOException ignored) {
-            }
-            return result;
-        } catch (Throwable t) {
-            log("[Decompiler] Exception during full-jar decompilation", t);
-            return java.util.Collections.emptyMap();
-        } finally {
-            try {
-                deleteRecursive(tempRoot);
-            } catch (IOException ignored) {
-            }
-        }
-    }
-
-    private String toInternalName(Path root, Path javaFile) {
-        try {
-            Path rel = root.relativize(javaFile);
-            String s = rel.toString();
-            s = s.replace(File.separatorChar, '/');
-            if (s.endsWith(".java")) s = s.substring(0, s.length() - 5);
-            return s; // now in form com/foo/Bar
-        } catch (Exception e) {
-            return null;
         }
     }
 }

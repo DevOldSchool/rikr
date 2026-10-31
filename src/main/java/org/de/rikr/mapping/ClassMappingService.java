@@ -147,6 +147,7 @@ public class ClassMappingService {
             usedTargets.add(mapping.targetClassName());
         }
 
+        List<ClassComparator.Signature> targets = classComparator.signatures(targetClasses);
         List<AutoMatch> proposals = new ArrayList<>();
         sourceClasses.stream()
             .filter(Objects::nonNull)
@@ -156,7 +157,7 @@ public class ClassMappingService {
                 sourceJar,
                 targetJar,
                 sourceClass,
-                targetClasses,
+                targets,
                 minimumSimilarityPercent
             ).ifPresent(match -> proposals.add(new AutoMatch(sourceClass, match))));
 
@@ -224,10 +225,11 @@ public class ClassMappingService {
         String sourceJar,
         String targetJar,
         ClassNode sourceClass,
-        List<ClassNode> targetClasses,
+        List<ClassComparator.Signature> targets,
         int minimumSimilarityPercent
     ) {
-        List<ClassMatch> candidates = classComparator.getClassNodeMatches(targetClasses, sourceClass).stream()
+        List<ClassMatch> candidates = classComparator.getClassNodeMatches(targets, classComparator.signature(sourceClass))
+            .stream()
             .filter(match -> match.similarityPercent() >= minimumSimilarityPercent)
             .filter(match -> !isRejected(sourceJar, targetJar, sourceClass, match.classNode()))
             .toList();

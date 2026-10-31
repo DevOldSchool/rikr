@@ -21,18 +21,29 @@ import java.awt.dnd.DropTargetDropEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class ContentPanel extends JScrollPane {
     private final Rikr controller;
     private final JTextPane contentPane;
     private final JPopupMenu contextMenu;
     private final JMenuItem renameItem;
-    private final StyledDocument document;
-    private final Style style;
-    private final SyntaxHighlighter syntaxHighlighter;
-    private final SyntaxHighlighter javaSyntaxHighlighter;
+    private StyledDocument document;
+    // Highlighting a large class takes seconds, so it is done off the event thread, into a document of its own
+    // that replaces the one on screen in one step. Each display is numbered, so a late one is dropped.
+    private final ExecutorService highlighting = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "rikr-highlight");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private long display;
+    // Whether the last class asked for is on screen, and what waits for it to be.
+    private boolean shown = true;
+    private final List<Runnable> whenShown = new ArrayList<>();
     private final LineHighlighter lineHighlighter;
     private final RenameActionHandler renameActionHandler;
     // Where the context menu was opened, so Rename acts on the name that was clicked.
@@ -61,11 +72,8 @@ public class ContentPanel extends JScrollPane {
         contentPane.setBackground(Theme.CONTENT_BACKGROUND_COLOR);
         contentPane.setBorder(BorderFactory.createEmptyBorder(10, 0, 10, 10));
         document = contentPane.getStyledDocument();
-        style = document.addStyle("content", null);
         setViewportView(contentPane);
 
-        syntaxHighlighter = new SyntaxHighlighter();
-        javaSyntaxHighlighter = new SyntaxHighlighter();
         lineHighlighter = new LineHighlighter(contentPane, Theme.BACKGROUND_COLOR);
 
         // Set up drop listener
@@ -145,72 +153,90 @@ public class ContentPanel extends JScrollPane {
     }
 
     public void displayClass(ClassNode classNode) {
-        if (javaOnlyMode) {
-            // Render decompiled Java in this panel
-            SwingUtilities.invokeLater(() -> {
-                clear();
-                displayedClass = classNode;
-                document.setCharacterAttributes(0, document.getLength(), style, true);
-                contentPane.selectAll();
-
-                // Try cache first
-                String cached = controller.decompiler().getDecompiledSource(classNode);
-                if (cached != null && !cached.isEmpty()) {
-                    javaSyntaxHighlighter.highlight(document, cached);
-                    contentPane.setCaretPosition(0);
-                } else {
-                    contentPane.setText("// Decompiling with JetBrains engine...\n");
-                    decompileInBackgroundJavaOnly(classNode);
-                }
-            });
-        } else {
-            // Render ASM
-            SwingUtilities.invokeLater(() -> {
-                clear();
-                document.setCharacterAttributes(0, document.getLength(), style, true);
-                contentPane.selectAll();
-
-                BytecodeText bytecode = BytecodeText.of(classNode);
-                syntaxHighlighter.highlight(document, bytecode.text());
-                displayedClass = classNode;
-                displayedBytecode = bytecode;
-                contentPane.setCaretPosition(0);
-            });
-        }
-    }
-
-    private void decompileInBackgroundJavaOnly(ClassNode classNode) {
-        // Try cache first (pre-decompiled on jar load)
-        String cached = controller.decompiler().getDecompiledSource(classNode);
-        if (cached != null && !cached.isEmpty()) {
-            SwingUtilities.invokeLater(() -> {
-                javaSyntaxHighlighter.highlight(document, cached);
-                contentPane.setCaretPosition(0);
-            });
+        clear();
+        long request = display;
+        shown = false;
+        displayedClass = classNode;
+        if (!javaOnlyMode) {
+            BytecodeText bytecode = BytecodeText.of(classNode);
+            show(request, bytecode.text(), bytecode);
             return;
         }
+        String cached = controller.decompiler().getDecompiledSource(classNode);
+        if (cached != null && !cached.isEmpty()) {
+            show(request, cached, null);
+            return;
+        }
+        contentPane.setText("// Decompiling with JetBrains engine...\n");
+        controller.decompiler().decompileClassAsync(classNode).thenAccept(result -> SwingUtilities.invokeLater(() -> {
+            if (request != display) {
+                return;
+            }
+            if (!result.success() || result.source().isEmpty()) {
+                contentPane.setText("// " + result.message() + "\n");
+                finishShowing();
+            } else {
+                show(request, result.source(), null);
+            }
+        }));
+    }
 
-        controller.decompiler().decompileClassAsync(classNode).thenAccept(result -> {
+    // Highlights the text off the event thread, then shows it unless another class was asked for meanwhile.
+    private void show(long request, String text, BytecodeText bytecode) {
+        StyledDocument highlighted = (StyledDocument) contentPane.getEditorKit().createDefaultDocument();
+        highlighting.execute(() -> {
+            new SyntaxHighlighter().highlight(highlighted, text);
             SwingUtilities.invokeLater(() -> {
-                if (!result.success() || result.source().isEmpty()) {
-                    contentPane.setText("// " + result.message() + "\n");
-                } else {
-                    javaSyntaxHighlighter.highlight(document, result.source());
-                    contentPane.setCaretPosition(0);
+                if (request != display) {
+                    return;
                 }
+                setDocument(highlighted);
+                displayedBytecode = bytecode;
+                contentPane.setCaretPosition(0);
+                finishShowing();
             });
         });
     }
 
-    public void clear() {
-        try {
-            clearMarkedLine();
-            document.remove(0, document.getLength());
-            displayedClass = null;
-            displayedBytecode = null;
-        } catch (BadLocationException e) {
-            throw new RuntimeException(e);
+    private void finishShowing() {
+        shown = true;
+        List<Runnable> waiting = List.copyOf(whenShown);
+        whenShown.clear();
+        waiting.forEach(Runnable::run);
+    }
+
+    /**
+     * Run {@code action} once the class last asked for is on screen: now if it is, or when its text is ready. A class
+     * is shown a moment after {@link #displayClass}, longer for a large one, and actions that find text in it, such
+     * as selecting a method, must wait for it.
+     */
+    public void whenShown(Runnable action) {
+        if (shown) {
+            action.run();
+        } else {
+            whenShown.add(action);
         }
+    }
+
+    private void setDocument(StyledDocument replacement) {
+        // Highlights hold positions in the old document, which mean nothing in the new one.
+        contentPane.getHighlighter().removeAllHighlights();
+        markedLine = null;
+        contentPane.setDocument(replacement);
+        document = replacement;
+    }
+
+    /**
+     * Empty the view and forget the class, including any that is still being shown.
+     */
+    public void clear() {
+        clearMarkedLine();
+        display++;
+        whenShown.clear();
+        shown = true;
+        setDocument((StyledDocument) contentPane.getEditorKit().createDefaultDocument());
+        displayedClass = null;
+        displayedBytecode = null;
     }
 
     public boolean isJavaOnly() {
@@ -239,7 +265,7 @@ public class ContentPanel extends JScrollPane {
      * Move the caret back to an offset after the class is shown again, for example after a rename.
      */
     public void restoreCaret(int offset) {
-        SwingUtilities.invokeLater(() -> contentPane.setCaretPosition(Math.min(offset, document.getLength())));
+        whenShown(() -> contentPane.setCaretPosition(Math.min(offset, document.getLength())));
     }
 
     private void setDropTarget() {
@@ -293,6 +319,10 @@ public class ContentPanel extends JScrollPane {
      * @param methodPattern the method's name and descriptor, which only its declaration prints together
      */
     public void selectInMethod(String methodPattern, String label) {
+        whenShown(() -> selectInShownMethod(methodPattern, label));
+    }
+
+    private void selectInShownMethod(String methodPattern, String label) {
         String text;
         try {
             text = document.getText(0, document.getLength());
@@ -326,6 +356,10 @@ public class ContentPanel extends JScrollPane {
     }
 
     public void selectTextAfterPattern(String pattern, String textToSelect) {
+        whenShown(() -> selectShownTextAfterPattern(pattern, textToSelect));
+    }
+
+    private void selectShownTextAfterPattern(String pattern, String textToSelect) {
         Highlighter hilite = contentPane.getHighlighter();
         Document doc = contentPane.getDocument();
         String text = null;

@@ -28,33 +28,36 @@
         <spotless.version>3.10.4</spotless.version>
         <coverage.core.lines>0.85</coverage.core.lines>
         <coverage.core.branches>0.55</coverage.core.branches>
+        <!-- src/main/java/org/jetbrains holds a patched copy of one of its classes: update the copy with it. -->
+        <fernflower.version>261.26222.65</fernflower.version>
+        <maven.antrun.version>3.1.0</maven.antrun.version>
     </properties>
 
     <dependencies>
         <dependency>
             <groupId>org.ow2.asm</groupId>
             <artifactId>asm</artifactId>
-            <version>9.7</version>
+            <version>9.11.1</version>
         </dependency>
         <dependency>
             <groupId>org.ow2.asm</groupId>
             <artifactId>asm-tree</artifactId>
-            <version>9.7</version>
+            <version>9.11.1</version>
         </dependency>
         <dependency>
             <groupId>org.ow2.asm</groupId>
             <artifactId>asm-analysis</artifactId>
-            <version>9.7</version>
+            <version>9.11.1</version>
         </dependency>
         <dependency>
             <groupId>org.ow2.asm</groupId>
             <artifactId>asm-util</artifactId>
-            <version>9.7</version>
+            <version>9.11.1</version>
         </dependency>
         <dependency>
             <groupId>org.ow2.asm</groupId>
             <artifactId>asm-commons</artifactId>
-            <version>9.7</version>
+            <version>9.11.1</version>
         </dependency>
         <dependency>
             <groupId>com.formdev</groupId>
@@ -69,7 +72,7 @@
         <dependency>
             <groupId>com.jetbrains.intellij.java</groupId>
             <artifactId>java-decompiler-engine</artifactId>
-            <version>261.26222.65</version>
+            <version>${fernflower.version}</version>
         </dependency>
         <dependency>
             <groupId>com.google.code.gson</groupId>
@@ -120,11 +123,22 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-jar-plugin</artifactId>
                     <version>${maven.jar.version}</version>
+                    <configuration>
+                        <!-- The patched FernFlower classes go in the decompiler's JAR instead. -->
+                        <excludes>
+                            <exclude>org/jetbrains/**</exclude>
+                        </excludes>
+                    </configuration>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-dependency-plugin</artifactId>
                     <version>${maven.dependency.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-antrun-plugin</artifactId>
+                    <version>${maven.antrun.version}</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
@@ -170,7 +184,8 @@
                         <arg>-XDcompilePolicy=simple</arg>
                         <arg>-XDaddTypeAnnotationsToSymbol=true</arg>
                         <arg>--should-stop=ifError=FLOW</arg>
-                        <arg>-Xplugin:ErrorProne</arg>
+                        <!-- The patched FernFlower class is JetBrains' code, kept as close to theirs as possible. -->
+                        <arg>-Xplugin:ErrorProne -XepExcludedPaths:.*/src/main/java/org/jetbrains/.*</arg>
                     </compilerArgs>
                     <annotationProcessorPaths>
                         <path>
@@ -202,6 +217,30 @@
                         <configuration>
                             <includeScope>runtime</includeScope>
                             <outputDirectory>${project.build.directory}/lib</outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <!-- Puts the patched FernFlower classes in place of the originals in the copied decompiler JAR, so
+                     there is one copy of each whatever order a launcher puts the JARs in (docs/decisions/0010). -->
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>patch-fernflower</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <zip destfile="${project.build.directory}/lib/java-decompiler-engine-${fernflower.version}.jar"
+                                     update="true">
+                                    <fileset dir="${project.build.outputDirectory}"
+                                             includes="org/jetbrains/**/*.class"/>
+                                </zip>
+                            </target>
                         </configuration>
                     </execution>
                 </executions>
@@ -244,6 +283,9 @@
                             <include>src/main/java/**/*.java</include>
                             <include>src/test/java/**/*.java</include>
                         </includes>
+                        <excludes>
+                            <exclude>src/main/java/org/jetbrains/**</exclude>
+                        </excludes>
                         <removeUnusedImports/>
                         <trimTrailingWhitespace/>
                         <endWithNewline/>

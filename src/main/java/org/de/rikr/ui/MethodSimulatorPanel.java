@@ -240,8 +240,8 @@ public class MethodSimulatorPanel extends JPanel {
         if (userInterface.getContentPanel().getDisplayedClass() != owner) {
             userInterface.displayBytecode(owner);
         }
-        // The view fills in later on the event thread, so mark the line once it has.
-        SwingUtilities.invokeLater(this::markInstruction);
+        // The view fills in later, so mark the line once it has.
+        userInterface.getContentPanel().whenShown(this::markInstruction);
         onChange.run();
     }
 

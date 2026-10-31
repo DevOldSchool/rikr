@@ -6,28 +6,9 @@ import org.de.rikr.mapping.MemberMatch.Reason;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.commons.Remapper;
-import org.objectweb.asm.tree.AbstractInsnNode;
-import org.objectweb.asm.tree.ClassNode;
-import org.objectweb.asm.tree.FieldInsnNode;
-import org.objectweb.asm.tree.FieldNode;
-import org.objectweb.asm.tree.IntInsnNode;
-import org.objectweb.asm.tree.InvokeDynamicInsnNode;
-import org.objectweb.asm.tree.LdcInsnNode;
-import org.objectweb.asm.tree.MethodInsnNode;
-import org.objectweb.asm.tree.MethodNode;
-import org.objectweb.asm.tree.MultiANewArrayInsnNode;
-import org.objectweb.asm.tree.TypeInsnNode;
-import org.objectweb.asm.tree.VarInsnNode;
+import org.objectweb.asm.tree.*;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.IdentityHashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Function;
 
 /**
@@ -46,11 +27,17 @@ import java.util.function.Function;
  * candidate; ties are left unmatched.
  */
 public class MemberMatcher {
-    /** The lowest similarity that matches a member that has several candidates. */
+    /**
+     * The lowest similarity that matches a member that has several candidates.
+     */
     static final int MIN_SIMILAR_PERCENT = 60;
-    /** The lowest similarity that matches a member whose only candidate has the same kind and type. */
+    /**
+     * The lowest similarity that matches a member whose only candidate has the same kind and type.
+     */
     static final int MIN_ONLY_CANDIDATE_PERCENT = 40;
-    /** Confidence of a match that rests only on being the one candidate, with nothing to compare. */
+    /**
+     * Confidence of a match that rests only on being the one candidate, with nothing to compare.
+     */
     static final int NO_EVIDENCE_PERCENT = 50;
     // Larger groups of same-typed members are left unmatched instead of being compared pair by pair.
     static final long MAX_PAIRS_PER_GROUP = 250_000;
@@ -63,6 +50,10 @@ public class MemberMatcher {
     private static final double HAS_UNUSED_PARAMETERS = 0.6;
     private static final double LACKS_UNUSED_PARAMETERS = 0.4;
     private static final int ROUNDS = 2;
+    // How much the order of a field's accesses counts when ranking fields already alike in use: enough to tell
+    // apart fields such as x and y, which are used the same way, but not to match fields used differently.
+    private static final double ORDER_SHARE = 0.2;
+    private static final String ORDER_PREFIX = "order ";
     private static final int NO_EVIDENCE = -1;
 
     private final MethodComparator methodComparator = new MethodComparator();
@@ -176,12 +167,32 @@ public class MemberMatcher {
         Map<FieldNode, Map<String, Integer>> targetUses
     ) {
         List<Pair<FieldNode>> pairs = new ArrayList<>();
+        // Use and order are compared apart; every pair of a group compares the same maps, so each is split once.
+        Map<FieldNode, Map<String, Integer>> sourceUse = new IdentityHashMap<>();
+        Map<FieldNode, Map<String, Integer>> sourceOrder = new IdentityHashMap<>();
+        Map<FieldNode, Map<String, Integer>> targetUse = new IdentityHashMap<>();
+        Map<FieldNode, Map<String, Integer>> targetOrder = new IdentityHashMap<>();
+        split(sourceUses, sourceUse, sourceOrder);
+        split(targetUses, targetUse, targetOrder);
         for (Group<Member<FieldNode>> group : groups.values()) {
-            pairs.addAll(assign(group, (left, right) -> new Score(
-                dice(sourceUses.getOrDefault(left.node(), Map.of()), targetUses.getOrDefault(right.node(), Map.of())),
-                Reason.SIMILAR_USE)));
+            pairs.addAll(assign(group, (left, right) -> {
+                int use = dice(sourceUse.getOrDefault(left.node(), Map.of()), targetUse.getOrDefault(right.node(), Map.of()));
+                int order = dice(sourceOrder.getOrDefault(left.node(), Map.of()),
+                    targetOrder.getOrDefault(right.node(), Map.of()));
+                // The order only ranks fields already alike in use, such as x and y; it decides no match alone.
+                double rank = use == NO_EVIDENCE || order == NO_EVIDENCE ? use
+                    : (1 - ORDER_SHARE) * use + ORDER_SHARE * order;
+                return new Score(use, Reason.SIMILAR_USE, rank);
+            }));
         }
         return pairs;
+    }
+
+    private static void split(Map<FieldNode, Map<String, Integer>> uses, Map<FieldNode, Map<String, Integer>> use,
+                              Map<FieldNode, Map<String, Integer>> order) {
+        uses.forEach((field, features) -> features.forEach((feature, count) ->
+            (feature.startsWith(ORDER_PREFIX) ? order : use).computeIfAbsent(field, ignored -> new HashMap<>())
+                .put(feature, count)));
     }
 
     private List<Pair<MethodNode>> matchMethods(
@@ -234,23 +245,25 @@ public class MemberMatcher {
                 Score score = scorer.score(source, target);
                 if (score.percent() == NO_EVIDENCE) {
                     if (onlyCandidate) {
-                        candidates.add(new Candidate<>(source, target, NO_EVIDENCE_PERCENT, Reason.ONLY_CANDIDATE));
+                        candidates.add(new Candidate<>(source, target, NO_EVIDENCE_PERCENT, Reason.ONLY_CANDIDATE,
+                            NO_EVIDENCE_PERCENT));
                     }
                 } else if (score.percent() >= MIN_SIMILAR_PERCENT) {
-                    candidates.add(new Candidate<>(source, target, score.percent(), score.reason()));
+                    candidates.add(new Candidate<>(source, target, score.percent(), score.reason(), score.rank()));
                 } else if (onlyCandidate && score.percent() >= MIN_ONLY_CANDIDATE_PERCENT) {
-                    candidates.add(new Candidate<>(source, target, score.percent(), Reason.ONLY_CANDIDATE));
+                    candidates.add(new Candidate<>(source, target, score.percent(), Reason.ONLY_CANDIDATE,
+                        score.rank()));
                 }
             }
         }
-        candidates.sort(Comparator.comparingInt((Candidate<N> candidate) -> candidate.percent()).reversed());
+        candidates.sort(Comparator.comparingDouble((Candidate<N> candidate) -> candidate.rank()).reversed());
 
         Set<Member<N>> used = new HashSet<>();
         List<Pair<N>> pairs = new ArrayList<>();
         int start = 0;
         while (start < candidates.size()) {
             int end = start;
-            while (end < candidates.size() && candidates.get(end).percent() == candidates.get(start).percent()) {
+            while (end < candidates.size() && candidates.get(end).rank() == candidates.get(start).rank()) {
                 end++;
             }
             List<Candidate<N>> level = candidates.subList(start, end).stream()
@@ -517,19 +530,53 @@ public class MemberMatcher {
                     // are otherwise used alike. Elsewhere, control flow obfuscation reorders the code.
                     List<FieldNode> initialized = new ArrayList<>();
                     boolean initializer = method.name.startsWith("<");
+                    // Accesses by the source line they are on, for the order below.
+                    Map<String, List<long[]>> byType = new HashMap<>();
+                    List<FieldNode> accessed = new ArrayList<>();
+                    int line = -1;
+                    int position = 0;
                     for (AbstractInsnNode instruction : method.instructions) {
+                        if (instruction instanceof LineNumberNode number) {
+                            line = number.line;
+                        }
+                        position++;
+                        if (instruction instanceof FieldInsnNode access && line >= 0) {
+                            FieldNode field = resolveField(access);
+                            if (field != null) {
+                                accessed.add(field);
+                                byType.computeIfAbsent(access.getOpcode() + access.desc, ignored -> new ArrayList<>())
+                                    .add(new long[]{line, position, accessed.size() - 1});
+                            }
+                        }
                         if (instruction instanceof FieldInsnNode access) {
                             FieldNode field = resolveField(access);
                             if (field != null) {
                                 Map<String, Integer> fieldUses = uses.computeIfAbsent(field, ignored -> new HashMap<>());
                                 add(fieldUses, id + " " + access.getOpcode(), 1);
                                 add(fieldUses, id + " " + access.getOpcode() + " " + context(access), 1);
+                                String detail = detail(access, methodIds);
+                                if (detail != null) {
+                                    add(fieldUses, id + " " + access.getOpcode() + " " + detail, 1);
+                                }
                                 boolean write = access.getOpcode() == Opcodes.PUTFIELD
                                     || access.getOpcode() == Opcodes.PUTSTATIC;
                                 if (initializer && write && owner.fields.contains(field)) {
                                     initialized.add(field);
                                 }
                             }
+                        }
+                    }
+
+                    for (Map.Entry<String, List<long[]>> type : byType.entrySet()) {
+                        List<long[]> order = type.getValue();
+                        if (order.size() < 2) {
+                            continue;
+                        }
+                        order.sort(Comparator.<long[]>comparingLong(entry -> entry[0]).thenComparingLong(entry -> entry[1]));
+                        for (int index = 0; index < order.size(); index++) {
+                            Map<String, Integer> fieldUses = uses.get(accessed.get((int) order.get(index)[2]));
+                            add(fieldUses, ORDER_PREFIX + id + " " + type.getKey() + " #" + index, 1);
+                            add(fieldUses, ORDER_PREFIX + id + " " + type.getKey() + " #-" + (order.size() - index), 1);
                         }
                     }
                     // Counted from both ends, so a field added in a new version shifts only one of the two.
@@ -549,6 +596,45 @@ public class MemberMatcher {
          * A multiplication by a constant is passed over, since obfuscators wrap fields in one.
          */
         static String context(FieldInsnNode access) {
+            AbstractInsnNode next = neighbour(access);
+            if (next == null) {
+                return "none";
+            }
+            return next instanceof VarInsnNode variable ? next.getOpcode() + " " + variable.var
+                : String.valueOf(next.getOpcode());
+        }
+
+        /**
+         * More about where a value comes from or goes, for the cases {@link #context} sees only as an opcode: the
+         * call a written value came from, such as which of a buffer's read methods, and the constant a read value
+         * is compared with, such as an alignment field's {@code == 2}. Null when there is nothing more to say.
+         */
+        String detail(FieldInsnNode access, Map<MethodNode, Integer> methodIds) {
+            boolean write = access.getOpcode() == Opcodes.PUTFIELD || access.getOpcode() == Opcodes.PUTSTATIC;
+            AbstractInsnNode next = neighbour(access);
+            if (write && next instanceof MethodInsnNode call) {
+                Integer id = methodIds.get(resolveMethod(call));
+                return "from call " + (id != null ? id : member(call.owner, call.name) + methodDescriptor(call.desc));
+            }
+            if (!write && next != null && smallConstant(next) != null) {
+                AbstractInsnNode after = step(next, false);
+                if (after instanceof JumpInsnNode) {
+                    return "compared with " + smallConstant(next);
+                }
+            }
+            return null;
+        }
+
+        private static Integer smallConstant(AbstractInsnNode instruction) {
+            int opcode = instruction.getOpcode();
+            if (opcode >= Opcodes.ICONST_M1 && opcode <= Opcodes.ICONST_5) {
+                return opcode - Opcodes.ICONST_0;
+            }
+            return instruction instanceof IntInsnNode value && opcode != Opcodes.NEWARRAY ? value.operand : null;
+        }
+
+        // The instruction a written value comes from or a read value goes to, passing over a multiplication.
+        private static AbstractInsnNode neighbour(FieldInsnNode access) {
             boolean write = access.getOpcode() == Opcodes.PUTFIELD || access.getOpcode() == Opcodes.PUTSTATIC;
             AbstractInsnNode next = step(access, write);
             if (write && next != null && isMultiply(next)) {
@@ -562,11 +648,7 @@ public class MemberMatcher {
                     next = step(multiply, false);
                 }
             }
-            if (next == null) {
-                return "none";
-            }
-            return next instanceof VarInsnNode variable ? next.getOpcode() + " " + variable.var
-                : String.valueOf(next.getOpcode());
+            return next;
         }
 
         private static AbstractInsnNode step(AbstractInsnNode from, boolean backwards) {
@@ -662,7 +744,11 @@ public class MemberMatcher {
         }
     }
 
-    private record Score(int percent, Reason reason) {
+    // percent decides whether a pair may match and is its confidence; rank orders the pairs that may.
+    private record Score(int percent, Reason reason, double rank) {
+        Score(int percent, Reason reason) {
+            this(percent, reason, percent);
+        }
     }
 
     // Matched members numbered alike on both sides, so features that name them can be compared.
@@ -678,7 +764,7 @@ public class MemberMatcher {
         }
     }
 
-    private record Candidate<N>(Member<N> source, Member<N> target, int percent, Reason reason) {
+    private record Candidate<N>(Member<N> source, Member<N> target, int percent, Reason reason, double rank) {
     }
 
     private record Pair<N>(Member<N> source, Member<N> target, int percent, Reason reason) {

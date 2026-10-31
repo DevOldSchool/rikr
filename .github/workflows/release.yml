@@ -64,8 +64,11 @@ jobs:
             if [ "$type" = "deb" ] || [ "$type" = "rpm" ]; then
               extra="--linux-shortcut"
             fi
+            # jpackage's own jlink options without --strip-native-commands: the decompiler runs in a JVM started
+            # with the runtime's java launcher (docs/decisions/0011).
             jpackage --type "$type" --name Rikr --app-version "$version" \
               --vendor "Rikr" --description "A reverse engineering workbench for Java bytecode" \
+              --jlink-options "--strip-debug --no-man-pages --no-header-files" \
               --input target/jpackage-input --main-jar rikr.jar --main-class org.de.rikr.Rikr \
               --icon "$icon" $extra --dest dist
           done

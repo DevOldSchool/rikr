@@ -66,8 +66,8 @@ final class RikrTools implements AutoCloseable {
 
     private final ProjectSessionService sessions = new ProjectSessionService();
     private final List<String> log = Collections.synchronizedList(new ArrayList<>());
-    // Only messages from the thread running a tool belong in its result; the decompiler's background warm-up
-    // logs a great deal that has nothing to do with the call.
+    // Only messages from the thread running a tool belong in its result; the decompiler's own thread logs a great
+    // deal that has nothing to do with the call.
     private volatile Thread toolThread;
     private final Logger logger;
     private Project project;

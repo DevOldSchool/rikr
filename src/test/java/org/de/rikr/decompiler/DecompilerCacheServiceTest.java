@@ -36,7 +36,7 @@ class DecompilerCacheServiceTest {
             assertNotNull(service.getDecompiledSource(first));
             assertNull(service.getDecompiledSource(sameNameInOtherJar));
 
-            service.invalidateJar("first.jar", List.of(first));
+            service.invalidate(List.of(first));
 
             assertNull(service.getDecompiledSource(first));
         }

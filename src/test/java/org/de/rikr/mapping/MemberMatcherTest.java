@@ -165,6 +165,30 @@ class MemberMatcherTest {
     }
 
     @Test
+    void tellsApartFieldsUsedAlikeByTheOrderOfTheirSourceLines() {
+        ClassNode source = resetInOrder("a", "x", "y");
+        ClassNode target = resetInOrder("b", "p", "q");
+        // Declared the other way round, so only the order in reset() tells them apart.
+        target.fields.addFirst(target.fields.removeLast());
+
+        MemberMatches matches = matcher.match(List.of(source), List.of(target), Map.of("a", "b"));
+
+        assertEquals("p", field(matches, "x").orElseThrow().target().name());
+        assertEquals("q", field(matches, "y").orElseThrow().target().name());
+    }
+
+    @Test
+    void tellsApartFieldsByTheCallTheyAreSetFromAndTheConstantTheyAreComparedWith() {
+        ClassNode source = decoder("a", "kind", "size");
+        ClassNode target = decoder("b", "k", "s");
+
+        MemberMatches matches = matcher.match(List.of(source), List.of(target), Map.of("a", "b"));
+
+        assertEquals("k", field(matches, "kind").orElseThrow().target().name());
+        assertEquals("s", field(matches, "size").orElseThrow().target().name());
+    }
+
+    @Test
     void theOnlyCandidateMatchesWithoutEvidence() {
         ClassNode source = classNode("a");
         source.fields.add(new FieldNode(Opcodes.ACC_PUBLIC, "unused", "J", null, null));
@@ -323,6 +347,71 @@ class MemberMatcherTest {
         constructor.instructions.add(new InsnNode(Opcodes.RETURN));
         classNode.methods.add(constructor);
         return classNode;
+    }
+
+    // A class whose reset() sets each int field to zero on its own source line, in the order given.
+    private static ClassNode resetInOrder(String name, String... fields) {
+        ClassNode classNode = classNode(name);
+        MethodNode reset = new MethodNode(Opcodes.ACC_PUBLIC, "reset", "()V", null, null);
+        int line = 10;
+        for (String field : fields) {
+            classNode.fields.add(new FieldNode(Opcodes.ACC_PUBLIC, field, "I", null, null));
+            LabelNode label = new LabelNode();
+            reset.instructions.add(label);
+            reset.instructions.add(new org.objectweb.asm.tree.LineNumberNode(line++, label));
+            reset.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            reset.instructions.add(new InsnNode(Opcodes.ICONST_0));
+            reset.instructions.add(new FieldInsnNode(Opcodes.PUTFIELD, name, field, "I"));
+        }
+        reset.instructions.add(new InsnNode(Opcodes.RETURN));
+        classNode.methods.add(reset);
+        return classNode;
+    }
+
+    /**
+     * A class with two int fields, the first set from readByte() and compared with 2, the second set from
+     * readShort() and compared with 3, with no line numbers, so only the calls and constants tell them apart.
+     */
+    private static ClassNode decoder(String name, String first, String second) {
+        ClassNode classNode = classNode(name);
+        classNode.fields.add(new FieldNode(Opcodes.ACC_PUBLIC, first, "I", null, null));
+        classNode.fields.add(new FieldNode(Opcodes.ACC_PUBLIC, second, "I", null, null));
+        classNode.methods.add(reading(name, "readByte", 1));
+        classNode.methods.add(reading(name, "readShort", 2));
+        MethodNode decode = new MethodNode(Opcodes.ACC_PUBLIC, "decode", "()V", null, null);
+        for (String[] field : new String[][]{{first, "readByte"}, {second, "readShort"}}) {
+            decode.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            decode.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            decode.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, name, field[1], "()I"));
+            decode.instructions.add(new FieldInsnNode(Opcodes.PUTFIELD, name, field[0], "I"));
+        }
+        decode.instructions.add(new InsnNode(Opcodes.RETURN));
+        classNode.methods.add(decode);
+        MethodNode check = new MethodNode(Opcodes.ACC_PUBLIC, "check", "()Z", null, null);
+        LabelNode no = new LabelNode();
+        for (String[] field : new String[][]{{second, "3"}, {first, "2"}}) {
+            check.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            check.instructions.add(new FieldInsnNode(Opcodes.GETFIELD, name, field[0], "I"));
+            check.instructions.add(new InsnNode(Opcodes.ICONST_0 + Integer.parseInt(field[1])));
+            check.instructions.add(new JumpInsnNode(Opcodes.IF_ICMPNE, no));
+        }
+        check.instructions.add(new InsnNode(Opcodes.ICONST_1));
+        check.instructions.add(new InsnNode(Opcodes.IRETURN));
+        check.instructions.add(no);
+        check.instructions.add(new InsnNode(Opcodes.ICONST_0));
+        check.instructions.add(new InsnNode(Opcodes.IRETURN));
+        classNode.methods.add(check);
+        return classNode;
+    }
+
+    // A method that returns its own small constant, so methods of different names have different code.
+    private static MethodNode reading(String owner, String name, int value) {
+        MethodNode method = new MethodNode(Opcodes.ACC_PUBLIC, name, "()I", null, null);
+        method.instructions.add(new IntInsnNode(Opcodes.BIPUSH, value * 40));
+        method.instructions.add(new LdcInsnNode(name));
+        method.instructions.add(new InsnNode(Opcodes.POP));
+        method.instructions.add(new InsnNode(Opcodes.IRETURN));
+        return method;
     }
 
     private static MethodNode everything(String owner, String name) {

@@ -15,3 +15,5 @@ a new record and mark the old one as replaced.
 | [0007](0007-mcp-server-over-stdio.md) | Agents use Rikr through its own MCP server over stdio |
 | [0008](0008-entry-points-by-heuristics.md) | Entry points are found by heuristics, most likely first |
 | [0009](0009-current-method-shared-by-workspaces.md) | The chosen method is current for every workspace |
+| [0010](0010-patched-fernflower-class.md) | One FernFlower class is patched in Rikr |
+| [0011](0011-decompiler-in-its-own-jvm.md) | The decompiler runs in a JVM of its own |

@@ -6,6 +6,7 @@ import org.de.rikr.theme.Theme;
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.text.Document;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.Element;
 import java.awt.*;
@@ -32,7 +33,7 @@ public class LineNumberComponent extends JComponent {
         setFont(defaultFont);
         updateFontMetrics(defaultFont);
 
-        textPane.getDocument().addDocumentListener(new DocumentListener() {
+        DocumentListener changes = new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
                 updatePreferredWidth();
@@ -49,6 +50,18 @@ public class LineNumberComponent extends JComponent {
             public void changedUpdate(DocumentEvent e) {
                 repaint();
             }
+        };
+        textPane.getDocument().addDocumentListener(changes);
+        // The pane is given a new document for each class it shows.
+        textPane.addPropertyChangeListener("document", event -> {
+            if (event.getOldValue() instanceof Document old) {
+                old.removeDocumentListener(changes);
+            }
+            if (event.getNewValue() instanceof Document replacement) {
+                replacement.addDocumentListener(changes);
+            }
+            updatePreferredWidth();
+            repaint();
         });
 
         textPane.addCaretListener(e -> repaint());

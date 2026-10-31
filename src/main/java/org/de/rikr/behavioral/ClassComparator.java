@@ -8,8 +8,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 public class ClassComparator {
+    // Any class type outside java/; String.replaceAll would compile this again for every descriptor.
+    private static final Pattern APPLICATION_TYPE = Pattern.compile("L(?!java/).*?;");
 
     public List<ClassNode> getMatchingClassNodes(List<ClassNode> classes, ClassNode classNodeToMatch) {
         return getClassNodeMatches(classes, classNodeToMatch).stream()
@@ -22,9 +25,19 @@ public class ClassComparator {
         Objects.requireNonNull(classes, "classes");
         Objects.requireNonNull(classNodeToMatch, "classNodeToMatch");
 
-        return classes.stream()
-            .filter(Objects::nonNull)
-            .map(classNode -> new ClassMatch(classNode, getSimilarityPercent(classNodeToMatch, classNode)))
+        return getClassNodeMatches(signatures(classes), signature(classNodeToMatch));
+    }
+
+    /**
+     * {@link #getClassNodeMatches(List, ClassNode)} for classes whose signatures were worked out already, which is
+     * what makes comparing every class of one JAR with every class of another affordable.
+     */
+    public List<ClassMatch> getClassNodeMatches(List<Signature> candidates, Signature source) {
+        Objects.requireNonNull(candidates, "candidates");
+        Objects.requireNonNull(source, "source");
+
+        return candidates.stream()
+            .map(candidate -> new ClassMatch(candidate.classNode(), similarityPercent(source, candidate)))
             .filter(match -> match.similarityPercent() > 0)
             .sorted((left, right) -> {
                 int scoreComparison = Integer.compare(right.similarityPercent(), left.similarityPercent());
@@ -41,16 +54,49 @@ public class ClassComparator {
         Objects.requireNonNull(source, "source");
         Objects.requireNonNull(candidate, "candidate");
 
-        if (Modifier.isInterface(source.access) != Modifier.isInterface(candidate.access)) {
+        return similarityPercent(signature(source), signature(candidate));
+    }
+
+    /**
+     * The parts of a class that are compared, as the class is now; a signature is not updated when the class
+     * changes, so it is meant to be used straight away.
+     */
+    public Signature signature(ClassNode classNode) {
+        Objects.requireNonNull(classNode, "classNode");
+        Map<String, Integer> partCounts = new HashMap<>();
+        List<String> parts = getSignatureParts(classNode);
+        for (String part : parts) {
+            partCounts.merge(part, 1, Integer::sum);
+        }
+        return new Signature(classNode, Modifier.isInterface(classNode.access), Map.copyOf(partCounts), parts.size());
+    }
+
+    public List<Signature> signatures(List<ClassNode> classes) {
+        return classes.stream()
+            .filter(Objects::nonNull)
+            .map(this::signature)
+            .toList();
+    }
+
+    /**
+     * @param partCounts how many times each part occurs
+     * @param size       how many parts there are
+     */
+    public record Signature(ClassNode classNode, boolean isInterface, Map<String, Integer> partCounts, int size) {
+    }
+
+    private static int similarityPercent(Signature source, Signature candidate) {
+        if (source.isInterface() != candidate.isInterface()) {
             return 0;
         }
 
-        List<String> sourceSignature = getSignatureParts(source);
-        List<String> candidateSignature = getSignatureParts(candidate);
-        int matchingPartCount = getMatchingPartCount(sourceSignature, candidateSignature);
+        // Each part of the source matches at most one part of the candidate.
+        int matchingPartCount = 0;
+        for (Map.Entry<String, Integer> part : source.partCounts().entrySet()) {
+            matchingPartCount += Math.min(part.getValue(), candidate.partCounts().getOrDefault(part.getKey(), 0));
+        }
 
-        return (int) Math.round(200.0 * matchingPartCount
-            / (sourceSignature.size() + candidateSignature.size()));
+        return (int) Math.round(200.0 * matchingPartCount / (source.size() + candidate.size()));
     }
 
     public List<String> getNonStaticFieldDescriptions(ClassNode classNode) {
@@ -71,7 +117,7 @@ public class ClassComparator {
 
     public String normalizeDescriptor(String descriptor) {
         Objects.requireNonNull(descriptor, "descriptor");
-        return descriptor.replaceAll("L(?!java/).*?;", "L?;");
+        return APPLICATION_TYPE.matcher(descriptor).replaceAll("L?;");
     }
 
     private List<String> getSignatureParts(ClassNode classNode) {
@@ -86,24 +132,6 @@ public class ClassComparator {
         getNonStaticMethodDescriptions(classNode).forEach(description -> parts.add("method:" + description));
 
         return parts;
-    }
-
-    private int getMatchingPartCount(List<String> sourceParts, List<String> candidateParts) {
-        Map<String, Integer> candidatePartCounts = new HashMap<>();
-        for (String part : candidateParts) {
-            candidatePartCounts.merge(part, 1, Integer::sum);
-        }
-
-        int matchingPartCount = 0;
-        for (String part : sourceParts) {
-            int availableCount = candidatePartCounts.getOrDefault(part, 0);
-            if (availableCount > 0) {
-                matchingPartCount++;
-                candidatePartCounts.put(part, availableCount - 1);
-            }
-        }
-
-        return matchingPartCount;
     }
 
     private boolean hasSuperclass(ClassNode classNode) {

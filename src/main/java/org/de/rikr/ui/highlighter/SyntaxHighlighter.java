@@ -14,11 +14,6 @@ import java.util.regex.Pattern;
 public class SyntaxHighlighter {
     private static final Logger LOGGER = Logger.getLogger(SyntaxHighlighter.class.getName());
 
-    private static final String KEYWORD_STYLE = "Keyword";
-    private static final String COMMENT_STYLE = "Comment";
-    private static final String NUMBER_STYLE = "Number";
-    private static final String STRING_STYLE = "String";
-    private static final String ANNOTATION_STYLE = "Annotation";
 
     private static final float LINE_HEIGHT = -0.2f;
 
@@ -41,8 +36,9 @@ public class SyntaxHighlighter {
             throw new RuntimeException(e);
         }
 
-        // Define styles
-        Style defaultStyle = doc.addStyle(StyleContext.DEFAULT_STYLE, null);
+        // Plain attribute sets, not the document's styles: the document is highlighted off the event thread, and a
+        // change to one of its styles is announced to the screen later, as a change to all of its text.
+        SimpleAttributeSet defaultStyle = new SimpleAttributeSet();
         StyleConstants.setForeground(defaultStyle, Theme.SYNTAX_HIGHLIGHT_DEFAULT_COLOR);
         StyleConstants.setFontFamily(defaultStyle, defaultFont.getFamily());
         StyleConstants.setFontSize(defaultStyle, defaultFont.getSize());
@@ -50,21 +46,22 @@ public class SyntaxHighlighter {
         StyleConstants.setSpaceAbove(defaultStyle, 4);
         StyleConstants.setSpaceBelow(defaultStyle, 4);
 
-        Style keywordStyle = doc.addStyle(KEYWORD_STYLE, defaultStyle);
+        // Applied over the default style, which every character already has.
+        SimpleAttributeSet keywordStyle = new SimpleAttributeSet();
         StyleConstants.setForeground(keywordStyle, Theme.SYNTAX_HIGHLIGHT_KEYWORD_COLOR);
         StyleConstants.setBold(keywordStyle, true);
 
-        Style commentStyle = doc.addStyle(COMMENT_STYLE, defaultStyle);
+        SimpleAttributeSet commentStyle = new SimpleAttributeSet();
         StyleConstants.setForeground(commentStyle, Theme.SYNTAX_HIGHLIGHT_COMMENT_COLOR);
         StyleConstants.setItalic(commentStyle, true);
 
-        Style numberStyle = doc.addStyle(NUMBER_STYLE, defaultStyle);
+        SimpleAttributeSet numberStyle = new SimpleAttributeSet();
         StyleConstants.setForeground(numberStyle, Theme.SYNTAX_HIGHLIGHT_NUMBER_COLOR);
 
-        Style stringStyle = doc.addStyle(STRING_STYLE, defaultStyle);
+        SimpleAttributeSet stringStyle = new SimpleAttributeSet();
         StyleConstants.setForeground(stringStyle, Theme.SYNTAX_HIGHLIGHT_STRING_COLOR);
 
-        Style annotationStyle = doc.addStyle(ANNOTATION_STYLE, defaultStyle);
+        SimpleAttributeSet annotationStyle = new SimpleAttributeSet();
         StyleConstants.setForeground(annotationStyle, Theme.SYNTAX_HIGHLIGHT_ANNOTATION_COLOR);
         StyleConstants.setBold(annotationStyle, true);
 
@@ -86,7 +83,7 @@ public class SyntaxHighlighter {
         highlightNumbers(doc, content, numberStyle);
     }
 
-    private void highlightComments(StyledDocument doc, String content, Style commentStyle) {
+    private void highlightComments(StyledDocument doc, String content, AttributeSet commentStyle) {
         commentRegions = new ArrayList<>();
 
         // Highlight single-line comments
@@ -110,7 +107,7 @@ public class SyntaxHighlighter {
         }
     }
 
-    private void highlightKeywords(StyledDocument doc, String content, Style keywordStyle) {
+    private void highlightKeywords(StyledDocument doc, String content, AttributeSet keywordStyle) {
         // Highlight Java keywords
         String[] keywords = {
             "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class", "const",
@@ -136,7 +133,7 @@ public class SyntaxHighlighter {
         }
     }
 
-    private void highlightNumbers(StyledDocument doc, String content, Style numberStyle) {
+    private void highlightNumbers(StyledDocument doc, String content, AttributeSet numberStyle) {
         // Pattern to match numbers, integers and decimals
         String[] numberPatterns = {"\\b\\d+\\b", "\\b\\d+\\.\\d+\\b"};
 
@@ -155,7 +152,7 @@ public class SyntaxHighlighter {
         }
     }
 
-    private void highlightStrings(StyledDocument doc, String content, Style stringStyle) {
+    private void highlightStrings(StyledDocument doc, String content, AttributeSet stringStyle) {
         stringRegions = new ArrayList<>();
         Pattern pattern = Pattern.compile("\"(.*?)\"");
         Matcher matcher = pattern.matcher(content);
@@ -170,7 +167,7 @@ public class SyntaxHighlighter {
         }
     }
 
-    private void highlightAnnotations(StyledDocument doc, String content, Style annotationStyle) {
+    private void highlightAnnotations(StyledDocument doc, String content, AttributeSet annotationStyle) {
         annotationRegions = new ArrayList<>();
         // Patterns:
         // 1) Java-style annotations: @Qualified.OrSimple_Name

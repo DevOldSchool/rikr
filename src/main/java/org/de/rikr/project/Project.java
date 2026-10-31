@@ -162,14 +162,10 @@ public class Project implements AutoCloseable {
             case ProjectEvent.JarsLoaded loaded -> {
                 for (String jar : loaded.jars()) {
                     references.indexJar(jar, workspace.classesSnapshot(jar));
-                    File source = workspace.sourceFile(jar);
-                    if (source != null) {
-                        decompiler.warmUpJar(jar, source, () -> workspace.classesSnapshot(jar));
-                    }
                 }
             }
             case ProjectEvent.JarRemoved removed -> {
-                decompiler.invalidateJar(removed.jar(), removed.classes());
+                decompiler.invalidate(removed.classes());
                 references.removeJar(removed.jar());
                 mappings.removeJar(removed.jar());
                 renames.removeJar(removed.jar());
@@ -209,7 +205,7 @@ public class Project implements AutoCloseable {
      */
     private void refreshJar(String jar) {
         workspace.classesChanged(jar);
-        decompiler.invalidateJar(jar, workspace.classesSnapshot(jar));
+        decompiler.invalidate(workspace.classesSnapshot(jar));
         reindex(jar);
     }
 

@@ -13,7 +13,7 @@ Exactly one thread changes a project: the Swing event thread in the GUI, the req
 work runs on `TaskRunner`, one task at a time, and must not change the project: it returns a result that the event
 thread applies. Work that needs class data on another thread first takes a snapshot on the owning thread, for
 example `JarOperations.snapshot`, which converts classes to bytes before a JAR is written in the background.
-The decompiler warm-up reads its own copy of the JAR from disk.
+The decompiler converts the class it is asked for to bytes before decompiling it on its own thread.
 
 ## Consequences
 

@@ -39,7 +39,7 @@ class ProjectTest {
     @TempDir
     Path tempDir;
 
-    // The decompiler's warm-up thread logs too, so the list must take messages from several threads.
+    // The decompiler's thread logs too, so the list must take messages from several threads.
     private final List<String> log = new CopyOnWriteArrayList<>();
     private final Project project = new Project(log::add);
 

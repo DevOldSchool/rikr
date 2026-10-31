@@ -7,6 +7,8 @@ import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.MethodNode;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -64,7 +66,7 @@ final class CodeLink {
             return javaFieldAt(owner, java, offset).flatMap(field -> bytecodeField(field, bytecode));
         }
         JavaMethod method = enclosing.get();
-        Optional<Range> header = bytecodeHeader(method.method(), bytecode);
+        Optional<Range> header = bytecodeHeader(owner, method.method(), bytecode);
         if (header.isEmpty()) {
             return Optional.empty();
         }
@@ -132,7 +134,7 @@ final class CodeLink {
         if (inJava.isEmpty()) {
             return Optional.empty();
         }
-        int start = bytecodeHeader(method.get(), bytecode).map(Range::start).orElse(0);
+        int start = bytecodeHeader(owner, method.get(), bytecode).map(Range::start).orElse(0);
         int javaEnd = methods.stream().mapToInt(JavaMethod::start).filter(at -> at > inJava.get().start())
             .min().orElse(java.length());
         if (lineStart(bytecode, offset) == lineStart(bytecode, start)) {
@@ -141,45 +143,47 @@ final class CodeLink {
         int bodyEnd = bytecodeMethodEnd(owner, bytecode, start);
         boolean isStatic = (method.get().access & Opcodes.ACC_STATIC) != 0;
 
-        // The Java lines made from the clicked instruction's source line, inside this method when possible.
+        // The Java lines made from the clicked instruction's source line, inside this method when possible, else
+        // outside every method, as a field's initializer is for a constructor. Never inside another method: methods
+        // may share line numbers, as obfuscators' often do, and FernFlower marks only one of their lines.
         int line = sourceLineAt(bytecode, start, offset);
         List<Range> javaLines = new ArrayList<>();
         if (line >= 0) {
-            List<Range> anywhere = new ArrayList<>();
+            List<Range> outside = new ArrayList<>();
             originals.forEach((javaLine, numbers) -> {
-                if (numbers.contains(line)) {
-                    anywhere.add(lineRange(java, javaLine));
+                if (!numbers.contains(line)) {
+                    return;
+                }
+                Range range = lineRange(java, javaLine);
+                Optional<JavaMethod> in = enclosing(methods, range.start());
+                if (in.isPresent() && in.get().method() == method.get()) {
+                    javaLines.add(range);
+                } else if (in.isEmpty()) {
+                    outside.add(range);
                 }
             });
-            anywhere.sort((left, right) -> Integer.compare(left.start(), right.start()));
-            anywhere.stream().filter(range -> range.start() >= inJava.get().start() && range.start() < javaEnd)
-                .forEach(javaLines::add);
             if (javaLines.isEmpty()) {
-                javaLines.addAll(anywhere);
+                javaLines.addAll(outside);
             }
+            javaLines.sort((left, right) -> Integer.compare(left.start(), right.start()));
         }
         boolean byLine = !javaLines.isEmpty();
-        List<Range> javaRegions = byLine ? javaLines : List.of(new Range(inJava.get().start(), javaEnd));
+        // After the declaration's name, which would otherwise match a call or field of the same name.
+        Range javaBody = new Range(inJava.get().name().end(), javaEnd);
+        List<Range> javaRegions = byLine ? javaLines : List.of(javaBody);
         Range bytecodeRegion = byLine ? lineRegionAt(bytecode, start, bodyEnd, offset) : new Range(start, bodyEnd);
 
         Range clicked = instructionAt(bytecode, offset);
         String name = clicked == null ? null : token(bytecode.substring(clicked.start(), clicked.end()), isStatic);
         if (name != null) {
-            int count = 0;
-            for (Range instruction : instructions(bytecode, bytecodeRegion)) {
-                if (instruction.start() > clicked.start()) {
-                    break;
-                }
-                if (name.equals(token(bytecode.substring(instruction.start(), instruction.end()), isStatic))) {
-                    count++;
-                }
+            Optional<Range> found = sameToken(bytecode, bytecodeRegion, clicked, name, isStatic, java, javaRegions);
+            // FernFlower may mark only the first of the Java lines a source line became, as it does for an array
+            // filled element by element; then the name is looked for in the whole method.
+            if (found.isEmpty() && byLine) {
+                found = sameToken(bytecode, new Range(start, bodyEnd), clicked, name, isStatic, java, List.of(javaBody));
             }
-            List<Range> found = new ArrayList<>();
-            for (Range region : javaRegions) {
-                found.addAll(occurrences(java, name, region.start(), region.end()));
-            }
-            if (!found.isEmpty()) {
-                return Optional.of(found.get(Math.max(0, Math.min(count, found.size()) - 1)));
+            if (found.isPresent()) {
+                return found;
             }
         }
         if (byLine) {
@@ -187,6 +191,29 @@ final class CodeLink {
         }
         return sameOccurrence(bytecode, start, offset, java, inJava.get().start(), javaEnd)
             .or(() -> Optional.of(inJava.get().name()));
+    }
+
+    // The occurrence of an instruction's token in the Java regions with the same count as the instruction has
+    // among those in the bytecode region, or the last occurrence if the Java has fewer.
+    private static Optional<Range> sameToken(String bytecode, Range bytecodeRegion, Range clicked, String name,
+                                             boolean isStatic, String java, List<Range> javaRegions) {
+        int count = 0;
+        for (Range instruction : instructions(bytecode, bytecodeRegion)) {
+            if (instruction.start() > clicked.start()) {
+                break;
+            }
+            if (name.equals(token(bytecode.substring(instruction.start(), instruction.end()), isStatic))) {
+                count++;
+            }
+        }
+        List<Range> found = new ArrayList<>();
+        for (Range region : javaRegions) {
+            found.addAll(occurrences(java, name, region.start(), region.end()));
+        }
+        if (found.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(found.get(Math.max(0, Math.min(count, found.size()) - 1)));
     }
 
     // Instruction lines start with an opcode in capitals; labels, line numbers and frames are not instructions.
@@ -209,8 +236,12 @@ final class CodeLink {
         Map.entry("*", "(?<!/)\\*(?!/)"), Map.entry("/", "(?<![/*])/(?![/*])"), Map.entry("%", "%"),
         Map.entry("<<", "(?<!<)<<(?!<)"), Map.entry(">>", "(?<!>)>>(?!>)"), Map.entry(">>>", ">>>"),
         Map.entry("&", "(?<!&)&(?!&)"), Map.entry("|", "(?<!\\|)\\|(?!\\|)"), Map.entry("^", "\\^"),
-        Map.entry("[", "\\["));
+        // An index after a name or a closing bracket, not a type's [] nor the size in new T[n].
+        Map.entry("[", "(?<!new [\\w$.]{1,200})(?<=[\\w$)\\]])\\[(?!\\])"));
     private static final Pattern NUMBER = Pattern.compile("-?\\d+(?:\\.\\d+)?[LFD]?");
+    // Java writes long, float and double literals with a suffix, such as 671064862094971049L; bytecode doesn't.
+    private static final Pattern SUFFIXED_NUMBER = Pattern.compile("(-?\\d+(?:\\.\\d+)?)[LFDlfd]");
+    private static final Pattern UNSUFFIXED_NUMBER = Pattern.compile("-?\\d+(?:\\.\\d+)?");
 
     /**
      * What an instruction reads as in Java, or null when it has no word of its own there. Local variables are named
@@ -240,7 +271,7 @@ final class CodeLink {
             return operand;
         }
         if (opcode.equals("LDC") && NUMBER.matcher(operand).matches()) {
-            return operand;
+            return withoutSuffix(operand);
         }
         if (opcode.equals("ACONST_NULL")) {
             return "null";
@@ -405,13 +436,11 @@ final class CodeLink {
      */
     static Optional<MethodNode> methodAtBytecode(ClassNode owner, String bytecode, int offset) {
         MethodNode found = null;
-        int foundAt = -1;
-        for (MethodNode method : owner.methods) {
-            int at = bytecodeHeader(method, bytecode).map(Range::start).orElse(-1);
-            if (at >= 0 && lineStart(bytecode, at) <= offset && at > foundAt) {
-                found = method;
-                foundAt = at;
+        for (Header header : headers(owner, bytecode).inOrder()) {
+            if (header.lineStart() > offset) {
+                break;
             }
+            found = header.method();
         }
         return Optional.ofNullable(found);
     }
@@ -438,6 +467,16 @@ final class CodeLink {
     }
 
     private static List<JavaMethod> javaMethods(ClassNode owner, String java) {
+        JavaMethods cached = lastJavaMethods;
+        if (cached != null && cached.owner() == owner && cached.java().equals(java)) {
+            return cached.methods();
+        }
+        List<JavaMethod> methods = findJavaMethods(owner, java);
+        lastJavaMethods = new JavaMethods(owner, java, methods);
+        return methods;
+    }
+
+    private static List<JavaMethod> findJavaMethods(ClassNode owner, String java) {
         List<JavaMethod> methods = new ArrayList<>();
         Matcher declaration = DECLARATION.matcher(java);
         while (declaration.find()) {
@@ -461,7 +500,7 @@ final class CodeLink {
                     new Range(staticBlock.start(), staticBlock.end()))));
         }
         methods.sort((left, right) -> Integer.compare(left.start(), right.start()));
-        return methods;
+        return List.copyOf(methods);
     }
 
     // The method a Java offset is in: the last declaration before it, unless the offset is on a field line between
@@ -521,22 +560,83 @@ final class CodeLink {
     }
 
     // A method header is its name and descriptor at the start of a line, after any modifiers.
-    private static Optional<Range> bytecodeHeader(MethodNode method, String bytecode) {
-        Matcher header = Pattern.compile("(?m)^[ \\t]*(?:[a-z]+ )*(" + Pattern.quote(method.name)
-            + ")" + Pattern.quote(method.desc)).matcher(bytecode);
-        return header.find() ? Optional.of(new Range(header.start(1), header.end(1))) : Optional.empty();
+    private static Optional<Range> bytecodeHeader(ClassNode owner, MethodNode method, String bytecode) {
+        return Optional.ofNullable(headers(owner, bytecode).names().get(method));
     }
 
+    // Where the next method's header line starts, or the end of the text.
     private static int bytecodeMethodEnd(ClassNode owner, String bytecode, int start) {
-        int end = bytecode.length();
-        for (MethodNode method : owner.methods) {
-            int at = bytecodeHeader(method, bytecode).map(Range::start).orElse(-1);
-            if (at > start) {
-                end = Math.min(end, lineStart(bytecode, at));
+        for (Header header : headers(owner, bytecode).inOrder()) {
+            if (header.name().start() > start) {
+                return header.lineStart();
             }
         }
-        return end;
+        return bytecode.length();
     }
+
+    // Every method's header, found in one pass: a large class has hundreds of methods and megabytes of bytecode,
+    // and a link is made on every caret move. The last texts' are kept, since the same class is clicked again.
+    private static Headers headers(ClassNode owner, String bytecode) {
+        Headers cached = lastHeaders;
+        if (cached != null && cached.owner() == owner && cached.bytecode().equals(bytecode)) {
+            return cached;
+        }
+        Map<String, MethodNode> bySignature = new HashMap<>();
+        for (MethodNode method : owner.methods) {
+            bySignature.putIfAbsent(method.name + method.desc, method);
+        }
+        Map<MethodNode, Range> names = new IdentityHashMap<>();
+        List<Header> inOrder = new ArrayList<>();
+        int lineStart = 0;
+        while (lineStart < bytecode.length()) {
+            int lineEnd = lineEnd(bytecode, lineStart);
+            int at = lineStart;
+            while (at < lineEnd && (bytecode.charAt(at) == ' ' || bytecode.charAt(at) == '\t')) {
+                at++;
+            }
+            // Modifiers are lower-case words, each followed by a space.
+            int word = at;
+            while (word < lineEnd && bytecode.charAt(word) >= 'a' && bytecode.charAt(word) <= 'z') {
+                word++;
+                if (word < lineEnd && bytecode.charAt(word) == ' ') {
+                    at = ++word;
+                }
+            }
+            int end = at;
+            while (end < lineEnd && !Character.isWhitespace(bytecode.charAt(end))) {
+                end++;
+            }
+            int parameters = at;
+            while (parameters < end && bytecode.charAt(parameters) != '(') {
+                parameters++;
+            }
+            if (parameters > at && parameters < end) {
+                MethodNode method = bySignature.get(bytecode.substring(at, end));
+                if (method != null && !names.containsKey(method)) {
+                    Range name = new Range(at, parameters);
+                    names.put(method, name);
+                    inOrder.add(new Header(method, name, lineStart));
+                }
+            }
+            lineStart = lineEnd + 1;
+        }
+        Headers headers = new Headers(owner, bytecode, names, List.copyOf(inOrder));
+        lastHeaders = headers;
+        return headers;
+    }
+
+    private record Header(MethodNode method, Range name, int lineStart) {
+    }
+
+    private record Headers(ClassNode owner, String bytecode, Map<MethodNode, Range> names, List<Header> inOrder) {
+    }
+
+    private record JavaMethods(ClassNode owner, String java, List<JavaMethod> methods) {
+    }
+
+    // Links are made on the event thread; these only save work, so a lost update costs nothing.
+    private static volatile Headers lastHeaders;
+    private static volatile JavaMethods lastJavaMethods;
 
     /**
      * The name at {@code offset} in {@code source}, found again in {@code target} between {@code targetStart} and
@@ -568,6 +668,9 @@ final class CodeLink {
             pattern = "(?<![\\w$])(?:" + String.join("|", BRANCHES) + ")(?![\\w$])|\\?";
         } else if (OPERATOR_PATTERNS.containsKey(name)) {
             pattern = OPERATOR_PATTERNS.get(name);
+        } else if (UNSUFFIXED_NUMBER.matcher(name).matches()) {
+            // With any suffix Java gives it, and not the end of a longer number such as 1.5.
+            pattern = "(?<![\\w$.])" + Pattern.quote(name) + "[LFDlfd]?(?![\\w$.])";
         } else {
             pattern = "(?<![\\w$])" + Pattern.quote(name) + "(?![\\w$])";
         }
@@ -617,7 +720,12 @@ final class CodeLink {
             clicked.length() - 1))) {
             return clicked.substring(0, clicked.length() - 1);
         }
-        return clicked;
+        return withoutSuffix(clicked);
+    }
+
+    private static String withoutSuffix(String number) {
+        Matcher suffixed = SUFFIXED_NUMBER.matcher(number);
+        return suffixed.matches() ? suffixed.group(1) : number;
     }
 
     private static Range wordAt(String text, int offset) {

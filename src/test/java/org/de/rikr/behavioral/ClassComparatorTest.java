@@ -54,6 +54,21 @@ class ClassComparatorTest {
     }
 
     @Test
+    void repeatedPartsMatchOncePerCopyAndSignaturesGiveTheSameMatches() {
+        ClassNode source = createClass("old/A", "java/lang/Object");
+        source.fields.add(new FieldNode(0, "x", "I", null, null));
+        source.fields.add(new FieldNode(0, "y", "I", null, null));
+        ClassNode candidate = createClass("new/B", "java/lang/Object");
+        candidate.fields.add(new FieldNode(0, "a", "I", null, null));
+
+        // Three of the source's four parts and all three of the candidate's: 200 * 3 / 7.
+        assertEquals(86, comparator.getSimilarityPercent(source, candidate));
+        List<ClassNode> candidates = List.of(candidate, source);
+        assertEquals(comparator.getClassNodeMatches(candidates, source),
+            comparator.getClassNodeMatches(comparator.signatures(candidates), comparator.signature(source)));
+    }
+
+    @Test
     void handlesRootClassWithoutSuperclass() {
         ClassNode source = createClass("java/lang/Object", null);
         ClassNode candidate = createClass("java/lang/Object", null);
