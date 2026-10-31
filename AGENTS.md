@@ -37,6 +37,7 @@ Code is grouped by feature under `src/main/java/org/de/rikr`, with tests in the 
 | `rename` | `RenameEngine` (ASM `Remapper` passes), `RenameService` (validation, history, undo, replay), `RenameStep` = `RenameOperation` or `RenameBatch`. |
 | `symbol` | Symbols recorded while printing bytecode, so a click resolves to a class, field or method. |
 | `flow` | Following code: `EntryPoints` (where a JAR starts, including obfuscated applets), `CallGraph` (calls with override dispatch), `ControlFlowBuilder` (basic blocks and edges), and `GraphLayout` (layered layout). Drawn by `ui/FlowPanel` with `ui/graph/GraphView`. |
+| `behavioral` | Simulating a method without running it: `MethodSimulator` steps through it (with undo), `Interpreter` gives each opcode its exact stack effect, and values it can't know are a typed `SimulatedValue.Unknown`, never a guess. `MethodComparator` runs two methods side by side for class matching. Calls aren't followed. |
 | `mapping` | Class matching between JARs (`MappingSet`, `ClassMappingService`) and `mapping/format` for tiny v2, Enigma and ProGuard files. |
 | `jar` | Reading JARs and class files, and `JarExportService` for safe export. |
 | `reference`, `search`, `decompiler`, `bookmark` | The features their names say. The decompiler is JetBrains FernFlower. |

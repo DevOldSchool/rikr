@@ -27,7 +27,6 @@ import java.io.File;
 import java.text.NumberFormat;
 import java.util.List;
 import java.util.Map;
-import java.util.Stack;
 
 public class ClassViewer {
     private final JFrame frame;
@@ -56,6 +55,8 @@ public class ClassViewer {
     private final EmptyStatePanel emptyState;
     private final StatusBar statusBar;
     private final NavigationHistory history = new NavigationHistory();
+    // The simulator's width while open, kept when it closes so it reopens as it was; 0 until first shown.
+    private int simulatorWidth;
 
     public ClassViewer(Rikr controller) {
         this.controller = controller;
@@ -110,7 +111,10 @@ public class ClassViewer {
         bookmarkWorkspacePanel = new BookmarkWorkspacePanel(controller);
         flowPanel = new FlowPanel(controller, this::openInBytecode);
         methodSimulatorPanel = new MethodSimulatorPanel(controller);
-        simulatorBar = new SimulatorBar(controller, e -> toggleMethodSimulatorVisibility(methodSimulatorPanel.isVisible()));
+        simulatorBar = new SimulatorBar(controller, e -> {
+            methodSimulatorPanel.stop();
+            toggleMethodSimulatorVisibility(true);
+        });
 
         // Create a panel to hold both the search panel and content panel
         rightPanel = new JPanel(new BorderLayout());
@@ -118,7 +122,8 @@ public class ClassViewer {
         rightPanel.add(searchBar, BorderLayout.NORTH);
         contentSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, codeView, methodSimulatorPanel);
         contentSplitPane.setDividerLocation(700);
-        contentSplitPane.setResizeWeight(0.80);
+        // The code view takes any change in window width; the simulator keeps the width it was given.
+        contentSplitPane.setResizeWeight(1.0);
         rightPanel.add(contentSplitPane, BorderLayout.CENTER);
         rightPanel.add(simulatorBar, BorderLayout.SOUTH);
 
@@ -509,17 +514,29 @@ public class ClassViewer {
 
     public void toggleMethodSimulatorVisibility(boolean isVisible) {
         if (isVisible) {
+            if (methodSimulatorPanel.getWidth() > 0) {
+                simulatorWidth = methodSimulatorPanel.getWidth();
+            }
             contentSplitPane.setRightComponent(null);
             contentSplitPane.setDividerSize(0);
             methodSimulatorPanel.setVisible(false);
             toggleSimulatorBarVisibility(false);
         } else {
             contentSplitPane.setRightComponent(methodSimulatorPanel);
-            contentSplitPane.setDividerLocation(700);
             contentSplitPane.setDividerSize(1);
+            contentSplitPane.setDividerLocation(Math.max(0, contentSplitPane.getWidth() - simulatorWidth()
+                - contentSplitPane.getDividerSize()));
             methodSimulatorPanel.setVisible(true);
             toggleSimulatorBarVisibility(true);
         }
+    }
+
+    // The width the simulator opens at: as it was last left, or else a third of the space with room for
+    // its values, while leaving the code view at least half.
+    private int simulatorWidth() {
+        int available = contentSplitPane.getWidth();
+        int width = simulatorWidth > 0 ? simulatorWidth : Math.max(380, available / 3);
+        return Math.min(width, available / 2);
     }
 
     private void toggleSearchBarVisibility(boolean isVisible) {
@@ -620,14 +637,6 @@ public class ClassViewer {
 
     public void updateProjectTitle(File projectFile) {
         frame.setTitle(projectFile == null ? "Rikr" : "Rikr - " + projectFile.getName());
-    }
-
-    public void setStackAreaText(Stack<Object> stack) {
-        methodSimulatorPanel.setStackAreaText(stack);
-    }
-
-    public void setLocalVariableAreaText(Map<Integer, Object> localVariables) {
-        methodSimulatorPanel.setLocalVariableAreaText(localVariables);
     }
 
     public LogPanel getLogPanel() {

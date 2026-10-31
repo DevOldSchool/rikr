@@ -45,16 +45,14 @@ public class SimulatorBar extends JPanel {
     }
 
     public void init() {
-        stepForwardsButton.addActionListener(e -> {
-            stepForwardsButton.setEnabled(false);
-            controller.getUserInterface().getMethodSimulatorPanel().stepForwards();
-            stepForwardsButton.setEnabled(true);
+        MethodSimulatorPanel simulator = controller.getUserInterface().getMethodSimulatorPanel();
+        stepForwardsButton.addActionListener(e -> simulator.stepForwards());
+        stepBackwardsButton.addActionListener(e -> simulator.stepBackwards());
+        simulator.setOnChange(() -> {
+            stepForwardsButton.setEnabled(simulator.canStepForwards());
+            stepBackwardsButton.setEnabled(simulator.canStepBackwards());
         });
-
-        stepBackwardsButton.addActionListener(e -> {
-            stepBackwardsButton.setEnabled(false);
-            controller.getUserInterface().getMethodSimulatorPanel().stepBackwards();
-            stepBackwardsButton.setEnabled(true);
-        });
+        stepForwardsButton.setEnabled(false);
+        stepBackwardsButton.setEnabled(false);
     }
 }

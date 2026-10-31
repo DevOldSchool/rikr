@@ -52,6 +52,8 @@ class ThemeContrastTest {
         check(failures, "annotation", palette.SYNTAX_HIGHLIGHT_ANNOTATION_COLOR, content, TEXT);
         check(failures, "code text on a search match", palette.SYNTAX_HIGHLIGHT_DEFAULT_COLOR,
             palette.SEARCH_HIGHLIGHT_COLOR, TEXT);
+        check(failures, "code text on the simulator's current instruction", palette.SYNTAX_HIGHLIGHT_DEFAULT_COLOR,
+            palette.CONTENT_SELECTED_HIGHLIGHT_COLOR, TEXT);
 
         check(failures, "control edge on panel", controlBorder, panel, NON_TEXT);
         check(failures, "focus ring on panel", focus, panel, NON_TEXT);

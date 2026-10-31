@@ -41,6 +41,8 @@ public class ContentPanel extends JScrollPane {
     // The symbols of the bytecode text on screen; null while Java is shown.
     private BytecodeText displayedBytecode;
     private LineNumberComponent lineNumberComponent;
+    // The simulator's current instruction, painted across the whole line; null when nothing is marked.
+    private Object markedLine;
 
     private final boolean javaOnlyMode;
 
@@ -202,6 +204,7 @@ public class ContentPanel extends JScrollPane {
 
     public void clear() {
         try {
+            clearMarkedLine();
             document.remove(0, document.getLength());
             displayedClass = null;
             displayedBytecode = null;
@@ -393,6 +396,52 @@ public class ContentPanel extends JScrollPane {
         }
 
         return -1;
+    }
+
+    /**
+     * Mark a line across the full width of the view and scroll it into view, replacing any line marked before.
+     * The caret and focus stay where they are, so the keyboard keeps working in whatever has it.
+     */
+    public void markLine(int lineNumber) {
+        clearMarkedLine();
+        Element root = document.getDefaultRootElement();
+        if (lineNumber < 0 || lineNumber >= root.getElementCount()) {
+            return;
+        }
+        Element line = root.getElement(lineNumber);
+        try {
+            markedLine = contentPane.getHighlighter().addHighlight(line.getStartOffset(), line.getStartOffset(),
+                (g, p0, p1, bounds, component) -> {
+                    try {
+                        Rectangle row = component.modelToView2D(p0).getBounds();
+                        g.setColor(Theme.CONTENT_SELECTED_HIGHLIGHT_COLOR);
+                        g.fillRect(0, row.y, component.getWidth(), row.height);
+                    } catch (BadLocationException ignored) {
+                        // The line went away; nothing to paint.
+                    }
+                });
+            Rectangle row = contentPane.modelToView2D(line.getStartOffset()).getBounds();
+            Rectangle view = getViewport().getViewRect();
+            // Scroll only when the line nears an edge, then put it a third of the way down, so the
+            // instructions that follow are in view and stepping doesn't make the text jump every time.
+            int margin = row.height * 3;
+            if (row.y < view.y + margin || row.y + row.height > view.y + view.height - margin) {
+                int top = Math.max(0, row.y - view.height / 3);
+                int bottom = Math.max(0, contentPane.getHeight() - view.height);
+                getViewport().setViewPosition(new java.awt.Point(view.x, Math.min(top, bottom)));
+            }
+        } catch (BadLocationException ignored) {
+            // The line is in range, so this can't happen.
+        }
+        contentPane.repaint();
+    }
+
+    public void clearMarkedLine() {
+        if (markedLine != null) {
+            contentPane.getHighlighter().removeHighlight(markedLine);
+            markedLine = null;
+            contentPane.repaint();
+        }
     }
 
     public void setCaretPositionToLineNumber(int lineNumber) {

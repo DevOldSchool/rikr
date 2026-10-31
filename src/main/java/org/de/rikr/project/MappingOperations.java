@@ -128,11 +128,9 @@ public class MappingOperations {
      * normalized descriptor that also behave the same when simulated.
      */
     public SimilarClassReport similarClassReport(String sourceJar, ClassNode sourceClass) {
-        List<ClassNode> sourceClasses = Optional.ofNullable(workspace.classesSnapshot(sourceJar)).orElse(List.of());
         List<SimilarClassReport.Match> matches = new ArrayList<>();
         int skipped = 0;
         for (Map.Entry<String, List<ClassMatch>> entry : findSimilarClasses(sourceJar, sourceClass).entrySet()) {
-            List<ClassNode> targetClasses = Optional.ofNullable(workspace.classesSnapshot(entry.getKey())).orElse(List.of());
             for (ClassMatch match : entry.getValue()) {
                 List<SimilarClassReport.MethodPair> equivalent = new ArrayList<>();
                 for (MethodNode sourceMethod : sourceClass.methods) {
@@ -142,7 +140,8 @@ public class MappingOperations {
                             continue;
                         }
                         try {
-                            if (methodComparator.areBehaviorallyEquivalent(sourceClasses, sourceMethod, targetClasses, targetMethod)) {
+                            if (methodComparator.areBehaviorallyEquivalent(sourceClass.name, sourceMethod,
+                                match.classNode().name, targetMethod)) {
                                 equivalent.add(new SimilarClassReport.MethodPair(sourceMethod, targetMethod));
                             }
                         } catch (RuntimeException exception) {
