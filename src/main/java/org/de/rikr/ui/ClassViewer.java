@@ -14,6 +14,7 @@ import org.de.rikr.ui.action.ClassFileActions;
 import org.de.rikr.ui.action.ProjectSessionActions;
 import org.de.rikr.ui.action.SymbolActions;
 import org.de.rikr.utilities.ClassNodeUtil;
+import org.de.rikr.rename.RenameStep;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.MethodNode;
@@ -28,6 +29,7 @@ import java.io.File;
 import java.text.NumberFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class ClassViewer {
     private final JFrame frame;
@@ -209,6 +211,7 @@ public class ClassViewer {
             classFileActions::saveSelectedJar,
             classFileActions::overwriteOriginalJar,
             controller::undoLastRename,
+            controller::redoLastRename,
             () -> toggleSearchBarVisibility(true),
             () -> findNext(1),
             () -> findNext(-1),
@@ -249,6 +252,9 @@ public class ClassViewer {
             }
         }
 
+        // The menu item and the switch in the code header show the same choice.
+        codeView.addPropertyChangeListener("javaShown",
+            e -> menuBar.getSplitAsmJavaItem().setSelected((Boolean) e.getNewValue()));
         menuBar.getSplitAsmJavaItem().addActionListener(
             e -> codeView.setJavaShown(menuBar.getSplitAsmJavaItem().isSelected())
         );
@@ -718,6 +724,10 @@ public class ClassViewer {
     /**
      * Mark the window as holding unsaved work: on macOS the close button shows a dot.
      */
+    public void updateUndoRedo(Optional<RenameStep> undo, Optional<RenameStep> redo) {
+        menuBar.updateUndoRedo(undo, redo);
+    }
+
     public void setEdited(boolean edited) {
         frame.getRootPane().putClientProperty("Window.documentModified", edited);
     }

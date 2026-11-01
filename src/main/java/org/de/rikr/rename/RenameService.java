@@ -21,6 +21,8 @@ import java.util.function.Function;
 public class RenameService {
     private final RenameEngine engine = new RenameEngine();
     private final List<RenameStep> history = new ArrayList<>();
+    // Steps undone, most recent last, so they can be redone; a new rename forgets them, as in any editor.
+    private final List<RenameStep> undone = new ArrayList<>();
     private final Set<String> dirtyJars = new HashSet<>();
 
     public RenamePreview previewClassRename(List<ClassNode> classes, ClassNode owner, String newName) {
@@ -349,6 +351,7 @@ public class RenameService {
         if (step instanceof RenameBatch batch) {
             RenameResult result = result("mapping", engine.renameBatch(classes, batch.inverse(), true));
             history.remove(history.size() - 1);
+            undone.add(batch);
             dirtyJars.add(batch.jarName());
             return Optional.of(new RenameUndoResult(batch, result, null));
         }
@@ -374,8 +377,62 @@ public class RenameService {
         }
 
         history.remove(history.size() - 1);
+        undone.add(operation);
         dirtyJars.add(operation.jarName());
         return Optional.of(new RenameUndoResult(operation, result, affectedClass));
+    }
+
+    /**
+     * Apply again the step undone last, unless something was renamed since.
+     *
+     * @return what was redone, with the class to show afterwards; empty when there is nothing to redo
+     * @throws IllegalArgumentException if the step no longer fits the JAR
+     */
+    public synchronized Optional<RenameUndoResult> redoLast(Function<String, List<ClassNode>> classesProvider) {
+        Objects.requireNonNull(classesProvider, "classesProvider");
+        if (undone.isEmpty()) {
+            return Optional.empty();
+        }
+        RenameStep step = undone.getLast();
+        List<ClassNode> classes = classesProvider.apply(step.jarName());
+        if (classes == null) {
+            throw new IllegalStateException("JAR is no longer loaded: " + step.jarName());
+        }
+        RenameUndoResult redone = switch (step) {
+            case RenameBatch batch -> {
+                BatchPlan plan = planBatch(classes, batch);
+                if (!plan.valid()) {
+                    throw new IllegalArgumentException(plan.problems().getFirst());
+                }
+                yield new RenameUndoResult(batch, result("mapping", engine.renameBatch(classes, plan.batch(), true)),
+                    null);
+            }
+            case RenameOperation operation -> {
+                RenameEngine.Changes changes = applyPersistedOperation(operation, classes);
+                String owner = operation.type() == RenameType.CLASS ? operation.newName() : operation.ownerName();
+                yield new RenameUndoResult(operation,
+                    result(operation.type().name().toLowerCase(java.util.Locale.ROOT), changes),
+                    requireClass(classes, owner));
+            }
+        };
+        undone.removeLast();
+        history.add(step);
+        dirtyJars.add(step.jarName());
+        return Optional.of(redone);
+    }
+
+    /**
+     * The step {@link #undoLast} would undo, if any.
+     */
+    public synchronized Optional<RenameStep> nextUndo() {
+        return history.isEmpty() ? Optional.empty() : Optional.of(history.getLast());
+    }
+
+    /**
+     * The step {@link #redoLast} would redo, if any.
+     */
+    public synchronized Optional<RenameStep> nextRedo() {
+        return undone.isEmpty() ? Optional.empty() : Optional.of(undone.getLast());
     }
 
     public synchronized void replay(
@@ -421,6 +478,7 @@ public class RenameService {
      */
     public synchronized void commitOverwrittenJar(String jarName, List<RenameStep> written, boolean clean) {
         history.removeIf(step -> step.jarName().equals(jarName) && written.contains(step));
+        undone.removeIf(step -> step.jarName().equals(jarName));
         if (clean) {
             dirtyJars.remove(jarName);
         }
@@ -428,28 +486,30 @@ public class RenameService {
 
     public synchronized void removeJar(String jarName) {
         history.removeIf(operation -> operation.jarName().equals(jarName));
+        undone.removeIf(operation -> operation.jarName().equals(jarName));
         dirtyJars.remove(jarName);
     }
 
     public synchronized void clear() {
         history.clear();
+        undone.clear();
         dirtyJars.clear();
     }
 
-    private void applyPersistedOperation(RenameOperation operation, List<ClassNode> classes) {
+    private RenameEngine.Changes applyPersistedOperation(RenameOperation operation, List<ClassNode> classes) {
         if (operation.type() == RenameType.CLASS) {
             requireValid(validateClassRename(classes, requireClass(classes, operation.oldName()), operation.newName()));
-            engine.renameClass(classes, operation.oldName(), operation.newName(), true);
+            return engine.renameClass(classes, operation.oldName(), operation.newName(), true);
         } else if (operation.type() == RenameType.FIELD) {
             ClassNode owner = requireClass(classes, operation.ownerName());
             FieldNode field = requireField(owner, operation.oldName(), operation.descriptor());
             requireValid(validateFieldRename(classes, owner, field, operation.newName()));
-            engine.renameField(classes, owner.name, field.name, field.desc, operation.newName(), true);
+            return engine.renameField(classes, owner.name, field.name, field.desc, operation.newName(), true);
         } else {
             ClassNode owner = requireClass(classes, operation.ownerName());
             MethodNode method = requireMethod(owner, operation.oldName(), operation.descriptor());
             requireValid(validateMethodRename(classes, owner, method, operation.newName()));
-            engine.renameMethod(classes, owner.name, method.name, method.desc, operation.newName(), true);
+            return engine.renameMethod(classes, owner.name, method.name, method.desc, operation.newName(), true);
         }
     }
 
@@ -599,6 +659,7 @@ public class RenameService {
 
     private void record(RenameStep step) {
         history.add(step);
+        undone.clear();
         dirtyJars.add(step.jarName());
     }
 

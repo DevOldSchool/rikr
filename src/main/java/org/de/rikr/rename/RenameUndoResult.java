@@ -5,9 +5,9 @@ import org.objectweb.asm.tree.ClassNode;
 import java.util.Objects;
 
 /**
- * What an undo reverted.
+ * What an undo reverted, or a redo applied again.
  *
- * @param affectedClass the class to show afterwards, or null when a whole batch was undone
+ * @param affectedClass the class to show afterwards, or null for a whole batch
  */
 public record RenameUndoResult(RenameStep step, RenameResult result, ClassNode affectedClass) {
     public RenameUndoResult {

@@ -218,6 +218,8 @@ final class RikrTools implements AutoCloseable {
                 false, this::rename),
             tool("undo", "Undo the last rename, or the last mapping import as a whole.",
                 Schema.object(), false, arguments -> undo()),
+            tool("redo", "Apply again the rename or import undone last. Renaming anything else first forgets it.",
+                Schema.object(), false, arguments -> redo()),
             tool("rename_history",
                 "List the recorded renames and imports, oldest first, and the JARs with unsaved renames.",
                 Schema.object(), true, arguments -> history()),
@@ -662,6 +664,19 @@ final class RikrTools implements AutoCloseable {
             throw new ToolException("There is nothing to undo.");
         }
         return "Undid " + describe(undone.get().step()) + ".";
+    }
+
+    private String redo() throws ToolException {
+        Optional<RenameUndoResult> redone;
+        try {
+            redone = project.renames().redoLast();
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            throw new ToolException("Can't redo: " + exception.getMessage());
+        }
+        if (redone.isEmpty()) {
+            throw new ToolException("There is nothing to redo.");
+        }
+        return "Redid " + describe(redone.get().step()) + ".";
     }
 
     private String history() {

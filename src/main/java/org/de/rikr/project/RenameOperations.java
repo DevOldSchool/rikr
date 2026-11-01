@@ -329,6 +329,25 @@ public class RenameOperations {
     }
 
     /**
+     * Apply again the step undone last, unless something was renamed since.
+     *
+     * @throws IllegalArgumentException if the step no longer fits the JAR
+     */
+    public Optional<RenameUndoResult> redoLast() {
+        Optional<RenameUndoResult> redo = service.redoLast(workspace::classes);
+        redo.ifPresent(value -> publish(value.step(), false, value.result()));
+        return redo;
+    }
+
+    public Optional<RenameStep> nextUndo() {
+        return service.nextUndo();
+    }
+
+    public Optional<RenameStep> nextRedo() {
+        return service.nextRedo();
+    }
+
+    /**
      * Every class, field and method of the JAR whose name differs from the name it was loaded with. A class is
      * listed when it or one of its members was renamed. Sorted by original class name.
      */

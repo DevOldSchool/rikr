@@ -2,11 +2,15 @@ package org.de.rikr.ui;
 
 import com.formdev.flatlaf.util.SystemInfo;
 import org.de.rikr.Rikr;
+import org.de.rikr.rename.RenameBatch;
+import org.de.rikr.rename.RenameOperation;
+import org.de.rikr.rename.RenameStep;
 import org.de.rikr.ui.action.SymbolActions;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.KeyEvent;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
@@ -27,6 +31,7 @@ public class MenuBar extends JMenuBar {
         Runnable exportJar,
         Runnable overwriteOriginalJar,
         Runnable undoRename,
+        Runnable redoRename,
         Runnable find,
         Runnable findNext,
         Runnable findPrevious,
@@ -53,6 +58,8 @@ public class MenuBar extends JMenuBar {
     private final JMenuItem groupBySuperclassItem = new JMenuItem("Group by Superclass");
     private final JMenuItem groupByInterfaceItem = new JMenuItem("Group by Interface");
     private final JMenuItem removeGroupingItem = new JMenuItem("Remove Grouping");
+    private final JMenuItem undoItem;
+    private final JMenuItem redoItem;
     private final JCheckBoxMenuItem annotationItem = new JCheckBoxMenuItem("Strip Annotations When Loading");
 
     public MenuBar(Rikr controller, Actions actions) {
@@ -73,7 +80,11 @@ public class MenuBar extends JMenuBar {
         fileMenu.add(item("Overwrite Original JAR...", 0, 0, actions.overwriteOriginalJar()));
 
         JMenu editMenu = new JMenu("Edit");
-        editMenu.add(item("Undo Rename", KeyEvent.VK_Z, MENU, actions.undoRename()));
+        undoItem = item("Undo Rename", KeyEvent.VK_Z, MENU, actions.undoRename());
+        redoItem = item("Redo Rename", KeyEvent.VK_Z, MENU | KeyEvent.SHIFT_DOWN_MASK, actions.redoRename());
+        editMenu.add(undoItem);
+        editMenu.add(redoItem);
+        updateUndoRedo(Optional.empty(), Optional.empty());
         editMenu.addSeparator();
         editMenu.add(item("Find in Class...", KeyEvent.VK_F, MENU, actions.find()));
         editMenu.add(item("Find Next", KeyEvent.VK_G, MENU, actions.findNext()));
@@ -154,6 +165,26 @@ public class MenuBar extends JMenuBar {
         removeGroupingItem.addActionListener(e ->
             controller.getUserInterface().getTreePanel().updateTree(controller.jars().classesByJar(), false, false));
         annotationItem.addActionListener(e -> controller.jars().setStripAnnotations(annotationItem.isSelected()));
+    }
+
+    /**
+     * Name the step Undo and Redo would act on, so the menu says what will change before it is chosen.
+     */
+    public void updateUndoRedo(Optional<RenameStep> undo, Optional<RenameStep> redo) {
+        undoItem.setText(undo.map(step -> "Undo " + describe(step)).orElse("Undo Rename"));
+        undoItem.setEnabled(undo.isPresent());
+        redoItem.setText(redo.map(step -> "Redo " + describe(step)).orElse("Redo Rename"));
+        redoItem.setEnabled(redo.isPresent());
+    }
+
+    static String describe(RenameStep step) {
+        return switch (step) {
+            case RenameOperation operation -> "Rename " + switch (operation.type()) {
+                case CLASS -> operation.oldName() + " → " + operation.newName();
+                case FIELD, METHOD -> operation.ownerName() + "." + operation.oldName() + " → " + operation.newName();
+            };
+            case RenameBatch batch -> "Import of " + batch.source();
+        };
     }
 
     public JCheckBoxMenuItem getSplitAsmJavaItem() {

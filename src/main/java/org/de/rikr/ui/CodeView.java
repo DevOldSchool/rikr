@@ -39,6 +39,9 @@ public class CodeView extends JPanel {
     private final Rikr controller;
     // Which class is open, and from which JAR, since the tree selection may be elsewhere.
     private final JLabel heading = new JLabel(" ");
+    // Bytecode alone, or with the decompiled Java beside it; the same choice as View › Split Bytecode and Java.
+    private final JToggleButton bytecodeOnly = new JToggleButton("Bytecode", true);
+    private final JToggleButton withJava = new JToggleButton("Bytecode and Java");
     // The method the person is working on, after the class, or null for the class alone.
     private MethodNode shownMethod;
     private final JPanel body = new JPanel(new BorderLayout());
@@ -50,7 +53,23 @@ public class CodeView extends JPanel {
         javaPanel = new ContentPanel(controller, true);
         heading.setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 10));
         heading.getAccessibleContext().setAccessibleName("Open class");
-        code.add(heading, BorderLayout.NORTH);
+        ButtonGroup views = new ButtonGroup();
+        views.add(bytecodeOnly);
+        views.add(withJava);
+        bytecodeOnly.setToolTipText("Show the bytecode alone");
+        withJava.setToolTipText("Show the decompiled Java beside the bytecode (Shift+Cmd+J)");
+        bytecodeOnly.addActionListener(event -> setJavaShown(false));
+        withJava.addActionListener(event -> setJavaShown(true));
+        JPanel switcher = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 2));
+        switcher.setOpaque(false);
+        switcher.getAccessibleContext().setAccessibleName("Code view");
+        switcher.add(bytecodeOnly);
+        switcher.add(withJava);
+        JPanel header = new JPanel(new BorderLayout());
+        header.setOpaque(false);
+        header.add(heading, BorderLayout.CENTER);
+        header.add(switcher, BorderLayout.EAST);
+        code.add(header, BorderLayout.NORTH);
         code.add(body, BorderLayout.CENTER);
         body.add(bytecodePanel, BorderLayout.CENTER);
         // With both views shown, moving the caret in one, by clicking or with the keyboard, shows the same code in
@@ -72,6 +91,10 @@ public class CodeView extends JPanel {
     private void applyTheme() {
         heading.setOpaque(true);
         heading.setBackground(Theme.BACKGROUND_COLOR);
+        if (heading.getParent() instanceof JComponent header) {
+            header.setOpaque(true);
+            header.setBackground(Theme.BACKGROUND_COLOR);
+        }
         updateHeading();
     }
 
@@ -129,6 +152,9 @@ public class CodeView extends JPanel {
             return;
         }
         javaShown = shown;
+        bytecodeOnly.setSelected(!shown);
+        withJava.setSelected(shown);
+        firePropertyChange("javaShown", !shown, shown);
         body.removeAll();
         if (shown) {
             JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, labelled(bytecodePanel, "Bytecode"),

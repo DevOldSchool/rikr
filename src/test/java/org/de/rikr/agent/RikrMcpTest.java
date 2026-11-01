@@ -192,6 +192,8 @@ class RikrMcpTest {
         assertTrue(Files.readString(mappings).contains("c\ta\tgame/Player"));
 
         assertTrue(text(call("undo", new JsonObject())).contains("field rename"));
+        assertTrue(text(call("redo", new JsonObject())).contains("field rename"));
+        assertTrue(text(call("undo", new JsonObject())).contains("field rename"));
         assertTrue(text(call("decompile", args("jar", "game.jar", "class", "b"))).contains("game.Player"));
 
         Path project = tempDir.resolve("game.rikr");

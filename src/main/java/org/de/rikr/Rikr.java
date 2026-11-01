@@ -130,6 +130,31 @@ public class Rikr {
         }
     }
 
+    public void redoLastRename() {
+        Optional<RenameUndoResult> redo;
+        try {
+            redo = project.renames().redoLast();
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            log("Can't redo: " + exception.getMessage());
+            return;
+        }
+        if (redo.isEmpty()) {
+            log("No rename to redo.");
+            return;
+        }
+        RenameUndoResult value = redo.get();
+        if (value.affectedClass() != null) {
+            userInterface.displayBytecode(value.affectedClass());
+        } else {
+            userInterface.refreshCode();
+        }
+        switch (value.step()) {
+            case RenameOperation operation ->
+                log("Redid rename " + operation.oldName() + " -> " + operation.newName() + ".");
+            case RenameBatch batch -> log("Redid the import of " + batch.source() + ".");
+        }
+    }
+
     public void toggleBookmark(ProjectBookmark bookmark) {
         boolean added = project.bookmarks().toggle(bookmark);
         log((added ? "Bookmarked " : "Removed bookmark ") + bookmark);
@@ -288,6 +313,7 @@ public class Rikr {
         userInterface.applyProjectLayout(opened.session().layout());
         userInterface.updateProjectTitle(currentProjectFile);
         userInterface.setEdited(false);
+        userInterface.updateUndoRedo(project.renames().nextUndo(), project.renames().nextRedo());
         refreshProjectState();
         log("Opened project " + currentProjectFile.getAbsolutePath());
     }
@@ -347,6 +373,7 @@ public class Rikr {
             }
         }
         userInterface.setEdited(project.unsavedChanges() > 0);
+        userInterface.updateUndoRedo(project.renames().nextUndo(), project.renames().nextRedo());
     }
 
     private void refreshProjectState() {

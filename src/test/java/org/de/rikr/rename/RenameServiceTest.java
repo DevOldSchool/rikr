@@ -90,6 +90,63 @@ class RenameServiceTest {
     }
 
     @Test
+    void redoAppliesTheUndoneStepAgainUntilSomethingElseIsRenamed() {
+        ClassNode owner = classNode("a/Owner");
+        FieldNode field = new FieldNode(Opcodes.ACC_PUBLIC, "oldField", "I", null, null);
+        MethodNode method = new MethodNode(Opcodes.ACC_PUBLIC, "m", "()V", null, null);
+        owner.fields.add(field);
+        owner.methods.add(method);
+        List<ClassNode> classes = List.of(owner);
+        RenameService service = new RenameService();
+        assertTrue(service.redoLast(jarName -> classes).isEmpty());
+
+        service.applyFieldRename("app.jar", classes, owner, field, "newField");
+        service.undoLast(jarName -> classes);
+        assertEquals("oldField", field.name);
+        assertEquals("newField", ((RenameOperation) service.nextRedo().orElseThrow()).newName());
+
+        RenameUndoResult redo = service.redoLast(jarName -> classes).orElseThrow();
+
+        assertEquals("newField", field.name);
+        assertEquals(owner, redo.affectedClass());
+        assertEquals(service.getHistory().getLast(), service.nextUndo().orElseThrow());
+        assertTrue(service.nextRedo().isEmpty());
+
+        service.undoLast(jarName -> classes);
+        service.applyMethodRename("app.jar", classes, owner, method, "run");
+        assertTrue(service.nextRedo().isEmpty());
+        assertEquals("oldField", field.name);
+    }
+
+    @Test
+    void redoesClassRenamesAndBatches() {
+        ClassNode owner = classNode("a/Owner");
+        owner.fields.add(new FieldNode(Opcodes.ACC_PUBLIC, "hp", "I", null, null));
+        List<ClassNode> classes = List.of(owner);
+        RenameService service = new RenameService();
+
+        service.applyClassRename("app.jar", classes, owner, "a/Player");
+        service.undoLast(jarName -> classes);
+        RenameUndoResult redoneClass = service.redoLast(jarName -> classes).orElseThrow();
+        assertEquals("a/Player", owner.name);
+        assertEquals(owner, redoneClass.affectedClass());
+
+        RenameBatch batch = new RenameBatch("app.jar", "test", java.util.Map.of(),
+            List.of(new RenameBatch.MemberRename("a/Player", "hp", "I", "health")), List.of());
+        service.applyBatch(classes, service.planBatch(classes, batch).batch());
+        service.undoLast(jarName -> classes);
+        assertEquals("hp", owner.fields.getFirst().name);
+        service.redoLast(jarName -> classes);
+        assertEquals("health", owner.fields.getFirst().name);
+        assertTrue(service.nextRedo().isEmpty());
+
+        service.undoLast(jarName -> classes);
+        service.removeJar("app.jar");
+        assertTrue(service.nextRedo().isEmpty());
+        assertTrue(service.nextUndo().isEmpty());
+    }
+
+    @Test
     void renamesOneOverloadAndRejectsSameDescriptorCollision() {
         ClassNode owner = classNode("a/Owner");
         MethodNode selected = new MethodNode(Opcodes.ACC_PUBLIC, "old", "()V", null, null);
