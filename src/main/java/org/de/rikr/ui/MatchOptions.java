@@ -23,7 +23,9 @@ final class MatchOptions {
         JToolBar options = new JToolBar();
         options.setFloatable(false);
         options.setOpaque(false);
-        options.setBorder(BorderFactory.createEmptyBorder(0, 2, 0, 0));
+        // The toolbar fills the field's height; the gap keeps the toggles inside its edge.
+        int gap = (SearchFields.MINIMUM_HEIGHT - 24) / 2;
+        options.setBorder(BorderFactory.createEmptyBorder(gap, 2, gap, gap));
         options.add(matchCase);
         options.add(matchWord);
         field.putClientProperty(FlatClientProperties.TEXT_FIELD_TRAILING_COMPONENT, options);
@@ -55,8 +57,8 @@ final class MatchOptions {
     private static JToggleButton toggle(String label, String tooltip, String name) {
         JToggleButton button = new JToggleButton(new LabelIcon(label));
         button.putClientProperty(FlatClientProperties.BUTTON_TYPE, FlatClientProperties.BUTTON_TYPE_TOOLBAR_BUTTON);
-        // Small enough that the selected background sits inside the field's edge.
-        button.setMargin(new Insets(1, 2, 1, 2));
+        // With its one-pixel edge, at least 24 by 24: the smallest target WCAG 2.2 SC 2.5.8 allows.
+        button.setMargin(new Insets(3, 3, 3, 3));
         button.setToolTipText(tooltip);
         button.getAccessibleContext().setAccessibleName(name);
         // Typing stays in the field; the toggles are reached with Alt+C and Alt+W, as in JetBrains IDEs.

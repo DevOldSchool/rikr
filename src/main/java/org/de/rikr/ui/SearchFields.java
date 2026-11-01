@@ -19,6 +19,8 @@ final class SearchFields {
     private static final Color LIGHT_BORDER = new Color(0x80, 0x83, 0x89);
     private static final Color DARK_FOCUS = new Color(0x54, 0x8a, 0xf7);
     private static final Color LIGHT_FOCUS = new Color(0x35, 0x74, 0xf0);
+    // Tall enough to hit easily, and to hold the 24-pixel match toggles inside the edge.
+    static final int MINIMUM_HEIGHT = 28;
 
     private SearchFields() {
     }
@@ -75,7 +77,10 @@ final class SearchFields {
 
         @Override
         public Insets getBorderInsets(Component component, Insets insets) {
-            insets.set(3, 6, 3, 3);
+            // The edge sets the height: FlatLaf ignores its minimum height for a border of our own.
+            int text = component.getFontMetrics(component.getFont()).getHeight();
+            int vertical = Math.max(2, (MINIMUM_HEIGHT - text + 1) / 2);
+            insets.set(vertical, 6, vertical, 3);
             return insets;
         }
     }
