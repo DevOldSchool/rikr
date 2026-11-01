@@ -50,6 +50,19 @@ public class ClassMappingService {
         ClassNode sourceClass,
         ClassMatch candidate
     ) {
+        accept(sourceJar, targetJar, sourceClass, candidate, false);
+    }
+
+    /**
+     * @param automatic whether Auto-match accepts it rather than a person
+     */
+    public void accept(
+        String sourceJar,
+        String targetJar,
+        ClassNode sourceClass,
+        ClassMatch candidate,
+        boolean automatic
+    ) {
         Objects.requireNonNull(sourceClass, "sourceClass");
         Objects.requireNonNull(candidate, "candidate");
         mappings.accept(new ClassMappingDecision(
@@ -57,8 +70,20 @@ public class ClassMappingService {
             targetJar,
             sourceClass.name,
             candidate.classNode().name,
-            candidate.similarityPercent()
+            candidate.similarityPercent(),
+            automatic
         ));
+    }
+
+    /**
+     * Forget the matches Auto-match accepted below the minimum similarity, so running it again with a higher
+     * minimum leaves those classes unmatched, or matches them again if they now qualify.
+     *
+     * @return how many matches were forgotten
+     */
+    public int removeAutomaticBelow(String sourceJar, String targetJar, int minimumSimilarityPercent) {
+        validatePercent(minimumSimilarityPercent);
+        return mappings.removeAutomaticBelow(sourceJar, targetJar, minimumSimilarityPercent).size();
     }
 
     public void reject(
@@ -141,14 +166,27 @@ public class ClassMappingService {
         Objects.requireNonNull(sourceClasses, "sourceClasses");
         Objects.requireNonNull(targetClasses, "targetClasses");
         validatePercent(minimumSimilarityPercent);
+        return acceptProposals(sourceJar, targetJar,
+            proposeUniqueMatches(sourceJar, targetJar, sourceClasses, targetClasses, minimumSimilarityPercent));
+    }
 
-        Set<String> usedTargets = new HashSet<>();
-        for (ClassMappingDecision mapping : getAcceptedMappings(sourceJar, targetJar)) {
-            usedTargets.add(mapping.targetClassName());
-        }
-
+    /**
+     * The match {@link #autoAcceptUniqueMatches} would accept for each unmatched source class, best first, without
+     * accepting any. Reads the classes and decisions without changing them, so it can run off the thread that
+     * changes the project.
+     */
+    public List<ProposedMatch> proposeUniqueMatches(
+        String sourceJar,
+        String targetJar,
+        List<ClassNode> sourceClasses,
+        List<ClassNode> targetClasses,
+        int minimumSimilarityPercent
+    ) {
+        Objects.requireNonNull(sourceClasses, "sourceClasses");
+        Objects.requireNonNull(targetClasses, "targetClasses");
+        validatePercent(minimumSimilarityPercent);
         List<ClassComparator.Signature> targets = classComparator.signatures(targetClasses);
-        List<AutoMatch> proposals = new ArrayList<>();
+        List<ProposedMatch> proposals = new ArrayList<>();
         sourceClasses.stream()
             .filter(Objects::nonNull)
             .sorted(Comparator.comparing(classNode -> classNode.name))
@@ -159,16 +197,30 @@ public class ClassMappingService {
                 sourceClass,
                 targets,
                 minimumSimilarityPercent
-            ).ifPresent(match -> proposals.add(new AutoMatch(sourceClass, match))));
+            ).ifPresent(match -> proposals.add(new ProposedMatch(sourceClass, match))));
 
         proposals.sort(
-            Comparator.comparingInt((AutoMatch match) -> match.candidate().similarityPercent()).reversed()
+            Comparator.comparingInt((ProposedMatch match) -> match.candidate().similarityPercent()).reversed()
                 .thenComparing(match -> match.sourceClass().name)
                 .thenComparing(match -> match.candidate().classNode().name)
         );
+        return List.copyOf(proposals);
+    }
 
+    /**
+     * Accept proposed matches as Auto-match's, best first, skipping a source class matched meanwhile and a target
+     * class already taken.
+     *
+     * @return the matches accepted
+     */
+    public List<ClassMappingDecision> acceptProposals(String sourceJar, String targetJar,
+                                                      List<ProposedMatch> proposals) {
+        Set<String> usedTargets = new HashSet<>();
+        for (ClassMappingDecision mapping : getAcceptedMappings(sourceJar, targetJar)) {
+            usedTargets.add(mapping.targetClassName());
+        }
         List<ClassMappingDecision> added = new ArrayList<>();
-        for (AutoMatch proposal : proposals) {
+        for (ProposedMatch proposal : proposals) {
             if (getAcceptedMapping(sourceJar, targetJar, proposal.sourceClass()).isPresent()) {
                 continue;
             }
@@ -176,7 +228,7 @@ public class ClassMappingService {
                 continue;
             }
             try {
-                accept(sourceJar, targetJar, proposal.sourceClass(), proposal.candidate());
+                accept(sourceJar, targetJar, proposal.sourceClass(), proposal.candidate(), true);
                 getAcceptedMapping(sourceJar, targetJar, proposal.sourceClass()).ifPresent(added::add);
             } catch (IllegalArgumentException ignored) {
                 // Another mapping may have claimed this target while proposals were calculated.
@@ -261,6 +313,9 @@ public class ClassMappingService {
             .replace("\t", "\\t");
     }
 
-    private record AutoMatch(ClassNode sourceClass, ClassMatch candidate) {
+    /**
+     * A match Auto-match would accept: the source class's unique best candidate.
+     */
+    public record ProposedMatch(ClassNode sourceClass, ClassMatch candidate) {
     }
 }

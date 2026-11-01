@@ -105,19 +105,58 @@ public class MappingOperations {
         return service.getAllAcceptedMappings();
     }
 
+    /**
+     * Auto-match by shape at once: forget Auto-match's earlier matches below the minimum, then accept each source
+     * class's unique best candidate at or above it. Matches people accepted are kept.
+     */
     public List<ClassMappingDecision> autoAcceptUnique(String sourceJar, String targetJar, int minimumSimilarityPercent) {
+        removeAutomaticBelow(sourceJar, targetJar, minimumSimilarityPercent);
+        try {
+            return acceptAutoMatches(sourceJar, targetJar,
+                autoMatchLater(sourceJar, targetJar, minimumSimilarityPercent).call());
+        } catch (Exception exception) {
+            throw new IllegalStateException(exception);
+        }
+    }
+
+    /**
+     * Forget the matches Auto-match accepted below the minimum, so a run with a higher minimum leaves those classes
+     * unmatched unless they qualify again. Matches people accepted are kept.
+     *
+     * @return how many matches were forgotten
+     */
+    public int removeAutomaticBelow(String sourceJar, String targetJar, int minimumSimilarityPercent) {
+        int removed = service.removeAutomaticBelow(sourceJar, targetJar, minimumSimilarityPercent);
+        if (removed > 0) {
+            events.publish(new ProjectEvent.MappingsChanged());
+        }
+        return removed;
+    }
+
+    /**
+     * Work that finds each unmatched source class's unique best candidate by shape, which can run on another
+     * thread: it reads the classes and decisions without changing them. Accept the result with
+     * {@link #acceptAutoMatches} on the thread that changes the project.
+     */
+    public Callable<List<ClassMappingService.ProposedMatch>> autoMatchLater(String sourceJar, String targetJar,
+                                                                            int minimumSimilarityPercent) {
         List<ClassNode> sourceClasses = workspace.classesSnapshot(sourceJar);
         List<ClassNode> targetClasses = workspace.classesSnapshot(targetJar);
         if (sourceClasses == null || targetClasses == null) {
-            return List.of();
+            return List::of;
         }
-        List<ClassMappingDecision> accepted = service.autoAcceptUniqueMatches(
-            sourceJar,
-            targetJar,
-            sourceClasses,
-            targetClasses,
-            minimumSimilarityPercent
-        );
+        return () -> service.proposeUniqueMatches(sourceJar, targetJar, sourceClasses, targetClasses,
+            minimumSimilarityPercent);
+    }
+
+    /**
+     * Accept matches found by {@link #autoMatchLater} as Auto-match's.
+     *
+     * @return the matches accepted
+     */
+    public List<ClassMappingDecision> acceptAutoMatches(String sourceJar, String targetJar,
+                                                        List<ClassMappingService.ProposedMatch> proposals) {
+        List<ClassMappingDecision> accepted = service.acceptProposals(sourceJar, targetJar, proposals);
         if (!accepted.isEmpty()) {
             events.publish(new ProjectEvent.MappingsChanged());
         }
@@ -180,22 +219,27 @@ public class MappingOperations {
     }
 
     /**
-     * Accept class matches found by {@link #voteClassesLater}. A match is skipped when either class was renamed,
-     * removed or matched otherwise in the meantime.
+     * Accept class matches found by {@link #voteClassesLater} as Auto-match's. A match is skipped when its share of
+     * the votes is below the minimum, or when either class was renamed, removed or matched otherwise in the meantime.
      *
+     * @param minimumConfidencePercent the least share of the votes to accept, as Auto-match's minimum similarity
      * @return the mappings accepted
      */
     public List<ClassMappingDecision> acceptVoted(String sourceJar, String targetJar,
-        List<ClassVoting.VotedMatch> matches) {
+        List<ClassVoting.VotedMatch> matches, int minimumConfidencePercent) {
         List<ClassMappingDecision> added = new ArrayList<>();
         for (ClassVoting.VotedMatch match : matches) {
+            if (match.confidencePercent() < minimumConfidencePercent) {
+                continue;
+            }
             Optional<ClassNode> source = workspace.findClass(new ClassRef(sourceJar, match.source()));
             Optional<ClassNode> target = workspace.findClass(new ClassRef(targetJar, match.target()));
             if (source.isEmpty() || target.isEmpty() || accepted(sourceJar, targetJar, source.get()).isPresent()) {
                 continue;
             }
             try {
-                service.accept(sourceJar, targetJar, source.get(), new ClassMatch(target.get(), match.confidencePercent()));
+                service.accept(sourceJar, targetJar, source.get(), new ClassMatch(target.get(), match.confidencePercent()),
+                    true);
                 accepted(sourceJar, targetJar, source.get()).ifPresent(added::add);
             } catch (IllegalArgumentException alreadyMapped) {
                 // Another source class claimed this target meanwhile; the earlier decision stands.

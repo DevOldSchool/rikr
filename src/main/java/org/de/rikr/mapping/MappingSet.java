@@ -91,6 +91,21 @@ public class MappingSet {
             .toList();
     }
 
+    /**
+     * Forget the matches Auto-match accepted from the source JAR to the target JAR below a similarity; the matches
+     * people accepted stay.
+     *
+     * @return the matches forgotten
+     */
+    public synchronized List<ClassMappingDecision> removeAutomaticBelow(String sourceJar, String targetJar,
+                                                                       int minimumPercent) {
+        List<ClassMappingDecision> removed = accepted(sourceJar, targetJar).stream()
+            .filter(mapping -> mapping.automatic() && mapping.similarityPercent() < minimumPercent)
+            .toList();
+        removed.forEach(mapping -> accepted.remove(side(source(mapping), targetJar)));
+        return removed;
+    }
+
     public synchronized void clear() {
         accepted.clear();
         rejected.clear();
@@ -137,7 +152,8 @@ public class MappingSet {
                 mapping.targetJar(),
                 rename.apply(source(mapping)).className(),
                 rename.apply(target(mapping)).className(),
-                mapping.similarityPercent()
+                mapping.similarityPercent(),
+                mapping.automatic()
             );
             updatedAccepted.put(side(source(updated), updated.targetJar()), updated);
         }

@@ -6,6 +6,7 @@ import org.de.rikr.jar.JarExportService;
 import org.de.rikr.jar.LoadedJar;
 import org.de.rikr.mapping.ClassMappingDecision;
 import org.de.rikr.mapping.ClassMatch;
+import org.de.rikr.mapping.ClassVoting;
 import org.de.rikr.mapping.MemberMatches;
 import org.de.rikr.mapping.SimilarClassReport;
 import org.de.rikr.mapping.format.NameMappings;
@@ -158,6 +159,20 @@ class ProjectTest {
         assertEquals(0, project.unsavedChanges());
         project.mappings().clearDecisions("old.jar", "new.jar", source);
         assertEquals(1, project.unsavedChanges());
+    }
+
+    @Test
+    void autoMatchesFromMembersOnlyAtTheMinimumAndCanBeDroppedLater() throws Exception {
+        loadOldAndNew();
+        List<ClassVoting.VotedMatch> voted = List.of(new ClassVoting.VotedMatch("a", "a", 2, 1));
+
+        assertTrue(project.mappings().acceptVoted("old.jar", "new.jar", voted, 90).isEmpty());
+        ClassMappingDecision accepted = project.mappings().acceptVoted("old.jar", "new.jar", voted, 60).getFirst();
+
+        assertEquals(67, accepted.similarityPercent());
+        assertTrue(accepted.automatic());
+        assertEquals(1, project.mappings().removeAutomaticBelow("old.jar", "new.jar", 90));
+        assertTrue(project.mappings().allAccepted().isEmpty());
     }
 
     private void loadOldAndNew() throws Exception {

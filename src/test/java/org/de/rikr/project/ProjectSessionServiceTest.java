@@ -31,7 +31,7 @@ class ProjectSessionServiceTest {
         service.save(destination.toFile(), session);
 
         String json = Files.readString(destination);
-        assertTrue(json.startsWith("{\n  \"formatVersion\": 2,"), json);
+        assertTrue(json.startsWith("{\n  \"formatVersion\": 3,"), json);
         assertTrue(json.contains("\"newName\": \"Calendar\""), json);
         assertEquals(session, service.load(destination.toFile()));
     }
@@ -82,7 +82,7 @@ class ProjectSessionServiceTest {
     @Test
     void rejectsFilesFromANewerVersion() throws Exception {
         Path source = directory.resolve("future.rikr");
-        Files.writeString(source, "{\"formatVersion\": 3}");
+        Files.writeString(source, "{\"formatVersion\": 4}");
 
         IOException error = assertThrows(IOException.class, () -> service.load(source.toFile()));
 
@@ -100,6 +100,36 @@ class ProjectSessionServiceTest {
         IOException error = assertThrows(IOException.class, () -> service.load(source.toFile()));
 
         assertEquals("Project file is missing renames[0].oldName", error.getMessage());
+    }
+
+    @Test
+    void keepsWhetherAutoMatchAcceptedAMapping() throws Exception {
+        ProjectSession base = session();
+        ProjectSession session = new ProjectSession(base.jarPaths(),
+            List.of(new ClassMappingDecision("234.jar", "235.jar", "a", "b", 97),
+                new ClassMappingDecision("234.jar", "235.jar", "c", "d", 91, true)),
+            base.renames(), base.bookmarks(), base.layout());
+        Path destination = directory.resolve("auto.rikr");
+
+        service.save(destination.toFile(), session);
+
+        assertTrue(Files.readString(destination).contains("\"automatic\": true"));
+        assertEquals(session, service.load(destination.toFile()));
+    }
+
+    @Test
+    void readsVersionTwoMappingsAsAcceptedByAPerson() throws Exception {
+        Path source = directory.resolve("older.rikr");
+        Files.writeString(source, """
+            {"formatVersion": 2, "jars": [], "renames": [],
+             "mappings": [{"sourceJar": "a.jar", "targetJar": "b.jar", "sourceClass": "a", "targetClass": "b",
+                           "similarityPercent": 70}],
+             "bookmarks": [], "layout": {"workspace": "PROJECT"}}
+            """);
+
+        ProjectSession session = service.load(source.toFile());
+
+        assertEquals(List.of(new ClassMappingDecision("a.jar", "b.jar", "a", "b", 70)), session.mappings());
     }
 
     @Test

@@ -273,7 +273,9 @@ final class RikrTools implements AutoCloseable {
                     Accept every source class whose best match in the target JAR is unique and at least \
                     min_similarity percent similar in shape. Then, unless use_members is false, match more classes \
                     from their members: matched fields and methods vote for the classes of their types, which \
-                    works where a deobfuscator changed the classes' shape.""",
+                    works where a deobfuscator changed the classes' shape; those need min_similarity percent of the \
+                    votes. Matches an earlier auto-match accepted below min_similarity are dropped first; matches \
+                    accepted with accept_class_mapping are kept.""",
                 Schema.object()
                     .string("source_jar", "Source JAR.", true)
                     .string("target_jar", "Target JAR.", true)
@@ -804,8 +806,10 @@ final class RikrTools implements AutoCloseable {
         if (minimum < 0 || minimum > 100) {
             throw new ToolException("min_similarity must be between 0 and 100.");
         }
+        int dropped = project.mappings().removeAutomaticBelow(sourceJar, targetJar, minimum);
         List<ClassMappingDecision> added = project.mappings().autoAcceptUnique(sourceJar, targetJar, minimum);
-        String result = "Accepted " + added.size() + " unique matches of at least " + minimum + "%.";
+        String result = (dropped == 0 ? "" : "Dropped " + dropped + " earlier automatic matches below " + minimum
+            + "%. ") + "Accepted " + added.size() + " unique matches of at least " + minimum + "%.";
         if (!arguments.bool("use_members", true)) {
             return result;
         }
@@ -815,7 +819,7 @@ final class RikrTools implements AutoCloseable {
         } catch (Exception exception) {
             throw new IllegalStateException(exception);
         }
-        int fromMembers = project.mappings().acceptVoted(sourceJar, targetJar, voted).size();
+        int fromMembers = project.mappings().acceptVoted(sourceJar, targetJar, voted, minimum).size();
         return result + " Accepted " + fromMembers + " more from their members.";
     }
 

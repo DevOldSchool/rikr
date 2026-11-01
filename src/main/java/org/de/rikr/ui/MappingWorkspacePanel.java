@@ -2,8 +2,10 @@ package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
 import org.de.rikr.mapping.ClassMappingDecision;
+import org.de.rikr.mapping.ClassMappingService;
 import org.de.rikr.mapping.CandidateRanking;
 import org.de.rikr.mapping.ClassMatch;
+import org.de.rikr.model.ClassRef;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;
 import org.de.rikr.ui.action.NameTransferAction;
@@ -18,6 +20,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 
 public class MappingWorkspacePanel extends JPanel {
@@ -39,8 +42,7 @@ public class MappingWorkspacePanel extends JPanel {
     private int hiddenCandidates;
     private final JList<ClassNode> sourceClassList = new JList<>(sourceClassModel);
     private final JList<ClassMatch> candidateList = new JList<>(candidateModel);
-    private final JTextArea sourceDetails = createDetailArea();
-    private final JTextArea candidateDetails = createDetailArea();
+    private final ClassComparisonPanel comparison = new ClassComparisonPanel();
     private final JButton acceptButton = new JButton("Accept ↩");
     private final JButton rejectButton = new JButton("Reject");
     private final JButton clearButton = new JButton("Clear source decisions");
@@ -58,7 +60,7 @@ public class MappingWorkspacePanel extends JPanel {
     private final JComboBox<String> showBox = new JComboBox<>(new String[]{SHOW_ALL, SHOW_UNMAPPED, SHOW_MAPPED});
     private final JLabel progressLabel = new JLabel(" ");
     private final JLabel differenceLegend = new JLabel(
-        "Highlighted members have no member of the same shape in the other class.");
+        "A member facing a dash, highlighted, has no member of the same shape in the other class.");
 
     private int candidateRequestSequence;
     // Background matching in progress, whose button stays off until it finishes.
@@ -141,7 +143,8 @@ public class MappingWorkspacePanel extends JPanel {
         toolbar.add(labelFor("Minimum %", minimumSimilaritySpinner));
         toolbar.add(minimumSimilaritySpinner);
         autoMatchButton.setToolTipText("Match every class whose best candidate is unique and at least the minimum "
-            + "similarity in shape, then match more from the fields and methods of the classes matched");
+            + "similarity in shape, then more from the fields and methods of the classes matched, also at least the "
+            + "minimum. Auto-match's earlier matches below the minimum are dropped; matches you accepted stay.");
         toolbar.add(autoMatchButton);
         toolbar.add(exportButton);
         carryNamesButton.setToolTipText(CARRY_NAMES_TOOLTIP);
@@ -200,16 +203,10 @@ public class MappingWorkspacePanel extends JPanel {
         lists.setResizeWeight(0.5);
         lists.setDividerSize(5);
 
-        JScrollPane sourceDetailsScroll = titledScrollPane(sourceDetails, "Source details");
-        JScrollPane candidateDetailsScroll = titledScrollPane(candidateDetails, "Candidate details");
-        // Equal preferred widths, so the long lines of one class do not squeeze the other side.
-        sourceDetailsScroll.setPreferredSize(new Dimension(300, 200));
-        candidateDetailsScroll.setPreferredSize(new Dimension(300, 200));
-        JSplitPane details = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, sourceDetailsScroll, candidateDetailsScroll);
-        details.setResizeWeight(0.5);
-        details.setDividerSize(5);
+        comparison.setBorder(BorderFactory.createTitledBorder("Compared by shape"));
+        comparison.setPreferredSize(new Dimension(600, 200));
 
-        JSplitPane workspace = new JSplitPane(JSplitPane.VERTICAL_SPLIT, lists, details);
+        JSplitPane workspace = new JSplitPane(JSplitPane.VERTICAL_SPLIT, lists, comparison);
         workspace.setResizeWeight(0.45);
         workspace.setDividerSize(5);
         add(workspace, BorderLayout.CENTER);
@@ -246,8 +243,6 @@ public class MappingWorkspacePanel extends JPanel {
 
         if (!hasJarPair()) {
             updateProgress();
-            sourceDetails.setText("");
-            candidateDetails.setText("");
             updateDetailsAndControls();
             return;
         }
@@ -332,7 +327,6 @@ public class MappingWorkspacePanel extends JPanel {
         candidateModel.clear();
         tiedCandidates = 0;
         hiddenCandidates = 0;
-        candidateDetails.setText("");
         if (!hasJarPair() || sourceClass == null || targetJar == null) {
             updateDetailsAndControls();
             return;
@@ -364,6 +358,10 @@ public class MappingWorkspacePanel extends JPanel {
                     List<ClassMatch> kept = CandidateRanking.forSource(sourceClass, found);
                     hiddenCandidates = found.size() - kept.size();
                     tiedCandidates = CandidateRanking.tiedAtTop(kept);
+                    Optional<ClassMatch> accepted = acceptedMatch(sourceClass, targetJar);
+                    if (accepted.isPresent()) {
+                        kept = CandidateRanking.withAccepted(kept, accepted.get());
+                    }
                     kept.forEach(candidateModel::addElement);
                     selectAcceptedCandidate(sourceClass);
                     updateDetailsAndControls();
@@ -465,22 +463,27 @@ public class MappingWorkspacePanel extends JPanel {
         autoMatching = true;
         autoMatchButton.setEnabled(false);
         statusLabel.setText("Auto-matching unique candidates...");
+        // A run with a higher minimum replaces Auto-match's own weaker matches; those people accepted stay.
+        int dropped = controller.mappings().removeAutomaticBelow(sourceJar, targetJar, minimumSimilarity);
+        Callable<List<ClassMappingService.ProposedMatch>> proposals =
+            controller.mappings().autoMatchLater(sourceJar, targetJar, minimumSimilarity);
 
-        new SwingWorker<List<ClassMappingDecision>, Void>() {
+        // Candidates are found in the background; they are accepted here, on the thread that changes the project.
+        new SwingWorker<List<ClassMappingService.ProposedMatch>, Void>() {
             @Override
-            protected List<ClassMappingDecision> doInBackground() {
-                return controller.mappings().autoAcceptUnique(sourceJar, targetJar, minimumSimilarity);
+            protected List<ClassMappingService.ProposedMatch> doInBackground() throws Exception {
+                return proposals.call();
             }
 
             @Override
             protected void done() {
                 try {
-                    int byShape = get().size();
+                    int byShape = controller.mappings().acceptAutoMatches(sourceJar, targetJar, get()).size();
                     repaintLists();
                     updateProgress();
                     refreshCandidates();
                     showNotice("Matched " + byShape + " classes by shape. Matching more from their members...");
-                    matchFromMembers(sourceJar, targetJar, byShape);
+                    matchFromMembers(sourceJar, targetJar, minimumSimilarity, dropped, byShape);
                 } catch (InterruptedException exception) {
                     finishAutoMatch();
                     Thread.currentThread().interrupt();
@@ -494,18 +497,22 @@ public class MappingWorkspacePanel extends JPanel {
     }
 
     // Classes whose shape changed, such as when a deobfuscator removed parameters, are found by their members.
-    private void matchFromMembers(String sourceJar, String targetJar, int byShape) {
+    private void matchFromMembers(String sourceJar, String targetJar, int minimumSimilarity, int dropped,
+                                  int byShape) {
         controller.runInBackground(
             "Matching classes of " + sourceJar + " and " + targetJar + " from their members",
             controller.mappings().voteClassesLater(sourceJar, targetJar),
             voted -> {
-                int fromMembers = controller.mappings().acceptVoted(sourceJar, targetJar, voted).size();
+                int fromMembers = controller.mappings().acceptVoted(sourceJar, targetJar, voted, minimumSimilarity)
+                    .size();
                 finishAutoMatch();
                 repaintLists();
                 updateProgress();
                 refreshCandidates();
-                showNotice("Auto-matched " + byShape + " classes by shape and " + fromMembers
-                    + " more from their members.");
+                showNotice((dropped == 0 ? "" : "Dropped " + dropped + " earlier automatic "
+                    + (dropped == 1 ? "match" : "matches") + " below " + minimumSimilarity + "%. ")
+                    + "Auto-matched " + byShape + " classes by shape and " + fromMembers
+                    + " more from their members, all at least " + minimumSimilarity + "%.");
             },
             exception -> {
                 finishAutoMatch();
@@ -565,15 +572,8 @@ public class MappingWorkspacePanel extends JPanel {
     private void updateDetailsAndControls() {
         ClassNode sourceClass = sourceClassList.getSelectedValue();
         ClassMatch candidate = candidateList.getSelectedValue();
-        sourceDetails.setText(ClassDetails.describe(sourceClass, null));
-        candidateDetails.setText(ClassDetails.describe(
-            candidate == null ? null : candidate.classNode(),
-            candidate == null ? null : candidate.similarityPercent()
-        ));
-        highlightDifferences(sourceDetails, sourceClass, candidate == null ? null : candidate.classNode());
-        highlightDifferences(candidateDetails, candidate == null ? null : candidate.classNode(), sourceClass);
-        sourceDetails.setCaretPosition(0);
-        candidateDetails.setCaretPosition(0);
+        comparison.show(hasJarPair() ? sourceClass : null, candidate == null ? null : candidate.classNode(),
+            candidate == null ? null : candidate.similarityPercent());
 
         boolean hasSource = hasJarPair() && sourceClass != null;
         boolean hasCandidate = hasSource && candidate != null;
@@ -649,20 +649,11 @@ public class MappingWorkspacePanel extends JPanel {
         return " " + hiddenCandidates + left + " left out, as " + sourceClass.name + " is in no package.";
     }
 
-    private static void highlightDifferences(JTextArea area, ClassNode shown, ClassNode other) {
-        area.getHighlighter().removeAllHighlights();
-        if (shown == null || other == null) {
-            return;
-        }
-        javax.swing.text.Highlighter.HighlightPainter painter =
-            new javax.swing.text.DefaultHighlighter.DefaultHighlightPainter(Theme.SEARCH_HIGHLIGHT_COLOR);
-        for (int line : ClassDetails.unmatchedMembers(area.getText(), shown, other)) {
-            try {
-                area.getHighlighter().addHighlight(area.getLineStartOffset(line), area.getLineEndOffset(line), painter);
-            } catch (javax.swing.text.BadLocationException ignored) {
-                // The line came from this text, so it exists.
-            }
-        }
+    // The class accepted as the source class's match, with the similarity it had when accepted.
+    private Optional<ClassMatch> acceptedMatch(ClassNode sourceClass, String targetJar) {
+        return acceptedMapping(sourceClass).flatMap(decision -> controller.jars()
+            .findClass(new ClassRef(targetJar, decision.targetClassName()))
+            .map(target -> new ClassMatch(target, decision.similarityPercent())));
     }
 
     private Optional<ClassMappingDecision> acceptedMapping(ClassNode sourceClass) {
@@ -735,8 +726,7 @@ public class MappingWorkspacePanel extends JPanel {
         differenceLegend.setForeground(Theme.CONTENT_HIGHLIGHT_TEXT_COLOR);
         sourceClassList.setBackground(Theme.CONTENT_BACKGROUND_COLOR);
         candidateList.setBackground(Theme.CONTENT_BACKGROUND_COLOR);
-        sourceDetails.setBackground(Theme.CONTENT_BACKGROUND_COLOR);
-        candidateDetails.setBackground(Theme.CONTENT_BACKGROUND_COLOR);
+        comparison.applyTheme();
         revalidate();
         repaint();
     }
@@ -753,13 +743,5 @@ public class MappingWorkspacePanel extends JPanel {
         JScrollPane scrollPane = new JScrollPane(component);
         scrollPane.setBorder(BorderFactory.createTitledBorder(title));
         return scrollPane;
-    }
-
-    private static JTextArea createDetailArea() {
-        JTextArea area = new JTextArea();
-        area.setEditable(false);
-        area.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        area.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
-        return area;
     }
 }

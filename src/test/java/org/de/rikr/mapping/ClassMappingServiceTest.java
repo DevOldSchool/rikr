@@ -76,6 +76,25 @@ class ClassMappingServiceTest {
         assertEquals(1, mappings.size());
         assertEquals("source/Unique", mappings.get(0).sourceClassName());
         assertEquals("target/Unique", mappings.get(0).targetClassName());
+        assertTrue(mappings.get(0).automatic());
+    }
+
+    @Test
+    void aHigherMinimumDropsOnlyAutomaticMatchesBelowIt() {
+        ClassNode weakSource = classWithMembers("source/Weak", "I", "()V");
+        ClassNode weakTarget = classWithMembers("target/Weak", "I", null);
+        ClassNode chosenSource = classWithMembers("source/Chosen", "J", "()V");
+        ClassNode chosenTarget = classWithMembers("target/Chosen", "J", null);
+        service.autoAcceptUniqueMatches("old.jar", "new.jar", List.of(weakSource), List.of(weakTarget), 50);
+        service.accept("old.jar", "new.jar", chosenSource, new ClassMatch(chosenTarget, 67));
+        int weak = service.getAcceptedMapping("old.jar", "new.jar", weakSource).orElseThrow().similarityPercent();
+        assertTrue(weak < 90, "similarity " + weak);
+
+        assertEquals(1, service.removeAutomaticBelow("old.jar", "new.jar", 90));
+
+        assertTrue(service.getAcceptedMapping("old.jar", "new.jar", weakSource).isEmpty());
+        assertFalse(service.getAcceptedMapping("old.jar", "new.jar", chosenSource).orElseThrow().automatic());
+        assertEquals(0, service.removeAutomaticBelow("old.jar", "new.jar", 90));
     }
 
     @Test

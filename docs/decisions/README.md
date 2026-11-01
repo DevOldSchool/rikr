@@ -19,3 +19,4 @@ a new record and mark the old one as replaced.
 | [0011](0011-decompiler-in-its-own-jvm.md) | The decompiler runs in a JVM of its own |
 | [0012](0012-methods-decompiled-in-parallel.md) | A class's methods are decompiled in parallel |
 | [0013](0013-decompiled-java-cached-on-disk.md) | Decompiled Java is kept on disk by class bytes |
+| [0014](0014-auto-match-owns-only-its-matches.md) | Auto-match keeps to its minimum and replaces only its own matches |

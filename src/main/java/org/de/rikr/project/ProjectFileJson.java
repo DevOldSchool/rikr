@@ -26,7 +26,8 @@ import java.util.function.Function;
  * code cannot silently change the format; {@link #FORMAT_VERSION} changes whenever the format does.
  */
 final class ProjectFileJson {
-    static final int FORMAT_VERSION = 2;
+    // 3: a class mapping says whether Auto-match accepted it. Version 2 files are read with every mapping a person's.
+    static final int FORMAT_VERSION = 3;
     private static final String BATCH = "BATCH";
 
     private static final Gson GSON = new GsonBuilder()
@@ -71,7 +72,11 @@ final class ProjectFileJson {
     record MemberRenameModel(String owner, String name, String descriptor, String newName) {
     }
 
-    record MappingModel(String sourceJar, String targetJar, String sourceClass, String targetClass, int similarityPercent) {
+    /**
+     * @param automatic null in version 2 files, which read as accepted by a person
+     */
+    record MappingModel(String sourceJar, String targetJar, String sourceClass, String targetClass, int similarityPercent,
+                        Boolean automatic) {
     }
 
     record BookmarkModel(String type, String jar, String className, String member, String descriptor) {
@@ -100,7 +105,7 @@ final class ProjectFileJson {
             session.renames().stream().map(ProjectFileJson::toModel).toList(),
             session.mappings().stream()
                 .map(mapping -> new MappingModel(mapping.sourceJar(), mapping.targetJar(), mapping.sourceClassName(),
-                    mapping.targetClassName(), mapping.similarityPercent()))
+                    mapping.targetClassName(), mapping.similarityPercent(), mapping.automatic()))
                 .toList(),
             session.bookmarks().stream()
                 .map(bookmark -> new BookmarkModel(bookmark.type().name(), bookmark.jarName(), bookmark.className(),
@@ -125,7 +130,7 @@ final class ProjectFileJson {
                 throw new IOException("Project file version " + formatVersion
                     + " was written by a newer version of Rikr; this version reads up to " + FORMAT_VERSION);
             }
-            if (formatVersion != FORMAT_VERSION) {
+            if (formatVersion < 2) {
                 throw new IOException("Unsupported project format version: " + formatVersion);
             }
             return toSession(GSON.fromJson(root, FileModel.class));
@@ -166,7 +171,8 @@ final class ProjectFileJson {
                 require(mapping.targetJar(), path + ".targetJar"),
                 require(mapping.sourceClass(), path + ".sourceClass"),
                 require(mapping.targetClass(), path + ".targetClass"),
-                mapping.similarityPercent()
+                mapping.similarityPercent(),
+                Boolean.TRUE.equals(mapping.automatic())
             ));
         }
 

@@ -2,6 +2,7 @@ package org.de.rikr.mapping;
 
 import org.objectweb.asm.tree.ClassNode;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -39,6 +40,20 @@ public final class CandidateRanking {
             tied++;
         }
         return tied;
+    }
+
+    /**
+     * The candidates with the accepted match among them. A match accepted earlier can rank below the minimum
+     * similarity now asked for, or fall outside the list; it is put first, so the class never looks unmatched.
+     */
+    public static List<ClassMatch> withAccepted(List<ClassMatch> ranked, ClassMatch accepted) {
+        if (ranked.stream().anyMatch(match -> match.classNode() == accepted.classNode())) {
+            return ranked;
+        }
+        List<ClassMatch> listed = new ArrayList<>(ranked.size() + 1);
+        listed.add(accepted);
+        listed.addAll(ranked);
+        return listed;
     }
 
     private static boolean inPackage(String internalName) {

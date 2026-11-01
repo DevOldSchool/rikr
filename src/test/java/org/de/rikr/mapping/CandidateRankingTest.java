@@ -42,6 +42,23 @@ class CandidateRankingTest {
         assertEquals(2, CandidateRanking.tiedAtTop(List.of(match("a", 100), match("b", 100), match("c", 50))));
     }
 
+    @Test
+    void listsTheAcceptedMatchFirstWhenTheMinimumLeftItOut() {
+        ClassMatch accepted = match("ro", 71);
+        List<ClassMatch> ranked = List.of(match("ab", 95));
+
+        assertEquals(List.of(accepted, ranked.getFirst()), CandidateRanking.withAccepted(ranked, accepted));
+        assertEquals(List.of(accepted), CandidateRanking.withAccepted(List.of(), accepted));
+    }
+
+    @Test
+    void leavesTheListAloneWhenTheAcceptedMatchIsInIt() {
+        ClassMatch accepted = match("ro", 95);
+        List<ClassMatch> ranked = List.of(match("ab", 99), accepted);
+
+        assertEquals(ranked, CandidateRanking.withAccepted(ranked, new ClassMatch(accepted.classNode(), 95)));
+    }
+
     private static ClassMatch match(String name, int percent) {
         return new ClassMatch(named(name), percent);
     }
