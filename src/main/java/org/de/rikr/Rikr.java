@@ -143,6 +143,8 @@ public class Rikr {
 
     public void saveProject(File destination) throws IOException {
         projectSessionService.save(destination, project.toSession(userInterface.captureProjectLayout()));
+        project.markSaved();
+        userInterface.setEdited(false);
         currentProjectFile = destination.getAbsoluteFile();
         RecentProjects.add(currentProjectFile);
         userInterface.updateProjectTitle(currentProjectFile);
@@ -285,8 +287,16 @@ public class Rikr {
         userInterface.updateTree(project.jars().classesByJar());
         userInterface.applyProjectLayout(opened.session().layout());
         userInterface.updateProjectTitle(currentProjectFile);
+        userInterface.setEdited(false);
         refreshProjectState();
         log("Opened project " + currentProjectFile.getAbsolutePath());
+    }
+
+    /**
+     * @see Project#unsavedChanges()
+     */
+    public int unsavedChanges() {
+        return project.unsavedChanges();
     }
 
     public File getCurrentProjectFile() {
@@ -328,11 +338,15 @@ public class Rikr {
                 }
                 userInterface.refreshTreeLabels();
                 userInterface.refreshControlFlow();
+                userInterface.refreshNaming();
                 refreshProjectState();
             }
             case ProjectEvent.JarsSaved ignored -> refreshProjectState();
             case ProjectEvent.BookmarksChanged ignored -> userInterface.refreshBookmarks();
+            case ProjectEvent.MappingsChanged ignored -> {
+            }
         }
+        userInterface.setEdited(project.unsavedChanges() > 0);
     }
 
     private void refreshProjectState() {

@@ -169,6 +169,8 @@ class RikrMcpTest {
         assertTrue(text(call("find_references", args("jar", "game.jar", "class", "a", "field", "hp")))
             .contains("Reads (1)"));
         assertEquals("No entry points found in game.jar.", text(call("list_entry_points", args("jar", "game.jar"))));
+        String naming = text(call("naming_progress", args("jar", "game.jar")));
+        assertTrue(naming.contains("classes named in game.jar.") && naming.contains("most referenced first"), naming);
         String calls = text(call("get_call_graph", args("jar", "game.jar", "class", "b", "method", "make")));
         assertTrue(calls.contains("-> static b.read(La;)I"), calls);
         String flow = text(call("get_control_flow", args("jar", "game.jar", "class", "b", "method", "read")));

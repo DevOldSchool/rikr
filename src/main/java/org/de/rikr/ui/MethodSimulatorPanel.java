@@ -6,7 +6,6 @@ import org.de.rikr.behavioral.SimulationException;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.symbol.InstructionLines;
 import org.de.rikr.theme.Theme;
-import org.de.rikr.ui.model.ClassNodeMutableTreeNode;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldInsnNode;
@@ -167,8 +166,8 @@ public class MethodSimulatorPanel extends JPanel {
 
     }
 
-    public void initSimulate(ClassNodeMutableTreeNode parentNode, MethodNode methodNode) {
-        this.owner = parentNode.getClassNode();
+    public void initSimulate(ClassNode owner, MethodNode methodNode) {
+        this.owner = owner;
         this.methodNode = methodNode;
         methodSimulator = new MethodSimulator(owner.name, methodNode);
         lines = InstructionLines.of(methodNode);

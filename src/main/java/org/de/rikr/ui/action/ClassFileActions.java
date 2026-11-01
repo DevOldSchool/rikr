@@ -105,7 +105,7 @@ public class ClassFileActions {
         if (original == null) {
             JOptionPane.showMessageDialog(
                 frame,
-                "Original JAR path unknown for '" + jarName + "'. Try 'Export Selected JAR...' instead.",
+                "Original JAR path unknown for '" + jarName + "'. Use Export JAR… instead.",
                 "Overwrite Original JAR",
                 JOptionPane.WARNING_MESSAGE
             );

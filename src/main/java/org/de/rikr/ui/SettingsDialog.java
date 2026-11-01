@@ -7,13 +7,13 @@ import javax.swing.*;
 import java.awt.*;
 
 /**
- * The modal Settings window. Apply and OK save the settings and then run {@code afterApply}.
+ * The modal Settings window. Apply and OK save the settings; views follow them through the settings listeners.
  */
 final class SettingsDialog {
     private SettingsDialog() {
     }
 
-    static void open(JFrame frame, Runnable afterApply) {
+    static void open(JFrame frame) {
         JDialog dialog = new JDialog(frame, "Settings", true);
         SettingsPanel panel = new SettingsPanel(SettingsManager.getCurrent());
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
@@ -24,9 +24,9 @@ final class SettingsDialog {
         buttons.add(apply);
         buttons.add(ok);
 
-        apply.addActionListener(e -> save(dialog, panel, frame, afterApply));
+        apply.addActionListener(e -> save(dialog, panel, frame));
         ok.addActionListener(e -> {
-            if (save(dialog, panel, frame, afterApply)) {
+            if (save(dialog, panel, frame)) {
                 dialog.dispose();
             }
         });
@@ -44,7 +44,7 @@ final class SettingsDialog {
     }
 
     // False, after saying why, when the settings can't be used; nothing is saved then.
-    private static boolean save(JDialog dialog, SettingsPanel panel, JFrame frame, Runnable afterApply) {
+    private static boolean save(JDialog dialog, SettingsPanel panel, JFrame frame) {
         String problem = panel.problem();
         if (problem != null) {
             JOptionPane.showMessageDialog(dialog, problem, "Settings", JOptionPane.ERROR_MESSAGE);
@@ -52,7 +52,6 @@ final class SettingsDialog {
         }
         Settings settings = panel.collectSettings();
         SettingsManager.applyAndSave(settings, frame);
-        afterApply.run();
         return true;
     }
 }

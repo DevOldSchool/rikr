@@ -40,12 +40,13 @@ public class Project implements AutoCloseable {
     private final ReferenceIndexService references = new ReferenceIndexService();
     private final DecompilerCacheService decompiler;
     private final SearchService searchService = new SearchService();
+    private int unsavedChanges;
 
     public Project(Logger logger) {
         this.logger = logger;
         this.jars = new JarOperations(logger, workspace, events);
         this.renames = new RenameOperations(workspace, events);
-        this.mappings = new MappingOperations(workspace);
+        this.mappings = new MappingOperations(workspace, events);
         this.bookmarks = new Bookmarks(workspace, events);
         this.decompiler = new DecompilerCacheService(logger);
         events.subscribe(this::onEvent);
@@ -81,6 +82,8 @@ public class Project implements AutoCloseable {
             }
             project.mappings.restore(session.mappings());
             project.bookmarks.replaceAll(session.bookmarks());
+            // Restoring the file's own state changes nothing the file doesn't already hold.
+            project.markSaved();
             return project;
         } catch (IOException exception) {
             project.close();
@@ -120,6 +123,18 @@ public class Project implements AutoCloseable {
                 + " renames, mappings or bookmarks of loose class files; only JARs can be reopened.");
         }
         return new ProjectSession(jarPaths, savedMappings, savedRenames, savedBookmarks, layout);
+    }
+
+    /**
+     * How many renames, class mapping decisions, bookmark changes and removals were made since the project was
+     * last saved or opened. They are kept only in the project file, so closing the project loses them.
+     */
+    public int unsavedChanges() {
+        return unsavedChanges;
+    }
+
+    public void markSaved() {
+        unsavedChanges = 0;
     }
 
     public EventBus events() {
@@ -172,6 +187,10 @@ public class Project implements AutoCloseable {
     }
 
     private void onEvent(ProjectEvent event) {
+        // Loading a JAR is not work to lose: the file is still there to load again.
+        if (!(event instanceof ProjectEvent.JarsLoaded || event instanceof ProjectEvent.JarsSaved)) {
+            unsavedChanges++;
+        }
         switch (event) {
             case ProjectEvent.JarsLoaded loaded -> {
                 for (String jar : loaded.jars()) {
@@ -210,6 +229,8 @@ public class Project implements AutoCloseable {
             case ProjectEvent.JarsSaved ignored -> {
             }
             case ProjectEvent.BookmarksChanged ignored -> {
+            }
+            case ProjectEvent.MappingsChanged ignored -> {
             }
         }
     }

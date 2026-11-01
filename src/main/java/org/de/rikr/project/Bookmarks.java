@@ -40,6 +40,10 @@ public class Bookmarks {
         return service.getBookmarks();
     }
 
+    public boolean contains(ProjectBookmark bookmark) {
+        return service.getBookmarks().contains(bookmark);
+    }
+
     public Optional<ClassNode> findClass(ProjectBookmark bookmark) {
         return workspace.findClass(new ClassRef(bookmark.jarName(), bookmark.className()));
     }

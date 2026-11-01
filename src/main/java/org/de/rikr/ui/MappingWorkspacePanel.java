@@ -2,6 +2,7 @@ package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
 import org.de.rikr.mapping.ClassMappingDecision;
+import org.de.rikr.mapping.CandidateRanking;
 import org.de.rikr.mapping.ClassMatch;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;
@@ -33,6 +34,9 @@ public class MappingWorkspacePanel extends JPanel {
     );
     private final DefaultListModel<ClassNode> sourceClassModel = new DefaultListModel<>();
     private final DefaultListModel<ClassMatch> candidateModel = new DefaultListModel<>();
+    // Of the candidates shown: how many share the best similarity, and how many were left out of the list.
+    private int tiedCandidates;
+    private int hiddenCandidates;
     private final JList<ClassNode> sourceClassList = new JList<>(sourceClassModel);
     private final JList<ClassMatch> candidateList = new JList<>(candidateModel);
     private final JTextArea sourceDetails = createDetailArea();
@@ -130,11 +134,11 @@ public class MappingWorkspacePanel extends JPanel {
     }
 
     private void buildToolbar() {
-        toolbar.add(new JLabel("Source JAR"));
+        toolbar.add(labelFor("Source JAR", jars.sourceBox()));
         toolbar.add(jars.sourceBox());
-        toolbar.add(new JLabel("Target JAR"));
+        toolbar.add(labelFor("Target JAR", jars.targetBox()));
         toolbar.add(jars.targetBox());
-        toolbar.add(new JLabel("Minimum %"));
+        toolbar.add(labelFor("Minimum %", minimumSimilaritySpinner));
         toolbar.add(minimumSimilaritySpinner);
         autoMatchButton.setToolTipText("Match every class whose best candidate is unique and at least the minimum "
             + "similarity in shape, then match more from the fields and methods of the classes matched");
@@ -163,6 +167,7 @@ public class MappingWorkspacePanel extends JPanel {
 
         JScrollPane sourceListScroll = titledScrollPane(sourceClassList, "Source classes");
         SearchFields.style(filterField, "Filter classes");
+        showBox.getAccessibleContext().setAccessibleName("Show");
         showBox.setToolTipText("Show all source classes, or only those not yet mapped, or only mapped ones");
         JPanel sourceFilter = new JPanel(new BorderLayout(6, 0));
         sourceFilter.setOpaque(false);
@@ -235,6 +240,8 @@ public class MappingWorkspacePanel extends JPanel {
             .orElse(null);
         sourceClassModel.clear();
         candidateModel.clear();
+        tiedCandidates = 0;
+        hiddenCandidates = 0;
         allSourceClasses.clear();
 
         if (!hasJarPair()) {
@@ -323,6 +330,8 @@ public class MappingWorkspacePanel extends JPanel {
         ClassNode sourceClass = sourceClassList.getSelectedValue();
         String targetJar = selectedTargetJar();
         candidateModel.clear();
+        tiedCandidates = 0;
+        hiddenCandidates = 0;
         candidateDetails.setText("");
         if (!hasJarPair() || sourceClass == null || targetJar == null) {
             updateDetailsAndControls();
@@ -351,7 +360,11 @@ public class MappingWorkspacePanel extends JPanel {
                 }
                 candidateList.setEnabled(true);
                 try {
-                    get().forEach(candidateModel::addElement);
+                    List<ClassMatch> found = get();
+                    List<ClassMatch> kept = CandidateRanking.forSource(sourceClass, found);
+                    hiddenCandidates = found.size() - kept.size();
+                    tiedCandidates = CandidateRanking.tiedAtTop(kept);
+                    kept.forEach(candidateModel::addElement);
                     selectAcceptedCandidate(sourceClass);
                     updateDetailsAndControls();
                 } catch (InterruptedException exception) {
@@ -375,7 +388,8 @@ public class MappingWorkspacePanel extends JPanel {
                 }
             }
         }
-        if (!candidateModel.isEmpty()) {
+        // A tie is not a match: picking the first would let Enter accept a coin flip.
+        if (!candidateModel.isEmpty() && tiedCandidates < 2) {
             candidateList.setSelectedIndex(0);
         }
     }
@@ -595,7 +609,7 @@ public class MappingWorkspacePanel extends JPanel {
                     "Accepted: " + mapping.sourceClassName() + " -> " + mapping.targetClassName()
                         + " (" + mapping.similarityPercent() + "%)"
                 ),
-                () -> statusLabel.setText(candidatePrompt(sourceClass, candidate))
+                () -> statusLabel.setText(candidatePrompt(sourceClass, candidate) + hiddenNote(sourceClass))
             );
         }
         if (notice == null && hasJarPair() && !anyAccepted && !carryingNames) {
@@ -614,12 +628,25 @@ public class MappingWorkspacePanel extends JPanel {
         updateDetailsAndControls();
     }
 
-    private static String candidatePrompt(ClassNode sourceClass, ClassMatch candidate) {
+    private String candidatePrompt(ClassNode sourceClass, ClassMatch candidate) {
+        if (candidate == null && tiedCandidates > 1) {
+            return "No unique match for " + sourceClass.name + ": " + tiedCandidates + " candidates tie at "
+                + candidateModel.get(0).similarityPercent() + "%, so none is picked. Compare their members, then "
+                + "choose one.";
+        }
         if (candidate == null) {
             return "Select a candidate to accept or reject.";
         }
         return "Press Enter to accept " + candidate.classNode().name + " (" + candidate.similarityPercent()
             + "%) as the match for " + sourceClass.name + ", or pick another candidate.";
+    }
+
+    private String hiddenNote(ClassNode sourceClass) {
+        if (hiddenCandidates == 0) {
+            return "";
+        }
+        String left = hiddenCandidates == 1 ? " candidate in a package is" : " candidates in packages are";
+        return " " + hiddenCandidates + left + " left out, as " + sourceClass.name + " is in no package.";
     }
 
     private static void highlightDifferences(JTextArea area, ClassNode shown, ClassNode other) {
@@ -712,6 +739,14 @@ public class MappingWorkspacePanel extends JPanel {
         candidateDetails.setBackground(Theme.CONTENT_BACKGROUND_COLOR);
         revalidate();
         repaint();
+    }
+
+    // A label that names its control for screen readers too.
+    private static JLabel labelFor(String text, JComponent control) {
+        JLabel label = new JLabel(text);
+        label.setLabelFor(control);
+        control.getAccessibleContext().setAccessibleName(text);
+        return label;
     }
 
     private static JScrollPane titledScrollPane(Component component, String title) {

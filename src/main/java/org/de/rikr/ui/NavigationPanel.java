@@ -15,6 +15,7 @@ public class NavigationPanel extends JPanel {
     private final JButton referencesButton;
     private final JButton bookmarksButton;
     private final JButton controlFlowButton;
+    private final JButton namingButton;
     private SelectedTab selectedTab = SelectedTab.PROJECT;
 
     public NavigationPanel(
@@ -23,7 +24,8 @@ public class NavigationPanel extends JPanel {
         ActionListener mappingAction,
         ActionListener referencesAction,
         ActionListener bookmarksAction,
-        ActionListener controlFlowAction
+        ActionListener controlFlowAction,
+        ActionListener namingAction
     ) {
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
         setBackground(Theme.BACKGROUND_COLOR);
@@ -71,6 +73,13 @@ public class NavigationPanel extends JPanel {
         controlFlowButton.setBorder(new FocusRingBorder());
         controlFlowButton.addActionListener(controlFlowAction);
 
+        namingButton = new JButton(Images.getImage("naming"));
+        namingButton.setToolTipText("Naming: the classes to name next");
+        namingButton.getAccessibleContext().setAccessibleName("Naming");
+        namingButton.setAlignmentX(Component.CENTER_ALIGNMENT);
+        namingButton.setBorder(new FocusRingBorder());
+        namingButton.addActionListener(namingAction);
+
         add(Box.createRigidArea(new Dimension(36, 5)));
         add(projectButton);
         add(Box.createRigidArea(new Dimension(36, 5)));
@@ -81,6 +90,8 @@ public class NavigationPanel extends JPanel {
         add(referencesButton);
         add(Box.createRigidArea(new Dimension(36, 5)));
         add(controlFlowButton);
+        add(Box.createRigidArea(new Dimension(36, 5)));
+        add(namingButton);
         add(Box.createRigidArea(new Dimension(36, 5)));
         // Bookmarks last: the workspaces above it follow the code; bookmarks are a list the person keeps.
         add(bookmarksButton);
@@ -122,6 +133,11 @@ public class NavigationPanel extends JPanel {
             selectedTab = SelectedTab.CONTROL_FLOW;
             applyTheme();
         });
+
+        namingButton.addActionListener(e -> {
+            selectedTab = SelectedTab.NAMING;
+            applyTheme();
+        });
     }
 
     public void selectProjectTab() {
@@ -148,6 +164,10 @@ public class NavigationPanel extends JPanel {
         controlFlowButton.doClick();
     }
 
+    public void selectNamingTab() {
+        namingButton.doClick();
+    }
+
     public String getSelectedTabId() {
         return selectedTab.name();
     }
@@ -161,6 +181,7 @@ public class NavigationPanel extends JPanel {
                 case REFERENCES -> selectReferencesTab();
                 case BOOKMARKS -> selectBookmarksTab();
                 case CONTROL_FLOW -> selectControlFlowTab();
+                case NAMING -> selectNamingTab();
             }
         } catch (IllegalArgumentException exception) {
             selectProjectTab();
@@ -175,6 +196,7 @@ public class NavigationPanel extends JPanel {
         style(referencesButton, "references", SelectedTab.REFERENCES);
         style(bookmarksButton, "bookmarks", SelectedTab.BOOKMARKS);
         style(controlFlowButton, "flow", SelectedTab.CONTROL_FLOW);
+        style(namingButton, "naming", SelectedTab.NAMING);
 
         revalidate();
         repaint();
@@ -195,6 +217,7 @@ public class NavigationPanel extends JPanel {
         MAPPING,
         REFERENCES,
         BOOKMARKS,
-        CONTROL_FLOW
+        CONTROL_FLOW,
+        NAMING
     }
 }

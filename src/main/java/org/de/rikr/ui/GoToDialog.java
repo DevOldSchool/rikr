@@ -120,6 +120,8 @@ final class GoToDialog {
                     .filter(target -> target.name().toLowerCase(Locale.ROOT).contains(text)
                         || target.owner().name.toLowerCase(Locale.ROOT).equals(text))
                     .sorted(Comparator.comparingInt((Target target) -> rank(target, text))
+                        // In an obfuscated JAR the program's own code is in no package; libraries keep theirs.
+                        .thenComparing(target -> target.owner().name.indexOf('/') >= 0)
                         .thenComparing(Target::name)
                         .thenComparing(target -> target.owner().name))
                     .limit(MAX_RESULTS + 1L)

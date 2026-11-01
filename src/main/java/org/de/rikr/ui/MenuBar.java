@@ -2,10 +2,12 @@ package org.de.rikr.ui;
 
 import com.formdev.flatlaf.util.SystemInfo;
 import org.de.rikr.Rikr;
+import org.de.rikr.ui.action.SymbolActions;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.KeyEvent;
+import java.util.function.Consumer;
 
 /**
  * The application menus. Shortcuts follow macOS conventions: Cmd+S saves the project, Cmd+G finds the next match.
@@ -37,8 +39,10 @@ public class MenuBar extends JMenuBar {
         Runnable showReferences,
         Runnable showBookmarks,
         Runnable showFlow,
+        Runnable showNaming,
         Runnable toggleLog,
-        Runnable openSettings
+        Runnable openSettings,
+        Consumer<SymbolActions.Action> symbolAction
     ) {
     }
 
@@ -96,6 +100,7 @@ public class MenuBar extends JMenuBar {
         viewMenu.add(item("Cross-JAR Mappings", KeyEvent.VK_M, view, actions.showMapping()));
         viewMenu.add(item("References and Call Hierarchy", KeyEvent.VK_R, view, actions.showReferences()));
         viewMenu.add(item("Entry Points and Flow", KeyEvent.VK_C, view, actions.showFlow()));
+        viewMenu.add(item("Naming", KeyEvent.VK_N, view, actions.showNaming()));
         viewMenu.add(item("Bookmarks", KeyEvent.VK_B, view, actions.showBookmarks()));
         viewMenu.addSeparator();
         viewMenu.add(groupBySuperclassItem);
@@ -105,6 +110,22 @@ public class MenuBar extends JMenuBar {
         splitAsmJavaItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_J, MENU | KeyEvent.SHIFT_DOWN_MASK));
         viewMenu.add(splitAsmJavaItem);
 
+        // Acts on the selection in the tree or the name at the caret in the code, whichever has the focus.
+        JMenu codeMenu = new JMenu("Code");
+        codeMenu.add(item("Rename…", KeyEvent.VK_F6, KeyEvent.SHIFT_DOWN_MASK,
+            () -> actions.symbolAction().accept(SymbolActions.Action.RENAME)));
+        codeMenu.add(item("Show References", KeyEvent.VK_F7, KeyEvent.ALT_DOWN_MASK,
+            () -> actions.symbolAction().accept(SymbolActions.Action.SHOW_REFERENCES)));
+        codeMenu.add(item("Add or Remove Bookmark", KeyEvent.VK_F3, 0,
+            () -> actions.symbolAction().accept(SymbolActions.Action.TOGGLE_BOOKMARK)));
+        codeMenu.addSeparator();
+        codeMenu.add(item("Show Control Flow", KeyEvent.VK_F8, KeyEvent.ALT_DOWN_MASK,
+            () -> actions.symbolAction().accept(SymbolActions.Action.SHOW_CONTROL_FLOW)));
+        codeMenu.add(item("Show Call Graph", KeyEvent.VK_F9, KeyEvent.ALT_DOWN_MASK,
+            () -> actions.symbolAction().accept(SymbolActions.Action.SHOW_CALL_GRAPH)));
+        codeMenu.add(item("Simulate Method", 0, 0,
+            () -> actions.symbolAction().accept(SymbolActions.Action.SIMULATE_METHOD)));
+
         JMenu windowMenu = new JMenu("Window");
         windowMenu.add(item("Show or Hide Log", KeyEvent.VK_L, MENU, actions.toggleLog()));
 
@@ -112,6 +133,7 @@ public class MenuBar extends JMenuBar {
         add(editMenu);
         add(navigateMenu);
         add(viewMenu);
+        add(codeMenu);
         add(windowMenu);
     }
 

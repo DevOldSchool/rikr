@@ -139,6 +139,27 @@ class ProjectTest {
         assertTrue(project.renames().dirtyJars().isEmpty());
     }
 
+    @Test
+    void countsUnsavedWorkButNotLoadingUntilSavedOrReopened() throws Exception {
+        loadOldAndNew();
+        assertEquals(0, project.unsavedChanges());
+        ClassNode source = project.jars().classes("old.jar").getFirst();
+        ClassNode target = project.jars().classes("new.jar").getFirst();
+
+        project.mappings().accept("old.jar", "new.jar", source, new ClassMatch(target, 100));
+        project.bookmarks().toggle(new ProjectBookmark(ProjectBookmarkType.CLASS, "old.jar", "a", null, null));
+        project.renames().renameClass("old.jar", source, "Player");
+
+        assertEquals(3, project.unsavedChanges());
+        try (Project reopened = Project.open(log::add, project.toSession(layout()))) {
+            assertEquals(0, reopened.unsavedChanges());
+        }
+        project.markSaved();
+        assertEquals(0, project.unsavedChanges());
+        project.mappings().clearDecisions("old.jar", "new.jar", source);
+        assertEquals(1, project.unsavedChanges());
+    }
+
     private void loadOldAndNew() throws Exception {
         project.jars().loadJars(new File[]{
             writeJar("old", "old.jar", classWithSelfField("a")),

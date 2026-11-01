@@ -49,4 +49,10 @@ public sealed interface ProjectEvent {
 
     record BookmarksChanged() implements ProjectEvent {
     }
+
+    /**
+     * A class mapping between two JARs was accepted, rejected or cleared.
+     */
+    record MappingsChanged() implements ProjectEvent {
+    }
 }

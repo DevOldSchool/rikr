@@ -43,6 +43,7 @@ public class SettingsPanel extends JPanel {
         String[] families = GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames();
         fontFamilyCombo = new JComboBox<>(families);
         fontFamilyCombo.setSelectedItem(settings.getFontFamily());
+        fontFamilyCombo.getAccessibleContext().setAccessibleName("Editor font");
         add(fontFamilyCombo, gridBagConstraints);
 
         gridBagConstraints.gridx = 0;
@@ -50,6 +51,7 @@ public class SettingsPanel extends JPanel {
         add(label("Font size"), gridBagConstraints);
         gridBagConstraints.gridx = 1;
         fontSizeSpinner = new JSpinner(new SpinnerNumberModel(settings.getFontSize(), 8, 48, 1));
+        fontSizeSpinner.getAccessibleContext().setAccessibleName("Font size");
         add(fontSizeSpinner, gridBagConstraints);
 
         gridBagConstraints.gridx = 0;
@@ -63,6 +65,7 @@ public class SettingsPanel extends JPanel {
         if (selected != null) {
             themeCombo.setSelectedItem(selected);
         }
+        themeCombo.getAccessibleContext().setAccessibleName("Theme");
         add(themeCombo, gridBagConstraints);
 
         DecompilerCacheSettings cache = settings.getDecompilerCache();
@@ -78,9 +81,9 @@ public class SettingsPanel extends JPanel {
         gridBagConstraints.gridy++;
         gridBagConstraints.insets = new Insets(0, 6, 6, 6);
         // A width makes the HTML wrap instead of widening the window.
-        JLabel cacheHint = new JLabel("<html><div style='width: 400px'>Classes decompiled before open at once, in "
-            + "any project. Past the size limit, the classes used least recently are deleted. A new folder starts "
-            + "empty; the old one is left as it is.</div></html>");
+        JLabel cacheHint = new JLabel("<html><div style='width: 400px'>Decompiled Java is kept on disk, so a class "
+            + "opens at once the next time, in any project. Past the size limit, the classes opened least recently "
+            + "are deleted. A new folder starts empty, and the old one is left as it is.</div></html>");
         cacheHint.putClientProperty("FlatLaf.styleClass", "small");
         add(cacheHint, gridBagConstraints);
         gridBagConstraints.gridwidth = 1;

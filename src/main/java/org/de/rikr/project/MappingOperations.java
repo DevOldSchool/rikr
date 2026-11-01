@@ -31,12 +31,14 @@ public class MappingOperations {
     private static final int MAX_CLASS_MATCHES_PER_JAR = 10;
 
     private final Workspace workspace;
+    private final EventBus events;
     private final ClassComparator classComparator = new ClassComparator();
     private final MethodComparator methodComparator = new MethodComparator();
     private final ClassMappingService service = new ClassMappingService(classComparator);
 
-    MappingOperations(Workspace workspace) {
+    MappingOperations(Workspace workspace, EventBus events) {
         this.workspace = workspace;
+        this.events = events;
     }
 
     public List<ClassMatch> findCandidates(
@@ -74,14 +76,17 @@ public class MappingOperations {
 
     public void accept(String sourceJar, String targetJar, ClassNode sourceClass, ClassMatch candidate) {
         service.accept(sourceJar, targetJar, sourceClass, candidate);
+        events.publish(new ProjectEvent.MappingsChanged());
     }
 
     public void reject(String sourceJar, String targetJar, ClassNode sourceClass, ClassNode targetClass) {
         service.reject(sourceJar, targetJar, sourceClass, targetClass);
+        events.publish(new ProjectEvent.MappingsChanged());
     }
 
     public void clearDecisions(String sourceJar, String targetJar, ClassNode sourceClass) {
         service.clearSourceDecisions(sourceJar, targetJar, sourceClass);
+        events.publish(new ProjectEvent.MappingsChanged());
     }
 
     public Optional<ClassMappingDecision> accepted(String sourceJar, String targetJar, ClassNode sourceClass) {
@@ -106,13 +111,17 @@ public class MappingOperations {
         if (sourceClasses == null || targetClasses == null) {
             return List.of();
         }
-        return service.autoAcceptUniqueMatches(
+        List<ClassMappingDecision> accepted = service.autoAcceptUniqueMatches(
             sourceJar,
             targetJar,
             sourceClasses,
             targetClasses,
             minimumSimilarityPercent
         );
+        if (!accepted.isEmpty()) {
+            events.publish(new ProjectEvent.MappingsChanged());
+        }
+        return accepted;
     }
 
     /**
@@ -191,6 +200,9 @@ public class MappingOperations {
             } catch (IllegalArgumentException alreadyMapped) {
                 // Another source class claimed this target meanwhile; the earlier decision stands.
             }
+        }
+        if (!added.isEmpty()) {
+            events.publish(new ProjectEvent.MappingsChanged());
         }
         return added;
     }

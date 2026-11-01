@@ -34,7 +34,7 @@ public class TreePopupMenu extends JPopupMenu {
     private final JTree tree;
     // Every item, including those not in the menu right now; declared first so item() can add to it.
     private final List<JMenuItem> items = new ArrayList<>();
-    private final JMenuItem renameItem = item("Rename");
+    private final JMenuItem renameItem = item("Rename…", "shift F6");
     private final JMenuItem removeItem = item("Remove", this::remove);
     private final JMenuItem groupBySuperclass = item("Group by Superclass",
         node -> group(node, ClassNodeUtil::groupBySuperclass));
@@ -45,14 +45,14 @@ public class TreePopupMenu extends JPopupMenu {
     private final JMenuItem importRenameMappings = item("Import Rename Mappings...", this::importRenameMappings);
     private final JMenuItem findExtenders = item("Find Extenders", this::findExtenders);
     private final JMenuItem findImplementors = item("Find Implementors", this::findImplementors);
-    private final JMenuItem findMatchingClassNodes = item("Find Matching Class Nodes", this::findMatchingClassNodes);
-    private final JMenuItem getClassNodeSignature = item("Get Class Node Signature", this::showClassSignature);
+    private final JMenuItem findMatchingClassNodes = item("Find Similar Classes in Other JARs", this::findMatchingClassNodes);
+    private final JMenuItem getClassNodeSignature = item("Show Class Summary", this::showClassSignature);
     private final JMenuItem simulateMethod = item("Simulate Method", this::simulateMethod);
-    private final JMenuItem showControlFlow = item("Show Control Flow", this::showControlFlow);
-    private final JMenuItem showCallGraph = item("Show Call Graph", this::showCallGraph);
+    private final JMenuItem showControlFlow = item("Show Control Flow", "alt F8", this::showControlFlow);
+    private final JMenuItem showCallGraph = item("Show Call Graph", "alt F9", this::showCallGraph);
     private final JMenuItem showEntryPoints = item("Show Entry Points", this::showEntryPoints);
-    private final JMenuItem showReferences = item("Show References", this::showReferences);
-    private final JMenuItem toggleBookmark = item("Toggle Bookmark", this::toggleBookmark);
+    private final JMenuItem showReferences = item("Show References", "alt F7", this::showReferences);
+    private final JMenuItem toggleBookmark = item("Add Bookmark", "F3", this::toggleBookmark);
 
     public TreePopupMenu(Rikr controller, JTree tree) {
         this.controller = controller;
@@ -91,9 +91,8 @@ public class TreePopupMenu extends JPopupMenu {
 
     private void rebuild(DefaultMutableTreeNode node) {
         removeAll();
-        add(renameItem);
-        if (node instanceof ClassMutableTreeNode || node instanceof JarMutableTreeNode) {
-            add(removeItem);
+        if (TreeNodes.declarationOf(node).isPresent()) {
+            add(renameItem);
         }
 
         switch (node) {
@@ -128,8 +127,15 @@ public class TreePopupMenu extends JPopupMenu {
             default -> {
             }
         }
-        if (TreeNodes.declarationOf(node).isPresent()) {
+        TreeNodes.targetOf(node).ifPresent(target -> {
+            toggleBookmark.setText(controller.getUserInterface().getSymbolActions().isBookmarked(target)
+                ? "Remove Bookmark" : "Add Bookmark");
             add(toggleBookmark);
+        });
+        // Removing is kept apart from the rest, last, so it is not chosen by mistake for Rename.
+        if (node instanceof ClassMutableTreeNode || node instanceof JarMutableTreeNode) {
+            addSeparator();
+            add(removeItem);
         }
     }
 
@@ -246,21 +252,25 @@ public class TreePopupMenu extends JPopupMenu {
         }
         ClassNode selected = classNode.getClassNode();
         Map<String, String> information = new LinkedHashMap<>();
-        information.put("ClassNode", selected.name);
-        information.put("Is Interface", String.valueOf(Modifier.isInterface(selected.access)));
-        information.put("Is Abstract", String.valueOf(Modifier.isAbstract(selected.access)));
-        information.put("Has Superclass", String.valueOf(
+        information.put("Class", selected.name);
+        information.put("Interface", yesNo(Modifier.isInterface(selected.access)));
+        information.put("Abstract", yesNo(Modifier.isAbstract(selected.access)));
+        information.put("Superclass", yesNo(
             selected.superName != null && !"java/lang/Object".equals(selected.superName)));
-        information.put("Interface count", String.valueOf(selected.interfaces.size()));
-        information.put("Field count", String.valueOf(controller.mappings().nonStaticFieldDescriptions(selected).size()));
-        information.put("Method count", String.valueOf(controller.mappings().nonStaticMethodDescriptions(selected).size()));
+        information.put("Interfaces", String.valueOf(selected.interfaces.size()));
+        information.put("Instance fields", String.valueOf(controller.mappings().nonStaticFieldDescriptions(selected).size()));
+        information.put("Instance methods", String.valueOf(controller.mappings().nonStaticMethodDescriptions(selected).size()));
         new InformationFrame(controller, information);
+    }
+
+    private static String yesNo(boolean value) {
+        return value ? "Yes" : "No";
     }
 
     private void simulateMethod(DefaultMutableTreeNode node) {
         if (node instanceof MethodNodeMutableTreeNode methodNode) {
-            ClassNodeMutableTreeNode parent = (ClassNodeMutableTreeNode) methodNode.getParent();
-            controller.getUserInterface().getMethodSimulatorPanel().initSimulate(parent, methodNode.getMethodNode());
+            controller.getUserInterface().getMethodSimulatorPanel().initSimulate(methodNode.getOwner(),
+                methodNode.getMethodNode());
         }
     }
 
@@ -384,6 +394,19 @@ public class TreePopupMenu extends JPopupMenu {
     private JMenuItem item(String label) {
         JMenuItem item = new JMenuItem(label);
         items.add(item);
+        return item;
+    }
+
+    // The shortcut is shown as a reminder; the Code menu in the menu bar is what responds to it.
+    private JMenuItem item(String label, String shortcut) {
+        JMenuItem item = item(label);
+        item.setAccelerator(KeyStroke.getKeyStroke(shortcut));
+        return item;
+    }
+
+    private JMenuItem item(String label, String shortcut, Consumer<DefaultMutableTreeNode> action) {
+        JMenuItem item = item(label, action);
+        item.setAccelerator(KeyStroke.getKeyStroke(shortcut));
         return item;
     }
 }

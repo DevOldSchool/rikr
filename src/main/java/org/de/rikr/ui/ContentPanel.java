@@ -3,11 +3,14 @@ package org.de.rikr.ui;
 import org.de.rikr.Rikr;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.symbol.BytecodeText;
+import org.de.rikr.symbol.Declaration;
 import org.de.rikr.symbol.Symbol;
 import org.de.rikr.theme.Theme;
+import org.de.rikr.ui.action.SymbolActions;
 import org.de.rikr.ui.handler.RenameActionHandler;
 import org.de.rikr.ui.highlighter.LineHighlighter;
 import org.de.rikr.ui.highlighter.SyntaxHighlighter;
+import org.de.rikr.ui.model.SymbolTarget;
 import org.objectweb.asm.tree.ClassNode;
 
 import javax.swing.*;
@@ -31,7 +34,6 @@ public class ContentPanel extends JScrollPane {
     private final Rikr controller;
     private final JTextPane contentPane;
     private final JPopupMenu contextMenu;
-    private final JMenuItem renameItem;
     private StyledDocument document;
     // Highlighting a large class takes seconds, so it is done off the event thread, into a document of its own
     // that replaces the one on screen in one step. Each display is numbered, so a late one is dropped.
@@ -78,10 +80,8 @@ public class ContentPanel extends JScrollPane {
         // Set up drop listener
         setDropTarget();
 
-        // Context menu for renaming
+        // Context menu, filled each time it opens for the name it opens on
         contextMenu = new JPopupMenu();
-        renameItem = new JMenuItem("Rename");
-        contextMenu.add(renameItem);
         // The menu is shown by hand, not attached to a component, so a theme switch doesn't reach it on its own.
         SettingsManager.addListener(s -> SwingUtilities.updateComponentTreeUI(contextMenu));
 
@@ -125,24 +125,72 @@ public class ContentPanel extends JScrollPane {
     }
 
     public void init() {
-        renameItem.addActionListener(renameActionHandler);
-
-        // Initialize original caret position listener
+        // The platform says which press opens a context menu: a right click, or a Control-click on a Mac.
         contentPane.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
-                if (SwingUtilities.isRightMouseButton(e)) {
-                    popupOffset = contentPane.viewToModel2D(e.getPoint());
-                }
+                showMenuFor(e);
             }
 
             @Override
             public void mouseReleased(MouseEvent e) {
-                if (SwingUtilities.isRightMouseButton(e)) {
-                    contextMenu.show(contentPane, e.getX(), e.getY());
+                showMenuFor(e);
+            }
+        });
+        // From the keyboard, the menu opens at the caret.
+        String showMenu = "showContextMenu";
+        contentPane.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("shift F10"), showMenu);
+        contentPane.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("CONTEXT_MENU"), showMenu);
+        contentPane.getActionMap().put(showMenu, new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                int caret = contentPane.getCaretPosition();
+                try {
+                    Rectangle place = contentPane.modelToView2D(caret).getBounds();
+                    showMenu(caret, place.x, place.y + place.height);
+                } catch (BadLocationException ignored) {
+                    showMenu(caret, 0, 0);
                 }
             }
         });
+    }
+
+    private void showMenuFor(MouseEvent event) {
+        if (event.isPopupTrigger()) {
+            showMenu(contentPane.viewToModel2D(event.getPoint()), event.getX(), event.getY());
+        }
+    }
+
+    // The actions that fit the name at the offset: the flow views for a method only.
+    private void showMenu(int offset, int x, int y) {
+        popupOffset = offset;
+        SymbolActions actions = controller.getUserInterface().getSymbolActions();
+        Optional<SymbolTarget> target = renameActionHandler.targetInCode(offset, false);
+        contextMenu.removeAll();
+        contextMenu.add(menuItem("Rename…", "shift F6", SymbolActions.Action.RENAME, offset));
+        contextMenu.add(menuItem("Show References", "alt F7", SymbolActions.Action.SHOW_REFERENCES, offset));
+        if (target.isPresent() && target.get().declaration() instanceof Declaration.MethodDeclaration) {
+            contextMenu.addSeparator();
+            contextMenu.add(menuItem("Show Control Flow", "alt F8", SymbolActions.Action.SHOW_CONTROL_FLOW, offset));
+            contextMenu.add(menuItem("Show Call Graph", "alt F9", SymbolActions.Action.SHOW_CALL_GRAPH, offset));
+            contextMenu.add(menuItem("Simulate Method", null, SymbolActions.Action.SIMULATE_METHOD, offset));
+        }
+        if (target.isPresent()) {
+            contextMenu.addSeparator();
+            contextMenu.add(menuItem(actions.isBookmarked(target.get()) ? "Remove Bookmark" : "Add Bookmark", "F3",
+                SymbolActions.Action.TOGGLE_BOOKMARK, offset));
+        }
+        contextMenu.show(contentPane, x, y);
+    }
+
+    // The shortcut is shown as a reminder; the Code menu in the menu bar is what responds to it.
+    private JMenuItem menuItem(String text, String shortcut, SymbolActions.Action action, int offset) {
+        JMenuItem item = new JMenuItem(text);
+        if (shortcut != null) {
+            item.setAccelerator(KeyStroke.getKeyStroke(shortcut));
+        }
+        item.addActionListener(event -> controller.getUserInterface().getSymbolActions().run(action, this, offset));
+        return item;
     }
 
     public void displayBytecode(ClassNode classNode) {

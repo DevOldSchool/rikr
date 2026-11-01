@@ -35,6 +35,9 @@ public final class TreeNodes {
      * The class, field or method the node shows. Empty for JAR and grouping nodes.
      */
     public static Optional<Declaration> declarationOf(DefaultMutableTreeNode node) {
+        if (node == null) {
+            return Optional.empty();
+        }
         return Optional.ofNullable(switch (node) {
             case ClassMutableTreeNode classNode -> new Declaration.ClassDeclaration(classNode.getClassNode());
             case ClassNodeMutableTreeNode classNode -> new Declaration.ClassDeclaration(classNode.getClassNode());
@@ -46,21 +49,33 @@ public final class TreeNodes {
     }
 
     /**
-     * A bookmark for the class, field or method the node shows.
+     * The class, field or method the node shows, with its JAR. Empty for JAR and grouping nodes.
      */
-    public static Optional<ProjectBookmark> bookmarkOf(DefaultMutableTreeNode node) {
+    public static Optional<SymbolTarget> targetOf(DefaultMutableTreeNode node) {
         Optional<String> jar = jarOf(node);
         Optional<Declaration> declaration = declarationOf(node);
         if (jar.isEmpty() || declaration.isEmpty()) {
             return Optional.empty();
         }
-        return Optional.of(switch (declaration.get()) {
-            case Declaration.ClassDeclaration target ->
-                new ProjectBookmark(ProjectBookmarkType.CLASS, jar.get(), target.owner().name, null, null);
-            case Declaration.FieldDeclaration target -> new ProjectBookmark(ProjectBookmarkType.FIELD, jar.get(),
-                target.owner().name, target.field().name, target.field().desc);
-            case Declaration.MethodDeclaration target -> new ProjectBookmark(ProjectBookmarkType.METHOD, jar.get(),
-                target.owner().name, target.method().name, target.method().desc);
-        });
+        return Optional.of(new SymbolTarget(jar.get(), declaration.get()));
+    }
+
+    /**
+     * A bookmark for the class, field or method the node shows.
+     */
+    public static Optional<ProjectBookmark> bookmarkOf(DefaultMutableTreeNode node) {
+        return targetOf(node).map(TreeNodes::bookmarkOf);
+    }
+
+    public static ProjectBookmark bookmarkOf(SymbolTarget target) {
+        String jar = target.jar();
+        return switch (target.declaration()) {
+            case Declaration.ClassDeclaration value ->
+                new ProjectBookmark(ProjectBookmarkType.CLASS, jar, value.owner().name, null, null);
+            case Declaration.FieldDeclaration value -> new ProjectBookmark(ProjectBookmarkType.FIELD, jar,
+                value.owner().name, value.field().name, value.field().desc);
+            case Declaration.MethodDeclaration value -> new ProjectBookmark(ProjectBookmarkType.METHOD, jar,
+                value.owner().name, value.method().name, value.method().desc);
+        };
     }
 }

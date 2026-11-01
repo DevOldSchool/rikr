@@ -36,6 +36,7 @@ public class SearchPanel extends JPanel {
     private Kind kind = Kind.ALL;
     private List<SearchResult> lastResults = List.of();
     private String lastQuery = "";
+    private boolean lastMatchCase;
     private boolean matchCase;
     private boolean matchWord;
     private JPanel searchBarPanel;
@@ -68,7 +69,7 @@ public class SearchPanel extends JPanel {
         // Create the list model and the results list
         listModel = new DefaultListModel<>();
         resultsList = new JList<>(listModel);
-        resultsList.setCellRenderer(new SearchResultItemRenderer());
+        resultsList.setCellRenderer(new SearchResultItemRenderer(() -> lastQuery, () -> lastMatchCase));
         resultsList.setBackground(Theme.BACKGROUND_COLOR);
         scrollPane = new JScrollPane(resultsList);
         scrollPane.setBorder(null);
@@ -183,6 +184,7 @@ public class SearchPanel extends JPanel {
         SearchQuery query = new SearchQuery(searchField.getText(), matchCase, matchWord);
         lastResults = controller.search(query);
         lastQuery = query.text();
+        lastMatchCase = matchCase;
         showResults();
     }
 

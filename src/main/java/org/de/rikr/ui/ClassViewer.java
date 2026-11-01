@@ -12,6 +12,7 @@ import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;
 import org.de.rikr.ui.action.ClassFileActions;
 import org.de.rikr.ui.action.ProjectSessionActions;
+import org.de.rikr.ui.action.SymbolActions;
 import org.de.rikr.utilities.ClassNodeUtil;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldNode;
@@ -46,6 +47,7 @@ public class ClassViewer {
     private final MappingWorkspacePanel mappingWorkspacePanel;
     private final ReferenceWorkspacePanel referenceWorkspacePanel;
     private final BookmarkWorkspacePanel bookmarkWorkspacePanel;
+    private final NamingWorkspacePanel namingWorkspacePanel;
     private final FlowPanel flowPanel;
     private final MethodSimulatorPanel methodSimulatorPanel;
     private final JPanel rightPanel;
@@ -55,11 +57,13 @@ public class ClassViewer {
     private final EmptyStatePanel emptyState;
     private final StatusBar statusBar;
     private final NavigationHistory history = new NavigationHistory();
+    private final SymbolActions symbolActions;
     // The simulator's width while open, kept when it closes so it reopens as it was; 0 until first shown.
     private int simulatorWidth;
 
     public ClassViewer(Rikr controller) {
         this.controller = controller;
+        symbolActions = new SymbolActions(controller);
         frame = new JFrame("Rikr");
         List<Image> icons = Images.appIcons();
         frame.setIconImages(icons);
@@ -67,12 +71,13 @@ public class ClassViewer {
         if (Taskbar.isTaskbarSupported() && Taskbar.getTaskbar().isSupported(Taskbar.Feature.ICON_IMAGE)) {
             Taskbar.getTaskbar().setIconImage(SystemInfo.isMacOS ? Images.macAppIcon() : icons.getLast());
         }
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        // Closing asks first when the project has unsaved work; see quit().
+        frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         frame.setSize(1200, 800);
         frame.addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
-                controller.shutdown();
+                quit();
             }
         });
 
@@ -109,6 +114,7 @@ public class ClassViewer {
         mappingWorkspacePanel = new MappingWorkspacePanel(controller);
         referenceWorkspacePanel = new ReferenceWorkspacePanel(controller);
         bookmarkWorkspacePanel = new BookmarkWorkspacePanel(controller);
+        namingWorkspacePanel = new NamingWorkspacePanel(controller);
         flowPanel = new FlowPanel(controller, this::openInBytecode);
         flowPanel.setViewListener(this::updateStatusContext);
         methodSimulatorPanel = new MethodSimulatorPanel(controller);
@@ -138,7 +144,11 @@ public class ClassViewer {
                 bookmarkWorkspacePanel.refresh();
                 showWorkspace(bookmarkWorkspacePanel, rightPanel, bookmarkWorkspacePanel);
             },
-            e -> showWorkspace(projectPanel, flowPanel, flowPanel)
+            e -> showWorkspace(projectPanel, flowPanel, flowPanel),
+            e -> {
+                showWorkspace(namingWorkspacePanel, rightPanel, namingWorkspacePanel);
+                namingWorkspacePanel.refresh();
+            }
         );
 
         // Create a split pane for the navigation panel and tree panel
@@ -211,17 +221,29 @@ public class ClassViewer {
             this::showReferencesTab,
             this::showBookmarksTab,
             navigationPanel::selectControlFlowTab,
+            navigationPanel::selectNamingTab,
             () -> toggleLogVisibility(logPanel.isVisible()),
-            () -> SettingsDialog.open(frame, codeView::redisplay)
+            () -> SettingsDialog.open(frame),
+            symbolActions::run
         ));
         frame.setJMenuBar(menuBar);
 
-        // Put Preferences under the app menu
+        // Put Preferences under the app menu, and let Quit ask about unsaved work as closing the window does.
         if (SystemInfo.isMacOS && java.awt.Desktop.isDesktopSupported()) {
             java.awt.Desktop desktop = java.awt.Desktop.getDesktop();
             try {
                 if (desktop.isSupported(java.awt.Desktop.Action.APP_PREFERENCES)) {
-                    desktop.setPreferencesHandler(e -> SettingsDialog.open(frame, codeView::redisplay));
+                    desktop.setPreferencesHandler(e -> SettingsDialog.open(frame));
+                }
+                if (desktop.isSupported(java.awt.Desktop.Action.APP_QUIT_HANDLER)) {
+                    desktop.setQuitHandler((event, response) -> {
+                        if (projectSessionActions.confirmClose()) {
+                            controller.shutdown();
+                            response.performQuit();
+                        } else {
+                            response.cancelQuit();
+                        }
+                    });
                 }
             } catch (UnsupportedOperationException ignored) {
             }
@@ -293,6 +315,7 @@ public class ClassViewer {
             flowPanel.refreshJars(List.copyOf(jarClassesMap.keySet()));
             treePanel.updateDirtyJars(controller.renames().dirtyJars());
             mappingWorkspacePanel.refreshJars(jarClassesMap);
+            namingWorkspacePanel.refreshJars(jarClassesMap);
         });
     }
 
@@ -621,6 +644,15 @@ public class ClassViewer {
         SwingUtilities.invokeLater(bookmarkWorkspacePanel::refresh);
     }
 
+    /**
+     * Count the named classes again after a rename, when the Naming workspace is on screen.
+     */
+    public void refreshNaming() {
+        if (namingWorkspacePanel.isShowing()) {
+            namingWorkspacePanel.refresh();
+        }
+    }
+
     public void refreshTreeLabels() {
         SwingUtilities.invokeLater(treePanel::refreshLabels);
     }
@@ -681,6 +713,26 @@ public class ClassViewer {
 
     public void updateProjectTitle(File projectFile) {
         frame.setTitle(projectFile == null ? "Rikr" : "Rikr - " + projectFile.getName());
+    }
+
+    /**
+     * Mark the window as holding unsaved work: on macOS the close button shows a dot.
+     */
+    public void setEdited(boolean edited) {
+        frame.getRootPane().putClientProperty("Window.documentModified", edited);
+    }
+
+    private void quit() {
+        if (!projectSessionActions.confirmClose()) {
+            return;
+        }
+        controller.shutdown();
+        frame.dispose();
+        System.exit(0);
+    }
+
+    public SymbolActions getSymbolActions() {
+        return symbolActions;
     }
 
     public LogPanel getLogPanel() {

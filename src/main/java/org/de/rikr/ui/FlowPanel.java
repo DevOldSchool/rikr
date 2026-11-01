@@ -83,6 +83,14 @@ public class FlowPanel extends JPanel {
     };
     private FlowView pending;
     private final JTextField find = new JTextField(14);
+    // Before a graph is chosen, the canvas lists the JAR's entry points to start from.
+    private static final String GRAPH = "graph";
+    private static final String ENTRIES = "entries";
+    private final CardLayout canvasCards = new CardLayout();
+    private final JPanel canvas = new JPanel(canvasCards);
+    private final DefaultListModel<EntryChoice> entries = new DefaultListModel<>();
+    private final JList<EntryChoice> entryList = new JList<>(entries);
+    private final JLabel entriesHeading = new JLabel();
     private final Deque<View> history = new ArrayDeque<>();
     private final Map<String, CallGraph> callGraphs = new HashMap<>();
     private View current;
@@ -98,8 +106,7 @@ public class FlowPanel extends JPanel {
             if (entry == null) {
                 return "Entry point…";
             }
-            return kindName(entry.kind()) + ": " + entry.method().owner() + "." + entry.method().name()
-                + entry.method().descriptor();
+            return kindName(entry.kind()) + ": " + describe(entry.method());
         }
     }
 
@@ -132,6 +139,11 @@ public class FlowPanel extends JPanel {
         JButton zoomOut = new JButton("−");
         JButton zoomIn = new JButton("+");
         JButton fit = new JButton("Fit");
+        zoomOut.setToolTipText("Zoom out");
+        zoomOut.getAccessibleContext().setAccessibleName("Zoom out");
+        zoomIn.setToolTipText("Zoom in");
+        zoomIn.getAccessibleContext().setAccessibleName("Zoom in");
+        fit.setToolTipText("Fit the whole graph in view");
         zoomOut.addActionListener(event -> view.zoomOut());
         zoomIn.addActionListener(event -> view.zoomIn());
         fit.addActionListener(event -> view.fit());
@@ -148,8 +160,10 @@ public class FlowPanel extends JPanel {
         });
         back.setEnabled(false);
         jarBox.setToolTipText("The JAR to find entry points in");
+        jarBox.getAccessibleContext().setAccessibleName("JAR");
         jarBox.addActionListener(event -> jarChosen());
         entryBox.setToolTipText("Where the JAR's code starts: main methods, applets, threads and event listeners");
+        entryBox.getAccessibleContext().setAccessibleName("Entry point");
         entryBox.addActionListener(event -> entryChosen());
         libraryCalls.setToolTipText("Show calls to methods outside the JAR, such as the JDK");
         libraryCalls.setOpaque(false);
@@ -201,10 +215,52 @@ public class FlowPanel extends JPanel {
         corner.setMaximumSize(new Dimension(220, 220));
         stack.add(corner);
         stack.add(view);
-        add(stack, BorderLayout.CENTER);
+        canvas.add(stack, GRAPH);
+        canvas.add(entriesPanel(), ENTRIES);
+        add(canvas, BorderLayout.CENTER);
         updateToggles();
+        showCanvas();
         applyTheme();
         SettingsManager.addListener(settings -> applyTheme());
+    }
+
+    private JComponent entriesPanel() {
+        entryList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        entryList.getAccessibleContext().setAccessibleName("Entry points");
+        entryList.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent event) {
+                if (event.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(event)) {
+                    openChosenEntry();
+                }
+            }
+        });
+        String open = "openEntryPoint";
+        entryList.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("ENTER"), open);
+        entryList.getActionMap().put(open, new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                openChosenEntry();
+            }
+        });
+        entriesHeading.setBorder(BorderFactory.createEmptyBorder(12, 12, 8, 12));
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.add(entriesHeading, BorderLayout.NORTH);
+        JScrollPane scroll = new JScrollPane(entryList);
+        scroll.setBorder(BorderFactory.createEmptyBorder(0, 8, 8, 8));
+        panel.add(scroll, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private void openChosenEntry() {
+        EntryChoice choice = entryList.getSelectedValue();
+        if (choice != null) {
+            entryBox.setSelectedItem(choice);
+        }
+    }
+
+    private void showCanvas() {
+        canvasCards.show(canvas, current == null ? ENTRIES : GRAPH);
     }
 
     /**
@@ -227,7 +283,11 @@ public class FlowPanel extends JPanel {
      */
     public void showEntryPoints(String jar) {
         jarBox.setSelectedItem(jar);
-        entryBox.requestFocusInWindow();
+        if (current == null) {
+            entryList.requestFocusInWindow();
+        } else {
+            entryBox.requestFocusInWindow();
+        }
     }
 
     public void showCallGraph(String jar, ClassNode owner, MethodNode method) {
@@ -256,6 +316,7 @@ public class FlowPanel extends JPanel {
         legend.show(List.of());
         pending = null;
         updateToggles();
+        showCanvas();
         viewListener.run();
     }
 
@@ -327,11 +388,26 @@ public class FlowPanel extends JPanel {
         updatingChoices = true;
         entryBox.removeAllItems();
         entryBox.addItem(new EntryChoice(null));
+        entries.clear();
         if (jar != null) {
-            controller.jars().entryPoints(jar).forEach(entry -> entryBox.addItem(new EntryChoice(entry)));
+            controller.jars().entryPoints(jar).forEach(entry -> {
+                EntryChoice choice = new EntryChoice(entry);
+                entryBox.addItem(choice);
+                entries.addElement(choice);
+            });
         }
         entryBox.setSelectedIndex(0);
         updatingChoices = false;
+        if (jar == null) {
+            entriesHeading.setText("Load a JAR to see where its code starts.");
+        } else if (entries.isEmpty()) {
+            entriesHeading.setText("No entry points found in " + jar + ". Right-click a method in the project tree "
+                + "to see its calls.");
+        } else {
+            entriesHeading.setText("Where " + jar + "’s code starts. Double-click one, or press Enter, to see "
+                + "its calls.");
+            entryList.setSelectedIndex(0);
+        }
     }
 
     private void entryChosen() {
@@ -357,6 +433,7 @@ public class FlowPanel extends JPanel {
         current = next;
         back.setEnabled(!history.isEmpty());
         updateToggles();
+        showCanvas();
         render(false);
         viewListener.run();
     }
@@ -368,6 +445,7 @@ public class FlowPanel extends JPanel {
         current = history.pop();
         back.setEnabled(!history.isEmpty());
         updateToggles();
+        showCanvas();
         render(false);
         viewListener.run();
     }
@@ -453,7 +531,7 @@ public class FlowPanel extends JPanel {
             new GraphLegend.Item(Theme.CONTENT_TEXT_COLOR, false, "call"),
             new GraphLegend.Item(SWITCH_COLOR, true, "override"),
             new GraphLegend.Item(LAMBDA_COLOR, true, "lambda")));
-        title.setText("Calls from " + describe(root) + ": " + nodes.size() + " methods"
+        title.setText("Calls from " + describe(root) + ": " + plural(nodes.size(), "method")
             + (truncated ? ", stopped at " + MAX_CALL_GRAPH_NODES : ""));
     }
 
@@ -521,9 +599,9 @@ public class FlowPanel extends JPanel {
             new GraphLegend.Item(FALSE_COLOR, false, "F  not taken"),
             new GraphLegend.Item(SWITCH_COLOR, false, "switch case"),
             new GraphLegend.Item(EXCEPTION_COLOR, true, "exception handler")));
-        title.setText("Control flow of " + describe(state.owner(), state.method()) + ": " + graph.blocks().size()
-            + " blocks, " + graph.edges().size() + " edges" + (unreachable == 0 ? "" : ", " + unreachable
-            + " unreachable"));
+        title.setText("Control flow of " + describe(state.owner(), state.method()) + ": "
+            + plural(graph.blocks().size(), "block") + ", " + plural(graph.edges().size(), "edge")
+            + (unreachable == 0 ? "" : ", " + unreachable + " unreachable"));
     }
 
     private void openNode(int node) {
@@ -686,6 +764,10 @@ public class FlowPanel extends JPanel {
             case LAMBDA -> LAMBDA_COLOR;
             default -> Theme.CONTENT_TEXT_COLOR;
         };
+    }
+
+    private static String plural(int count, String noun) {
+        return count + " " + noun + (count == 1 ? "" : "s");
     }
 
     private void applyTheme() {

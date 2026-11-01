@@ -7,6 +7,7 @@ import org.de.rikr.symbol.Declaration;
 import org.de.rikr.symbol.Symbol;
 import org.de.rikr.symbol.SymbolResolver;
 import org.de.rikr.ui.ContentPanel;
+import org.de.rikr.ui.model.SymbolTarget;
 import org.de.rikr.ui.model.TreeNodes;
 import org.objectweb.asm.tree.ClassNode;
 
@@ -14,7 +15,6 @@ import javax.swing.*;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.JTextComponent;
 import javax.swing.text.Utilities;
-import javax.swing.tree.DefaultMutableTreeNode;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -36,35 +36,31 @@ public class RenameActionHandler implements ActionListener {
         this.contentPanel = contentPanel;
     }
 
-    private record RenameTarget(String jar, Declaration declaration) {
-        String currentName() {
-            return switch (declaration) {
-                case Declaration.ClassDeclaration target -> target.owner().name;
-                case Declaration.FieldDeclaration target -> target.field().name;
-                case Declaration.MethodDeclaration target -> target.method().name;
-            };
-        }
-    }
-
     @Override
     public void actionPerformed(ActionEvent e) {
         Component invoker = ((JPopupMenu) ((JMenuItem) e.getSource()).getParent()).getInvoker();
         boolean fromCode = invoker instanceof JTextComponent;
-        Optional<RenameTarget> target = fromCode ? targetInCode() : targetInTree();
+        int caret = contentPanel.getPopupOffset();
+        Optional<SymbolTarget> target = fromCode ? targetInCode(caret, true) : targetInTree();
         if (target.isEmpty()) {
             return;
         }
-        int caret = contentPanel.getPopupOffset();
         SwingUtilities.invokeLater(() -> rename(target.get(), fromCode, caret));
     }
 
-    private Optional<RenameTarget> targetInTree() {
-        DefaultMutableTreeNode node = controller.getUserInterface().getTreePanel().getSelectedNode();
-        Optional<String> jar = TreeNodes.jarOf(node);
-        return jar.flatMap(name -> TreeNodes.declarationOf(node).map(value -> new RenameTarget(name, value)));
+    /**
+     * The class, field or method selected in the project tree.
+     */
+    public Optional<SymbolTarget> targetInTree() {
+        return TreeNodes.targetOf(controller.getUserInterface().getTreePanel().getSelectedNode());
     }
 
-    private Optional<RenameTarget> targetInCode() {
+    /**
+     * The class, field or method named at {@code offset} of this panel's code, or selected there.
+     *
+     * @param warn whether to say why there is none
+     */
+    public Optional<SymbolTarget> targetInCode(int offset, boolean warn) {
         ClassNode displayed = contentPanel.getDisplayedClass();
         if (displayed == null) {
             return Optional.empty();
@@ -74,26 +70,28 @@ public class RenameActionHandler implements ActionListener {
             return Optional.empty();
         }
         Optional<Declaration> declaration = contentPanel.isJavaOnly()
-            ? declarationByName(displayed)
-            : declarationAtClick(jar.get());
-        return declaration.map(value -> new RenameTarget(jar.get(), value));
+            ? declarationByName(displayed, offset, warn)
+            : declarationAt(jar.get(), offset, warn);
+        return declaration.map(value -> new SymbolTarget(jar.get(), value));
     }
 
-    private Optional<Declaration> declarationAtClick(String jar) {
-        Optional<Symbol> symbol = contentPanel.symbolAt(contentPanel.getPopupOffset());
+    private Optional<Declaration> declarationAt(String jar, int offset, boolean warn) {
+        Optional<Symbol> symbol = contentPanel.symbolAt(offset);
         if (symbol.isEmpty()) {
-            warn("Right-click the name of a class, field or method to rename it.");
+            if (warn) {
+                warn("Put the caret on the name of a class, field or method, or right-click it.");
+            }
             return Optional.empty();
         }
         Optional<Declaration> declaration = controller.jars().resolve(jar, symbol.get());
-        if (declaration.isEmpty()) {
+        if (declaration.isEmpty() && warn) {
             warn(describe(symbol.get()) + " is not declared in " + jar + ", so it cannot be renamed.");
         }
         return declaration;
     }
 
-    private Optional<Declaration> declarationByName(ClassNode displayed) {
-        String name = wordAtClick();
+    private Optional<Declaration> declarationByName(ClassNode displayed, int offset, boolean warn) {
+        String name = wordAt(offset);
         if (name.isEmpty()) {
             return Optional.empty();
         }
@@ -101,20 +99,21 @@ public class RenameActionHandler implements ActionListener {
         if (matches.size() == 1) {
             return Optional.of(matches.getFirst());
         }
-        warn(matches.isEmpty()
-            ? displayed.name + " declares nothing named " + name + ". Rename it from the bytecode view or the tree."
-            : displayed.name + " declares more than one " + name + ". Rename it from the bytecode view or the tree.");
+        if (warn) {
+            warn(matches.isEmpty()
+                ? displayed.name + " declares nothing named " + name + ". Rename it from the bytecode view or the tree."
+                : displayed.name + " declares more than one " + name + ". Rename it from the bytecode view or the tree.");
+        }
         return Optional.empty();
     }
 
-    private String wordAtClick() {
+    private String wordAt(int offset) {
         JTextPane pane = contentPanel.getContentPane();
         String selected = pane.getSelectedText();
         if (selected != null && !selected.isBlank()) {
             return selected.trim();
         }
         try {
-            int offset = contentPanel.getPopupOffset();
             int start = Utilities.getWordStart(pane, offset);
             int end = Utilities.getWordEnd(pane, offset);
             return pane.getDocument().getText(start, end - start).trim();
@@ -123,11 +122,17 @@ public class RenameActionHandler implements ActionListener {
         }
     }
 
-    private void rename(RenameTarget target, boolean fromCode, int caret) {
+    /**
+     * Ask for a new name, show what changes, and rename.
+     *
+     * @param fromCode whether the target was chosen in the code, which then keeps its place
+     * @param caret    where in the code to put the caret back
+     */
+    public void rename(SymbolTarget target, boolean fromCode, int caret) {
         JFrame frame = controller.getUserInterface().getFrame();
         Object input = JOptionPane.showInputDialog(
-            frame, "New name for " + target.currentName() + ":", "Rename", JOptionPane.PLAIN_MESSAGE, null, null,
-            target.currentName()
+            frame, "New name for " + target.name() + ":", "Rename", JOptionPane.PLAIN_MESSAGE, null, null,
+            target.name()
         );
         if (input == null || input.toString().trim().isEmpty()) {
             return;

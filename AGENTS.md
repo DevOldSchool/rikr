@@ -90,7 +90,7 @@ revisions from 2024-11-05 to 2025-11-25, which start with `initialize`. `McpServ
 request, as the specification's dual-era rules describe.
 
 The tools: `load_jars`, `remove_jar`, `list_jars`, `list_classes`, `describe_class`, `get_bytecode`, `decompile`,
-`search`, `find_references`, `list_entry_points`, `get_call_graph`, `get_control_flow`, `rename`, `undo`, `rename_history`, `import_mappings`, `export_mappings`, `export_jar`,
+`search`, `find_references`, `list_entry_points`, `naming_progress`, `get_call_graph`, `get_control_flow`, `rename`, `undo`, `rename_history`, `import_mappings`, `export_mappings`, `export_jar`,
 `overwrite_original_jar`, `match_classes`, `accept_class_mapping`, `auto_match_classes`, `match_members`,
 `carry_names`, `list_class_mappings`,
 `open_project` and `save_project`. Class names are internal (`a/b/C`); dotted names are accepted too. Renames and

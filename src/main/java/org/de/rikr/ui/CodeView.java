@@ -64,6 +64,9 @@ public class CodeView extends JPanel {
         cards.show(this, EMPTY);
         applyTheme();
         SettingsManager.addListener(settings -> applyTheme());
+        // The code's colours are fixed when it is highlighted, so a new theme, chosen in Settings or following the
+        // system's appearance, needs the code highlighted again.
+        SettingsManager.addListener(settings -> redisplay());
     }
 
     private void applyTheme() {

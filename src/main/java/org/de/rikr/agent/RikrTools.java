@@ -24,6 +24,7 @@ import org.de.rikr.project.ProjectSession;
 import org.de.rikr.project.ProjectSessionService;
 import org.de.rikr.project.RenameOperations;
 import org.de.rikr.reference.ReferenceResult;
+import org.de.rikr.rename.NamingWorklist;
 import org.de.rikr.rename.RenameBatch;
 import org.de.rikr.rename.RenameOperation;
 import org.de.rikr.rename.RenamePreview;
@@ -142,6 +143,14 @@ final class RikrTools implements AutoCloseable {
                     .string("jar", "JAR name.", true)
                     .integer("limit", "How many entry points to return. Default 200."),
                 true, this::entryPoints),
+            tool("naming_progress", """
+                    How many of a JAR's classes have names a person gave, and the classes still named by the \
+                    obfuscator, most referenced first: the ones whose names make the most code readable. Counts \
+                    only classes in no package when the JAR has any, since those are the program's own.""",
+                Schema.object()
+                    .string("jar", "JAR name.", true)
+                    .integer("limit", "How many unnamed classes to return. Default 200."),
+                true, this::namingProgress),
             tool("get_call_graph", """
                     The methods a method calls, and what those call, breadth first to a depth. Virtual and \
                     interface calls also list the overrides in the JAR they may dispatch to. Methods at the \
@@ -467,6 +476,25 @@ final class RikrTools implements AutoCloseable {
         for (EntryPoint entry : entries.subList(0, Math.min(limit, entries.size()))) {
             out.append("  ").append(entry.kind().name().toLowerCase(Locale.ROOT)).append(": ").append(entry.method())
                 .append("  (").append(entry.reason()).append(")\n");
+        }
+        return out.toString().strip();
+    }
+
+    private String namingProgress(Arguments arguments) throws ToolException {
+        String jar = jar(arguments, "jar");
+        int limit = Math.max(1, arguments.integer("limit", DEFAULT_LIMIT));
+        NamingWorklist.Progress progress = NamingWorklist.of(project.jars().classes(jar),
+            project.jars()::originalName, classNode -> project.references().findTypeReferences(jar, classNode).size(),
+            limit);
+        StringBuilder out = new StringBuilder(progress.named() + " of " + progress.classes() + " classes named in "
+            + jar + ".");
+        if (progress.next().isEmpty()) {
+            return out.append(" No class has an obfuscated name.").toString();
+        }
+        out.append(" Unnamed, most referenced first:\n");
+        for (NamingWorklist.Entry entry : progress.next()) {
+            out.append("  ").append(entry.classNode().name).append("  (").append(entry.references())
+                .append(entry.references() == 1 ? " reference)\n" : " references)\n");
         }
         return out.toString().strip();
     }

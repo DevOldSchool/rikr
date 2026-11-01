@@ -10,6 +10,7 @@ import org.de.rikr.ui.model.FieldNodeMutableTreeNode;
 import org.de.rikr.ui.model.InterfaceNodeMutableTreeNode;
 import org.de.rikr.ui.model.JarMutableTreeNode;
 import org.de.rikr.ui.model.MethodNodeMutableTreeNode;
+import org.de.rikr.ui.model.PackageGroupTreeNode;
 import org.de.rikr.ui.model.PackageTreeNode;
 import org.de.rikr.ui.model.TreeNodes;
 import org.de.rikr.utilities.ClassNodeUtil;
@@ -134,24 +135,43 @@ public class TreePanel extends JPanel {
 
         searchField.addActionListener(e -> performSearch());
 
-        // Add a custom mouse listener to the JTree
+        // The platform says which press opens a context menu: a right click, or a Control-click on a Mac.
         tree.addMouseListener(new MouseAdapter() {
             @Override
-            public void mouseClicked(MouseEvent e) {
-                if (SwingUtilities.isRightMouseButton(e)) {
-                    int row = tree.getClosestRowForLocation(e.getX(), e.getY());
-                    tree.setSelectionRow(row);
+            public void mousePressed(MouseEvent e) {
+                showMenuFor(e);
+            }
 
-                    // Show popup menu only if a valid node is selected
-                    DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
-                    if (selectedNode != null) {
-                        popupMenu.show(e.getComponent(), e.getX(), e.getY());
-                    }
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                showMenuFor(e);
+            }
+        });
+        // From the keyboard, the menu opens on the selected row.
+        String showMenu = "showContextMenu";
+        tree.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("shift F10"), showMenu);
+        tree.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("CONTEXT_MENU"), showMenu);
+        tree.getActionMap().put(showMenu, new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                Rectangle row = tree.getPathBounds(tree.getSelectionPath());
+                if (row != null) {
+                    popupMenu.show(tree, row.x + 16, row.y + row.height);
                 }
             }
         });
 
         popupMenu.init();
+    }
+
+    private void showMenuFor(MouseEvent event) {
+        if (!event.isPopupTrigger()) {
+            return;
+        }
+        tree.setSelectionRow(tree.getClosestRowForLocation(event.getX(), event.getY()));
+        if (tree.getLastSelectedPathComponent() != null) {
+            popupMenu.show(event.getComponent(), event.getX(), event.getY());
+        }
     }
 
     public ClassNode getNode(List<ClassNode> classes, String superName) {
@@ -217,7 +237,9 @@ public class TreePanel extends JPanel {
     }
 
     /**
-     * Add the classes under one node per package, packages first, then classes in no package; all sorted.
+     * Add the classes under one node per package, packages first, then classes in no package; all sorted. When a
+     * JAR has both, as an obfuscated one does, the packages are folded into one node so its own classes start on
+     * the first screen.
      */
     private static void addByPackage(DefaultMutableTreeNode parent, String jarName, List<ClassNode> classes) {
         Map<String, List<ClassNode>> byPackage = new TreeMap<>();
@@ -226,7 +248,15 @@ public class TreePanel extends JPanel {
             byPackage.computeIfAbsent(slash < 0 ? "" : classNode.name.substring(0, slash), name -> new ArrayList<>())
                 .add(classNode);
         }
+        List<ClassNode> noPackage = byPackage.getOrDefault("", List.of());
+        long packages = byPackage.keySet().stream().filter(name -> !name.isEmpty()).count();
+        DefaultMutableTreeNode packageParent = parent;
+        if (packages > 0 && !noPackage.isEmpty()) {
+            packageParent = new PackageGroupTreeNode((int) packages);
+            parent.add(packageParent);
+        }
         Comparator<ClassNode> byName = Comparator.comparing(classNode -> classNode.name);
+        DefaultMutableTreeNode packagesUnder = packageParent;
         byPackage.forEach((packageName, members) -> {
             if (packageName.isEmpty()) {
                 return;
@@ -234,9 +264,9 @@ public class TreePanel extends JPanel {
             PackageTreeNode packageNode = new PackageTreeNode(packageName);
             members.stream().sorted(byName).forEach(classNode ->
                 packageNode.add(new ClassMutableTreeNode(jarName, classNode, simpleName(classNode))));
-            parent.add(packageNode);
+            packagesUnder.add(packageNode);
         });
-        byPackage.getOrDefault("", List.of()).stream().sorted(byName).forEach(classNode ->
+        noPackage.stream().sorted(byName).forEach(classNode ->
             parent.add(new ClassMutableTreeNode(jarName, classNode, classNode.name)));
     }
 
@@ -252,6 +282,7 @@ public class TreePanel extends JPanel {
             case JarMutableTreeNode jar -> "jar:" + jar.getJarName();
             case PackageTreeNode packageNode -> "package:" + TreeNodes.jarOf(packageNode).orElse("")
                 + ":" + packageNode.getPackageName();
+            case PackageGroupTreeNode group -> "packages:" + TreeNodes.jarOf(group).orElse("");
             case ClassMutableTreeNode classNode -> classNode.getClassNode();
             case ClassNodeMutableTreeNode classNode -> List.of("declaration", classNode.getClassNode());
             case InterfaceNodeMutableTreeNode classNode -> List.of("declaration", classNode.getClassNode());

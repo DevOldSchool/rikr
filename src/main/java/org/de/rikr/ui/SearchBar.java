@@ -117,6 +117,10 @@ public class SearchBar extends JPanel {
         }
 
         updateResultCounter();
+        // Show the first match as the person types, as find bars in editors and browsers do.
+        if (!searchResults.isEmpty()) {
+            navigateResults(1);
+        }
     }
 
     private void removeHighlights(JTextComponent textComp) {

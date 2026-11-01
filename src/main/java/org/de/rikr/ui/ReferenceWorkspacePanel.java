@@ -114,7 +114,7 @@ public class ReferenceWorkspacePanel extends JPanel {
         classTarget = targetClass;
         targetLabel.setText("Type: " + targetClass.name + " in " + jarName);
         resetTabs();
-        addResultsTab("Type references", controller.references().findTypeReferences(jarName, targetClass));
+        addResultsTab("Type references", controller.references().findTypeReferences(jarName, targetClass), jarName);
         selectFirstResult();
     }
 
@@ -122,8 +122,8 @@ public class ReferenceWorkspacePanel extends JPanel {
         classTarget = null;
         targetLabel.setText("Field: " + owner.name + "." + field.name + " " + field.desc + " in " + jarName);
         resetTabs();
-        addResultsTab("Reads", controller.references().findFieldReads(jarName, owner, field));
-        addResultsTab("Writes", controller.references().findFieldWrites(jarName, owner, field));
+        addResultsTab("Reads", controller.references().findFieldReads(jarName, owner, field), jarName);
+        addResultsTab("Writes", controller.references().findFieldWrites(jarName, owner, field), jarName);
         selectFirstResult();
     }
 
@@ -131,8 +131,8 @@ public class ReferenceWorkspacePanel extends JPanel {
         classTarget = null;
         targetLabel.setText("Method: " + owner.name + "." + method.name + method.desc + " in " + jarName);
         resetTabs();
-        addResultsTab("Callers", controller.references().findMethodCallers(jarName, owner, method));
-        addResultsTab("Callees", controller.references().findMethodCallees(jarName, owner, method));
+        addResultsTab("Callers", controller.references().findMethodCallers(jarName, owner, method), jarName);
+        addResultsTab("Callees", controller.references().findMethodCallees(jarName, owner, method), jarName);
         selectFirstResult();
     }
 
@@ -146,7 +146,7 @@ public class ReferenceWorkspacePanel extends JPanel {
         addResultsTab("Classes", classes.stream()
             .map(classNode -> new ReferenceResult(kind, classNode.name + " " + relation, classNode,
                 ClassNodeUtil.getPattern(classNode, null, null), classNode.name))
-            .toList());
+            .toList(), jarName);
         selectFirstResult();
     }
 
@@ -168,7 +168,7 @@ public class ReferenceWorkspacePanel extends JPanel {
             results.add(new ReferenceResult(ReferenceKind.SIMILAR, match.jar() + "." + match.match().similarityPercent()
                 + "% similar, " + methods, target, ClassNodeUtil.getPattern(target, null, null), target.name));
         }
-        addResultsTab("Similar classes", results);
+        addResultsTab("Similar classes", results, "other JARs");
         if (report.skippedComparisons() > 0) {
             statusLabel.setText(report.skippedComparisons() + " method comparisons could not be simulated.");
         }
@@ -177,7 +177,7 @@ public class ReferenceWorkspacePanel extends JPanel {
 
     private void showEmptyState() {
         resetTabs();
-        addResultsTab("Results", List.of());
+        addResultsTab("Results", List.of(), null);
     }
 
     private void resetTabs() {
@@ -188,8 +188,10 @@ public class ReferenceWorkspacePanel extends JPanel {
 
     /**
      * Add a tab of results, grouped under a header row per class.
+     *
+     * @param where where the results were looked for, to say so when there are none; null to say nothing
      */
-    private void addResultsTab(String title, List<ReferenceResult> results) {
+    private void addResultsTab(String title, List<ReferenceResult> results, String where) {
         DefaultListModel<Object> model = new DefaultListModel<>();
         Map<String, List<Row>> byClass = new LinkedHashMap<>();
         for (Row row : rows(results)) {
@@ -226,14 +228,25 @@ public class ReferenceWorkspacePanel extends JPanel {
 
         JScrollPane scrollPane = new JScrollPane(resultList);
         scrollPane.setBorder(null);
+        if (results.isEmpty() && where != null) {
+            // An empty list looks the same as one still loading; say there is nothing.
+            JLabel none = new JLabel("No " + title.toLowerCase(java.util.Locale.ROOT) + " in " + where + ".",
+                SwingConstants.CENTER);
+            none.setForeground(Theme.CONTENT_HIGHLIGHT_TEXT_COLOR);
+            scrollPane.setViewportView(none);
+            scrollPane.getViewport().setBackground(Theme.CONTENT_BACKGROUND_COLOR);
+        }
         resultTabs.addTab(title + " (" + results.size() + ")", scrollPane);
         resultLists.add(resultList);
     }
 
+    // Opens the first tab that has results, so a method nothing calls shows what it calls instead of an empty tab.
     private void selectFirstResult() {
-        for (JList<Object> resultList : resultLists) {
+        for (int tab = 0; tab < resultLists.size(); tab++) {
+            JList<Object> resultList = resultLists.get(tab);
             for (int index = 0; index < resultList.getModel().getSize(); index++) {
                 if (resultList.getModel().getElementAt(index) instanceof Row) {
+                    resultTabs.setSelectedIndex(tab);
                     resultList.setSelectedIndex(index);
                     return;
                 }
