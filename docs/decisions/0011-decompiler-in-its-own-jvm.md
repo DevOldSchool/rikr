@@ -26,3 +26,7 @@ release keeps the launcher: jpackage runs with its own jlink options minus `--st
 - The worker gets bytes, not class nodes, so it can't see renames made meanwhile; `DecompilerCacheService` already
   discards results from before a rename.
 - Anything else that starts Rikr from a custom runtime must keep `bin/java`, or decompiling falls back to Rikr's JVM.
+- A JVM that has just started runs FernFlower slowly until the JIT has compiled it: a game client's largest class
+  took 12 seconds as the first class and 9 after others. So when JARs are loaded, the GUI and the MCP server send the
+  worker a few of their classes to decompile in the background (`Project.warmUpDecompiler`); the worker gives that
+  up as soon as a class is asked for. `Project` doesn't do it itself, so tests don't start workers.

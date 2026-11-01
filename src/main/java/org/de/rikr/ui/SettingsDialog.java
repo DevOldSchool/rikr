@@ -24,15 +24,11 @@ final class SettingsDialog {
         buttons.add(apply);
         buttons.add(ok);
 
-        Runnable save = () -> {
-            Settings settings = panel.collectSettings();
-            SettingsManager.applyAndSave(settings, frame);
-            afterApply.run();
-        };
-        apply.addActionListener(e -> save.run());
+        apply.addActionListener(e -> save(dialog, panel, frame, afterApply));
         ok.addActionListener(e -> {
-            save.run();
-            dialog.dispose();
+            if (save(dialog, panel, frame, afterApply)) {
+                dialog.dispose();
+            }
         });
         cancel.addActionListener(e -> dialog.dispose());
         // Return applies and closes, as on every other macOS dialog.
@@ -45,5 +41,18 @@ final class SettingsDialog {
         dialog.pack();
         dialog.setLocationRelativeTo(frame);
         dialog.setVisible(true);
+    }
+
+    // False, after saying why, when the settings can't be used; nothing is saved then.
+    private static boolean save(JDialog dialog, SettingsPanel panel, JFrame frame, Runnable afterApply) {
+        String problem = panel.problem();
+        if (problem != null) {
+            JOptionPane.showMessageDialog(dialog, problem, "Settings", JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
+        Settings settings = panel.collectSettings();
+        SettingsManager.applyAndSave(settings, frame);
+        afterApply.run();
+        return true;
     }
 }

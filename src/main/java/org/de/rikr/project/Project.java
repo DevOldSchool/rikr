@@ -17,9 +17,11 @@ import org.objectweb.asm.tree.ClassNode;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -146,6 +148,18 @@ public class Project implements AutoCloseable {
 
     public DecompilerCacheService decompiler() {
         return decompiler;
+    }
+
+    /**
+     * Warm the decompiler up on these JARs' classes, so the first class opened decompiles sooner. Front ends call it
+     * after loading JARs; the project doesn't, so tests and scripts don't start a decompiler for nothing.
+     */
+    public void warmUpDecompiler(Collection<String> jars) {
+        decompiler.warmUp(jars.stream()
+            .map(workspace::classesSnapshot)
+            .filter(Objects::nonNull)
+            .flatMap(List::stream)
+            .toList());
     }
 
     public List<SearchResult> search(SearchQuery query) {

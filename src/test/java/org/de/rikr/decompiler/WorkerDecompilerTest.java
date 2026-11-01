@@ -8,7 +8,9 @@ import org.objectweb.asm.tree.InsnNode;
 import org.objectweb.asm.tree.MethodNode;
 
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -33,6 +35,23 @@ class WorkerDecompilerTest {
             DecompileResult second = worker.decompile("b", classBytes("b"));
             assertTrue(second.success(), second.message());
             assertTrue(second.source().contains("class b"), second.source());
+        }
+    }
+
+    @Test
+    void decompilesAClassAskedForWhileWarmingUp() {
+        try (WorkerDecompiler worker = new WorkerDecompiler(log::add, WorkerDecompiler.command(),
+            Duration.ofSeconds(60))) {
+            Map<String, byte[]> warmUp = new LinkedHashMap<>();
+            for (int index = 0; index < 50; index++) {
+                warmUp.put("w" + index, classBytes("w" + index));
+            }
+            worker.warmUp(warmUp);
+
+            DecompileResult result = worker.decompile("a", classBytes("a"));
+
+            assertTrue(result.success(), result.message());
+            assertTrue(result.source().contains("class a"), result.source());
         }
     }
 

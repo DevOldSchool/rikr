@@ -32,6 +32,7 @@ import org.de.rikr.rename.RenameStep;
 import org.de.rikr.rename.RenameUndoResult;
 import org.de.rikr.search.SearchQuery;
 import org.de.rikr.search.SearchResult;
+import org.de.rikr.settings.DecompilerCacheSettings;
 import org.de.rikr.symbol.BytecodeText;
 import org.de.rikr.symbol.Declaration;
 import org.de.rikr.symbol.Symbol;
@@ -82,6 +83,13 @@ final class RikrTools implements AutoCloseable {
             }
         };
         this.project = new Project(logger);
+        configureDecompilerCache();
+    }
+
+    // The same cache as the GUI's, from Rikr's settings file.
+    private void configureDecompilerCache() {
+        DecompilerCacheSettings settings = DecompilerCacheSettings.load();
+        project.decompiler().configureDiskCache(settings.directoryPath(), settings.maxSizeBytes());
     }
 
     @Override
@@ -336,6 +344,7 @@ final class RikrTools implements AutoCloseable {
         JarOperations operations = project.jars();
         List<String> added = operations.addJars(operations.readJars(jars));
         operations.addClassFiles(operations.readClassFiles(classFiles));
+        project.warmUpDecompiler(added);
         return "Loaded: " + (added.isEmpty() && classFiles.isEmpty() ? "nothing new" : String.join(", ", added))
             + "\n\n" + listJars();
     }
@@ -844,8 +853,10 @@ final class RikrTools implements AutoCloseable {
         Project opened = Project.open(logger, session);
         project.close();
         project = opened;
+        configureDecompilerCache();
         projectFile = file.getAbsoluteFile();
         layout = session.layout();
+        project.warmUpDecompiler(project.jars().classesByJar().keySet());
         return "Opened " + projectFile + " with " + session.renames().size() + " rename steps, "
             + session.mappings().size() + " class mappings and " + session.bookmarks().size() + " bookmarks.\n\n"
             + listJars();

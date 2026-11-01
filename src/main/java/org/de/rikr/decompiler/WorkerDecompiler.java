@@ -13,6 +13,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -71,6 +72,7 @@ final class WorkerDecompiler implements AutoCloseable {
             worker.destroyForcibly();
         }, CompletableFuture.delayedExecutor(timeout.toMillis(), TimeUnit.MILLISECONDS));
         try {
+            requests.writeByte(DecompilerWorker.DECOMPILE);
             DecompilerWorker.writeString(requests, internalName);
             DecompilerWorker.writeBytes(requests, classBytes);
             requests.flush();
@@ -90,6 +92,35 @@ final class WorkerDecompiler implements AutoCloseable {
             return DecompileResult.failure("The decompiler stopped while decompiling " + internalName + ".");
         } finally {
             watchdog.cancel(false);
+        }
+    }
+
+    /**
+     * Starts the worker, unless it is running, and has it decompile these classes in the background until the next
+     * class is asked for, so the JIT has compiled FernFlower by then. Does nothing when classes are decompiled in this
+     * JVM, where it would only slow the application.
+     *
+     * @param classes class bytes by internal name
+     */
+    synchronized void warmUp(Map<String, byte[]> classes) {
+        if (inThisJvm || classes.isEmpty()) {
+            return;
+        }
+        if (!started()) {
+            inThisJvm = true;
+            return;
+        }
+        try {
+            requests.writeByte(DecompilerWorker.WARM_UP);
+            requests.writeInt(classes.size());
+            for (Map.Entry<String, byte[]> entry : classes.entrySet()) {
+                DecompilerWorker.writeString(requests, entry.getKey());
+                DecompilerWorker.writeBytes(requests, entry.getValue());
+            }
+            requests.flush();
+        } catch (IOException stopped) {
+            // The next class starts a new worker.
+            stop();
         }
     }
 

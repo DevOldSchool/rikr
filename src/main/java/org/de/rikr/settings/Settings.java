@@ -20,6 +20,7 @@ public class Settings {
     private String fontFamily;
     private int fontSize;
     private String themeId;
+    private DecompilerCacheSettings decompilerCache = DecompilerCacheSettings.defaults();
 
     public Settings() {
         this.fontFamily = Fonts.getDefaultFont() != null ? Fonts.getDefaultFont().getFamily() : "JetBrains Mono";
@@ -52,9 +53,17 @@ public class Settings {
         this.themeId = themeId;
     }
 
+    public DecompilerCacheSettings getDecompilerCache() {
+        return decompilerCache;
+    }
+
+    public void setDecompilerCache(DecompilerCacheSettings decompilerCache) {
+        this.decompilerCache = decompilerCache;
+    }
+
     public static class Store {
         private static final Path CONFIG_DIR = Paths.get(System.getProperty("user.home"), ".rikr");
-        private static final Path CONFIG_FILE = CONFIG_DIR.resolve("settings.properties");
+        static final Path CONFIG_FILE = CONFIG_DIR.resolve("settings.properties");
 
         public static Settings load() {
             Settings settings = new Settings();
@@ -85,6 +94,7 @@ public class Settings {
             if (loadedId != null && !loadedId.isEmpty()) {
                 settings.themeId = loadedId;
             }
+            settings.decompilerCache = DecompilerCacheSettings.fromProperties(props);
 
             return settings;
         }
@@ -95,6 +105,7 @@ public class Settings {
             props.setProperty(KEY_FONT_SIZE, Integer.toString(settings.fontSize));
             String id = (settings.themeId != null && !settings.themeId.isEmpty()) ? settings.themeId : "dark.flatij";
             props.setProperty(KEY_THEME_ID, id);
+            settings.decompilerCache.writeTo(props);
 
             try {
                 Files.createDirectories(CONFIG_DIR);

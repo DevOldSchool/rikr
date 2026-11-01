@@ -23,6 +23,7 @@ import org.de.rikr.resources.Fonts;
 import org.de.rikr.resources.Images;
 import org.de.rikr.search.SearchQuery;
 import org.de.rikr.search.SearchResult;
+import org.de.rikr.settings.DecompilerCacheSettings;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.task.TaskRunner;
 import org.de.rikr.ui.ClassNodeImages;
@@ -57,6 +58,11 @@ public class Rikr {
     public void start() {
         userInterface.init();
         useProject(new Project(userInterface.getLogPanel()));
+        SettingsManager.addListener(settings -> configureDecompilerCache(project, settings.getDecompilerCache()));
+    }
+
+    private static void configureDecompilerCache(Project project, DecompilerCacheSettings settings) {
+        project.decompiler().configureDiskCache(settings.directoryPath(), settings.maxSizeBytes());
     }
 
     public ClassViewer getUserInterface() {
@@ -299,11 +305,16 @@ public class Rikr {
         unsubscribe.run();
         project = next;
         unsubscribe = next.events().subscribe(this::onProjectEvent);
+        configureDecompilerCache(next, SettingsManager.getCurrent().getDecompilerCache());
+        next.warmUpDecompiler(next.jars().classesByJar().keySet());
     }
 
     private void onProjectEvent(ProjectEvent event) {
         switch (event) {
-            case ProjectEvent.JarsLoaded loaded -> userInterface.updateTree(project.jars().classesByJar());
+            case ProjectEvent.JarsLoaded loaded -> {
+                userInterface.updateTree(project.jars().classesByJar());
+                project.warmUpDecompiler(loaded.jars());
+            }
             case ProjectEvent.JarRemoved removed -> refreshProjectState();
             case ProjectEvent.ClassRemoved removed -> {
             }

@@ -1,0 +1,135 @@
+--- a/org/jetbrains/java/decompiler/struct/lazy/LazyLoader.java
++++ b/org/jetbrains/java/decompiler/struct/lazy/LazyLoader.java
+@@ -1,4 +1,7 @@
+ // Copyright 2000-2024 JetBrains s.r.o. and contributors. Use of this source code is governed by the Apache 2.0 license.
++// Rikr: a copy of FernFlower's LazyLoader, patched where marked "Rikr:" so loading a method's code doesn't read its
++// class again up to the method. The build puts it in place of the original; see docs/decisions/0012 and
++// patches/fernflower.
+ package org.jetbrains.java.decompiler.struct.lazy;
+ 
+ import org.jetbrains.java.decompiler.main.extern.IBytecodeProvider;
+@@ -7,14 +10,21 @@
+ import org.jetbrains.java.decompiler.struct.attr.StructGeneralAttribute;
+ import org.jetbrains.java.decompiler.struct.consts.ConstantPool;
+ import org.jetbrains.java.decompiler.util.DataInputFullStream;
++import org.jetbrains.java.decompiler.util.InterpreterUtil;
+ 
+ import java.io.IOException;
+ import java.util.HashMap;
+ import java.util.Map;
++import java.util.concurrent.ConcurrentHashMap;
+ 
+ public class LazyLoader {
+   private final Map<String, Link> mapClassLinks = new HashMap<>();
+   private final IBytecodeProvider provider;
++  // Rikr: for each class, where each method's code starts in the class file, by the
++  // method's name and descriptor. Found in one pass the first time a method's code is loaded: reading the class up to
++  // the method each time, constant pool included, took a tenth of the time on classes with hundreds of methods.
++  // Concurrent, since a class's methods are decompiled in parallel.
++  private final Map<String, Map<String, Integer>> codeOffsets = new ConcurrentHashMap<>();
+ 
+   public LazyLoader(IBytecodeProvider provider) {
+     this.provider = provider;
+@@ -22,10 +32,12 @@
+ 
+   public void addClassLink(String className, Link link) {
+     mapClassLinks.put(className, link);
++    codeOffsets.remove(className); // Rikr
+   }
+ 
+   public void removeClassLink(String className) {
+     mapClassLinks.remove(className);
++    codeOffsets.remove(className); // Rikr
+   }
+ 
+   public Link getClassLink(String className) {
+@@ -47,10 +59,45 @@
+   }
+ 
+   public byte[] loadBytecode(StructClass classStruct, StructMethod mt, int codeFullLength) {
++    // Rikr: reads the code from where findCode found it.
++    Integer offset = findCode(classStruct, mt);
++    if (offset == null) {
++      return null;
++    }
++
++    try (DataInputFullStream in = getClassStream(classStruct.qualifiedName)) {
++      if (in != null) {
++        in.discard(offset);
++        return in.read(codeFullLength);
++      }
++
++      return null;
++    }
++    catch (IOException ex) {
++      throw new RuntimeException(ex);
++    }
++  }
++
++  // Rikr: where the method's code starts in its class file, or null.
++  private Integer findCode(StructClass classStruct, StructMethod mt) {
++    Map<String, Integer> offsets = codeOffsets.get(classStruct.qualifiedName);
++    if (offsets == null) {
++      offsets = readCodeOffsets(classStruct);
++      if (offsets == null) {
++        return null;
++      }
++      codeOffsets.putIfAbsent(classStruct.qualifiedName, offsets);
++    }
++    return offsets.get(InterpreterUtil.makeUniqueKey(mt.getName(), mt.getDescriptor()));
++  }
++
++  // Rikr: the class file read as loadBytecode read it for one method, for all of them.
++  private Map<String, Integer> readCodeOffsets(StructClass classStruct) {
+     String className = classStruct.qualifiedName;
+ 
+     try (DataInputFullStream in = getClassStream(className)) {
+       if (in != null) {
++        int length = in.available();
+         in.discard(8);
+ 
+         ConstantPool pool = classStruct.getPool();
+@@ -74,6 +121,7 @@
+         }
+ 
+         // methods
++        Map<String, Integer> offsets = new HashMap<>();
+         size = in.readUnsignedShort();
+         for (int i = 0; i < size; i++) {
+           in.discard(2);
+@@ -82,27 +130,22 @@
+           int descriptorIndex = in.readUnsignedShort();
+ 
+           String[] values = pool.getClassElement(ConstantPool.METHOD, className, nameIndex, descriptorIndex);
+-          if (!mt.getName().equals(values[0]) || !mt.getDescriptor().equals(values[1])) {
+-            skipAttributes(in);
+-            continue;
+-          }
++          String key = InterpreterUtil.makeUniqueKey(values[0], values[1]);
+ 
+           int attrSize = in.readUnsignedShort();
+           for (int j = 0; j < attrSize; j++) {
+             int attrNameIndex = in.readUnsignedShort();
+             String attrName = pool.getPrimitiveConstant(attrNameIndex).getString();
+-            if (!StructGeneralAttribute.ATTRIBUTE_CODE.name.equals(attrName)) {
+-              in.discard(in.readInt());
+-              continue;
++            int attrLength = in.readInt();
++            if (StructGeneralAttribute.ATTRIBUTE_CODE.name.equals(attrName)) {
++              // The code follows max_stack, max_locals and code_length; the first method of a name and
++              // descriptor wins, as it did.
++              offsets.putIfAbsent(key, length - in.available() + 8);
+             }
+-
+-            in.discard(12);
+-
+-            return in.read(codeFullLength);
++            in.discard(attrLength);
+           }
+-
+-          break;
+         }
++        return offsets;
+       }
+ 
+       return null;

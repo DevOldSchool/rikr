@@ -12,9 +12,12 @@ import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadMXBean;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 import java.util.jar.Manifest;
 
 /**
@@ -23,11 +26,12 @@ import java.util.jar.Manifest;
 public class JetBrainsDecompilerService {
 
     /**
-     * The longest FernFlower may spend on one method, in seconds; the method is left out of the source after that,
-     * so code FernFlower can't finish doesn't hold up the class. Large classes of obfuscated programs take tens of
-     * seconds in all, but no single method comes near this. FernFlower checks the limit only now and then.
+     * The longest FernFlower may spend on one method, in seconds of its thread's processor time; the method is left
+     * out of the source after that, so code FernFlower can't finish doesn't hold up the class. The largest method of
+     * a game client takes 4 seconds alone and up to 8 while the class's other methods are decompiled alongside it.
+     * FernFlower checks the limit only now and then.
      */
-    private static final int MAX_SECONDS_PER_METHOD = 15;
+    private static final int MAX_SECONDS_PER_METHOD = 30;
 
     private final org.de.rikr.Logger logger;
 
@@ -89,6 +93,14 @@ public class JetBrainsDecompilerService {
      * Decompile the bytes of a single class. Returns null on failure.
      */
     public String decompile(String internalName, byte[] classBytes) {
+        return decompile(internalName, classBytes, () -> false);
+    }
+
+    /**
+     * Decompile the bytes of a single class, giving up when {@code cancelled} is true at one of FernFlower's checks.
+     * Returns null on failure or when given up.
+     */
+    String decompile(String internalName, byte[] classBytes, BooleanSupplier cancelled) {
         // FernFlower reads the class through the provider, by a path that needn't exist, and hands the Java to the
         // saver, so nothing is written to disk. It reads the class again for each method's code.
         String path = new File(internalName.substring(internalName.lastIndexOf('/') + 1) + ".class")
@@ -113,7 +125,7 @@ public class JetBrainsDecompilerService {
         };
 
         Fernflower fernflower = new Fernflower(provider, saver, options(), fernLogger,
-            new MethodTimeLimit(MAX_SECONDS_PER_METHOD));
+            new MethodTimeLimit(MAX_SECONDS_PER_METHOD, cancelled));
         try {
             fernflower.addSource(new File(path));
             fernflower.decompileContext();
@@ -144,28 +156,45 @@ public class JetBrainsDecompilerService {
     }
 
     /**
-     * Stops a method that takes longer than the limit. FernFlower's own keeps one start time, but Rikr's copy of
-     * FernFlower decompiles a class's methods in parallel (docs/decisions/0012), so each thread keeps its own.
+     * Stops a method whose thread has spent longer than the limit decompiling it. FernFlower's own keeps one start
+     * time and counts time on the clock, but Rikr's copy of FernFlower decompiles a class's methods in parallel
+     * (docs/decisions/0012), where they slow each other down: each thread counts its own processor time instead.
      */
     private static final class MethodTimeLimit implements CancellationManager {
-        private final long limitNanos;
-        private final ThreadLocal<Long> started = new ThreadLocal<>();
+        private static final ThreadMXBean THREADS = ManagementFactory.getThreadMXBean();
+        // How often processor time is read once a method has run longer than the limit: FernFlower checks in loops,
+        // and reading it is a system call.
+        private static final long RECHECK_NANOS = TimeUnit.MILLISECONDS.toNanos(100);
 
-        MethodTimeLimit(int seconds) {
+        private final long limitNanos;
+        private final BooleanSupplier cancelled;
+        private final ThreadLocal<long[]> started = new ThreadLocal<>();
+
+        MethodTimeLimit(int seconds, BooleanSupplier cancelled) {
             limitNanos = TimeUnit.SECONDS.toNanos(seconds);
+            this.cancelled = cancelled;
         }
 
         @Override
         public void checkCanceled() {
-            Long start = started.get();
-            if (start != null && System.nanoTime() - start > limitNanos) {
+            if (cancelled.getAsBoolean()) {
+                throw new CanceledException();
+            }
+            // {processor time at the start, when to read processor time next}. A thread's processor time grows no
+            // faster than the clock, so it isn't read until the method has run for the limit on the clock.
+            long[] times = started.get();
+            if (times == null || System.nanoTime() < times[1]) {
+                return;
+            }
+            if (THREADS.getCurrentThreadCpuTime() - times[0] > limitNanos) {
                 throw new TimeExceedException();
             }
+            times[1] = System.nanoTime() + RECHECK_NANOS;
         }
 
         @Override
         public void startMethod(String className, String methodName) {
-            started.set(System.nanoTime());
+            started.set(new long[]{THREADS.getCurrentThreadCpuTime(), System.nanoTime() + limitNanos});
         }
 
         @Override

@@ -18,3 +18,4 @@ a new record and mark the old one as replaced.
 | [0010](0010-patched-fernflower-class.md) | One FernFlower class is patched in Rikr |
 | [0011](0011-decompiler-in-its-own-jvm.md) | The decompiler runs in a JVM of its own |
 | [0012](0012-methods-decompiled-in-parallel.md) | A class's methods are decompiled in parallel |
+| [0013](0013-decompiled-java-cached-on-disk.md) | Decompiled Java is kept on disk by class bytes |

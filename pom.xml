@@ -125,6 +125,12 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>${maven.surefire.version}</version>
+                    <configuration>
+                        <systemPropertyVariables>
+                            <!-- Tests keep decompiled Java here, not in the user's cache. -->
+                            <rikr.cache.dir>${project.build.directory}/test-decompiled</rikr.cache.dir>
+                        </systemPropertyVariables>
+                    </configuration>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
