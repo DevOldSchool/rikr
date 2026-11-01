@@ -1,0 +1,196 @@
+// Copyright 2000-2024 JetBrains s.r.o. and contributors. Use of this source code is governed by the Apache 2.0 license.
+// Rikr: a copy of FernFlower's DecompilerContext, patched where marked "Rikr:" so a class's methods can be decompiled
+// in parallel, each in a context of its own. The build puts it in place of the original; see docs/decisions/0012 and
+// patches/fernflower.
+package org.jetbrains.java.decompiler.main;
+
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.jetbrains.java.decompiler.main.collectors.BytecodeSourceMapper;
+import org.jetbrains.java.decompiler.main.collectors.CounterContainer;
+import org.jetbrains.java.decompiler.main.collectors.ImportCollector;
+import org.jetbrains.java.decompiler.main.collectors.LimitContainer;
+import org.jetbrains.java.decompiler.main.extern.IFernflowerLogger;
+import org.jetbrains.java.decompiler.main.extern.IFernflowerPreferences;
+import org.jetbrains.java.decompiler.main.extern.IVariableNamingFactory;
+import org.jetbrains.java.decompiler.modules.decompiler.vars.VarProcessor;
+import org.jetbrains.java.decompiler.modules.renamer.PoolInterceptor;
+import org.jetbrains.java.decompiler.struct.StructContext;
+
+import java.util.Map;
+import java.util.Objects;
+
+public class DecompilerContext {
+  public static final String CURRENT_CLASS = "CURRENT_CLASS";
+  public static final String CURRENT_CLASS_WRAPPER = "CURRENT_CLASS_WRAPPER";
+  public static final String CURRENT_CLASS_NODE = "CURRENT_CLASS_NODE";
+  public static final String CURRENT_METHOD_WRAPPER = "CURRENT_METHOD_WRAPPER";
+  public static final String CURRENT_VAR_PROCESSOR = "CURRENT_VAR_PROCESSOR";
+  public static final String IN_CLASS_TYPE_PARAMS = "IN_CLASS_TYPE_PARAMS";
+  public static final String RENAMER_FACTORY = "RENAMER_FACTORY";
+
+  private final @NotNull Map<String, Object> properties;
+  private final @NotNull IFernflowerLogger logger;
+  private final @NotNull StructContext structContext;
+  private final @NotNull ClassesProcessor classProcessor;
+  private final @Nullable PoolInterceptor poolInterceptor;
+  private final @NotNull CancellationManager cancellationManager;
+  private final @NotNull IVariableNamingFactory renamerFactory;
+  private ImportCollector importCollector;
+  private VarProcessor varProcessor;
+  private CounterContainer counterContainer;
+  private BytecodeSourceMapper bytecodeSourceMapper;
+  private final @NotNull LimitContainer limitsContainer;
+
+  public DecompilerContext(@NotNull Map<String, Object> properties,
+                           @NotNull IFernflowerLogger logger,
+                           @NotNull StructContext structContext,
+                           @NotNull ClassesProcessor classProcessor,
+                           @Nullable PoolInterceptor interceptor,
+                           @Nullable CancellationManager cancellationManager,
+                           @NotNull IVariableNamingFactory renamerFactory) {
+    Objects.requireNonNull(properties);
+    Objects.requireNonNull(logger);
+    Objects.requireNonNull(structContext);
+    Objects.requireNonNull(classProcessor);
+    if (cancellationManager == null) {
+      Object object = properties.get(IFernflowerPreferences.MAX_PROCESSING_METHOD);
+      object = object == null ? "0" : object;
+      cancellationManager = CancellationManager.getSimpleWithTimeout(Integer.parseInt(object.toString()));
+    }
+
+    this.properties = properties;
+    this.logger = logger;
+    this.structContext = structContext;
+    this.classProcessor = classProcessor;
+    this.poolInterceptor = interceptor;
+    this.renamerFactory = renamerFactory;
+    this.counterContainer = new CounterContainer();
+    this.cancellationManager = cancellationManager;
+    this.limitsContainer = new LimitContainer(this.properties);
+  }
+
+  // Rikr: the class's context for decompiling one method on a thread of its own. It shares everything but the
+  // method's state and the import collector; ClassWrapper adds the copy's imports back.
+  private DecompilerContext(DecompilerContext context, VarProcessor varProcessor) {
+    this.properties = context.properties;
+    this.logger = context.logger;
+    this.structContext = context.structContext;
+    this.classProcessor = context.classProcessor;
+    this.poolInterceptor = context.poolInterceptor;
+    this.cancellationManager = context.cancellationManager;
+    this.renamerFactory = context.renamerFactory;
+    this.importCollector = context.importCollector == null ? null : context.importCollector.forMethod();
+    this.varProcessor = varProcessor;
+    this.counterContainer = new CounterContainer();
+    this.bytecodeSourceMapper = context.bytecodeSourceMapper;
+    this.limitsContainer = context.limitsContainer;
+  }
+
+  // Rikr: see the constructor above.
+  public static DecompilerContext forMethod(VarProcessor varProcessor) {
+    return new DecompilerContext(getCurrentContext(), varProcessor);
+  }
+
+  // *****************************************************************************
+  // context setup and update
+  // *****************************************************************************
+
+  private static final ThreadLocal<DecompilerContext> currentContext = new ThreadLocal<>();
+
+  public static DecompilerContext getCurrentContext() {
+    return currentContext.get();
+  }
+
+  public static void setCurrentContext(DecompilerContext context) {
+    currentContext.set(context);
+  }
+
+  public static void setProperty(String key, Object value) {
+    getCurrentContext().properties.put(key, value);
+  }
+
+  public static void startClass(ImportCollector importCollector) {
+    DecompilerContext context = getCurrentContext();
+    context.importCollector = importCollector;
+    context.counterContainer = new CounterContainer();
+    context.bytecodeSourceMapper = new BytecodeSourceMapper();
+  }
+
+  public static void startMethod(VarProcessor varProcessor) {
+    DecompilerContext context = getCurrentContext();
+    context.varProcessor = varProcessor;
+    context.counterContainer = new CounterContainer();
+  }
+
+  // Rikr: makes a method decompiled in a context of its own the current one, as startMethod does.
+  public static void startMethod(DecompilerContext methodContext) {
+    DecompilerContext context = getCurrentContext();
+    context.varProcessor = methodContext.varProcessor;
+    context.counterContainer = methodContext.counterContainer;
+    if (context.importCollector != null && methodContext.importCollector != null) {
+      context.importCollector.addNamesFrom(methodContext.importCollector);
+    }
+  }
+
+  // *****************************************************************************
+  // context access
+  // *****************************************************************************
+
+  public static Object getProperty(String key) {
+    return getCurrentContext().properties.get(key);
+  }
+
+  public static boolean getOption(String key) {
+    return "1".equals(getProperty(key));
+  }
+
+  public static String getNewLineSeparator() {
+    return getOption(IFernflowerPreferences.NEW_LINE_SEPARATOR) ?
+           IFernflowerPreferences.LINE_SEPARATOR_UNX : IFernflowerPreferences.LINE_SEPARATOR_WIN;
+  }
+
+  public static IFernflowerLogger getLogger() {
+    return getCurrentContext().logger;
+  }
+
+  public static LimitContainer getLimitContainer() {
+    return getCurrentContext().limitsContainer;
+  }
+
+  public static StructContext getStructContext() {
+    return getCurrentContext().structContext;
+  }
+
+  public static ClassesProcessor getClassProcessor() {
+    return getCurrentContext().classProcessor;
+  }
+
+  public static CancellationManager getCancellationManager() {
+    return getCurrentContext().cancellationManager;
+  }
+
+  public static PoolInterceptor getPoolInterceptor() {
+    return getCurrentContext().poolInterceptor;
+  }
+
+  public static IVariableNamingFactory getNamingFactory() {
+    return getCurrentContext().renamerFactory;
+  }
+
+  public static ImportCollector getImportCollector() {
+    return getCurrentContext().importCollector;
+  }
+
+  public static VarProcessor getVarProcessor() {
+    return getCurrentContext().varProcessor;
+  }
+
+  public static CounterContainer getCounterContainer() {
+    return getCurrentContext().counterContainer;
+  }
+
+  public static BytecodeSourceMapper getBytecodeSourceMapper() {
+    return getCurrentContext().bytecodeSourceMapper;
+  }
+}

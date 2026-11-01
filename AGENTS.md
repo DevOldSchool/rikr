@@ -17,7 +17,7 @@ Java 21 and Maven. All dependencies are in Maven Central and the IntelliJ reposi
 | Build classes and copy dependencies to `target/lib` | `mvn -q -DskipTests package` |
 | Start the GUI | `java -cp "target/classes:target/lib/*" org.de.rikr.Rikr` (after `package`) |
 | Start the MCP server | `bin/rikr-mcp` |
-| Check the patched FernFlower class against its diff (after changing it or `fernflower.version`) | `bin/check-patches` |
+| Check the patched FernFlower classes against their diffs (after changing it or `fernflower.version`) | `bin/check-patches` |
 
 Before handing work back, run `mvn -q verify`. It compiles with Error Prone, which fails the build on its error-level
 bug patterns; runs the tests, Checkstyle (spaces, not tabs, and a final newline) and Spotless; and checks that the
@@ -41,7 +41,7 @@ Code is grouped by feature under `src/main/java/org/de/rikr`, with tests in the 
 | `behavioral` | Simulating a method without running it: `MethodSimulator` steps through it (with undo), `Interpreter` gives each opcode its exact stack effect, and values it can't know are a typed `SimulatedValue.Unknown`, never a guess. `MethodComparator` runs two methods side by side for class matching. Calls aren't followed. |
 | `mapping` | Class matching between JARs (`MappingSet`, `ClassMappingService`), more class matches from matched members (`ClassVoting`), member matching within matched classes (`MemberMatcher`, used to carry names to a new version through `RenameOperations.planNameTransfer`, which skips made-up names such as `class12` via `GeneratedNames`), and `mapping/format` for tiny v2, Enigma and ProGuard files. |
 | `jar` | Reading JARs and class files, and `JarExportService` for safe export. |
-| `reference`, `search`, `decompiler`, `bookmark` | The features their names say. The decompiler is JetBrains FernFlower, with one class patched under `src/main/java/org/jetbrains` ([decision 0010](docs/decisions/0010-patched-fernflower-class.md)), run in a JVM of its own by `WorkerDecompiler` ([decision 0011](docs/decisions/0011-decompiler-in-its-own-jvm.md)). |
+| `reference`, `search`, `decompiler`, `bookmark` | The features their names say. The decompiler is JetBrains FernFlower, with a few classes patched under `src/main/java/org/jetbrains` ([decision 0010](docs/decisions/0010-patched-fernflower-class.md)) so that, among other things, a class's methods are decompiled in parallel ([decision 0012](docs/decisions/0012-methods-decompiled-in-parallel.md)), run in a JVM of its own by `WorkerDecompiler` ([decision 0011](docs/decisions/0011-decompiler-in-its-own-jvm.md)). |
 | `task` | `TaskRunner`: background work with results delivered on the Swing event thread. |
 | `agent` | The MCP server. |
 | `ui` | Swing: `ClassViewer` (main window), `CodeView` (with the `EmptyStatePanel` start screen), `TreePanel` (grouped by package), `StatusBar`, `GoToDialog` (Cmd+K), `NavigationHistory` (Back and Forward), `MenuBar` (every shortcut), the workspace panels. `Rikr` is the GUI's application shell. |

@@ -1,6 +1,6 @@
 # 0010: One FernFlower class is patched in Rikr
 
-**Status:** accepted
+**Status:** accepted; [0012](0012-methods-decompiled-in-parallel.md) patches three more classes the same way
 
 ## Context
 

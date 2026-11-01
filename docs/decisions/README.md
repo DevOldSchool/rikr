@@ -17,3 +17,4 @@ a new record and mark the old one as replaced.
 | [0009](0009-current-method-shared-by-workspaces.md) | The chosen method is current for every workspace |
 | [0010](0010-patched-fernflower-class.md) | One FernFlower class is patched in Rikr |
 | [0011](0011-decompiler-in-its-own-jvm.md) | The decompiler runs in a JVM of its own |
+| [0012](0012-methods-decompiled-in-parallel.md) | A class's methods are decompiled in parallel |

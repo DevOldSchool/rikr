@@ -1,25 +1,24 @@
 package org.de.rikr.decompiler;
 
-import org.jetbrains.java.decompiler.main.decompiler.ConsoleDecompiler;
+import org.jetbrains.java.decompiler.main.CancellationManager;
+import org.jetbrains.java.decompiler.main.Fernflower;
+import org.jetbrains.java.decompiler.main.extern.IBytecodeProvider;
 import org.jetbrains.java.decompiler.main.extern.IFernflowerLogger;
+import org.jetbrains.java.decompiler.main.extern.IResultSaver;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.tree.ClassNode;
 
-import java.io.*;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.io.File;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.jar.JarEntry;
-import java.util.jar.JarOutputStream;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
+import java.util.concurrent.TimeUnit;
+import java.util.jar.Manifest;
 
 /**
- * Simple, reliable service for decompiling ASM ClassNodes using JetBrains' FernFlower (ConsoleDecompiler).
- * This version wraps the class bytes into a temporary JAR, runs the decompiler, then extracts the
- * resulting .java files from the decompiled output JAR.
+ * Decompiles one class at a time with JetBrains' FernFlower, in memory.
  */
 public class JetBrainsDecompilerService {
 
@@ -40,11 +39,12 @@ public class JetBrainsDecompilerService {
         this.logger = logger;
     }
 
-    private void log(String msg) {
+    // FernFlower logs from the threads it decompiles methods on.
+    private synchronized void log(String msg) {
         if (logger != null) logger.log(msg);
     }
 
-    private void log(String msg, Throwable t) {
+    private synchronized void log(String msg, Throwable t) {
         if (logger != null) {
             logger.log(msg + (t != null ? " -> " + t.getClass().getSimpleName() + ": " + t.getMessage() : ""));
             if (t != null) {
@@ -89,101 +89,45 @@ public class JetBrainsDecompilerService {
      * Decompile the bytes of a single class. Returns null on failure.
      */
     public String decompile(String internalName, byte[] classBytes) {
-        Path tempRoot;
-        try {
-            tempRoot = Files.createTempDirectory("rikr_decompile");
-        } catch (IOException e) {
-            log("[Decompiler] Failed to create temp directory", e);
-            return null;
-        }
-
-        Path inputDir = tempRoot.resolve("input");
-        Path outputDir = tempRoot.resolve("output");
-
-        try {
-            Files.createDirectories(inputDir);
-            Files.createDirectories(outputDir);
-
-            // === Create temporary input JAR ===
-            Path jarFile = inputDir.resolve("temp.jar");
-            try (JarOutputStream jos = new JarOutputStream(Files.newOutputStream(jarFile))) {
-                jos.putNextEntry(new JarEntry(internalName + ".class"));
-                jos.write(classBytes);
-                jos.closeEntry();
+        // FernFlower reads the class through the provider, by a path that needn't exist, and hands the Java to the
+        // saver, so nothing is written to disk. It reads the class again for each method's code.
+        String path = new File(internalName.substring(internalName.lastIndexOf('/') + 1) + ".class")
+            .getAbsolutePath();
+        IBytecodeProvider provider = (externalPath, internalPath) -> {
+            if (!path.equals(externalPath)) {
+                throw new IOException("No class at " + externalPath);
             }
-            log("[Decompiler] Created temp JAR: " + jarFile);
+            return classBytes;
+        };
+        SourceSaver saver = new SourceSaver();
+        IFernflowerLogger fernLogger = new IFernflowerLogger() {
+            @Override
+            public void writeMessage(String message, Severity severity) {
+                log("[FernFlower][" + severity + "] " + message);
+            }
 
-            IFernflowerLogger fernLogger = new IFernflowerLogger() {
-                @Override
-                public void writeMessage(String message, Severity severity) {
-                    log("[FernFlower][" + severity + "] " + message);
-                }
+            @Override
+            public void writeMessage(String message, Severity severity, Throwable t) {
+                log("[FernFlower][" + severity + "] " + message, t);
+            }
+        };
 
-                @Override
-                public void writeMessage(String message, Severity severity, Throwable t) {
-                    log("[FernFlower][" + severity + "] " + message, t);
-                }
-            };
-
-            // === Run the decompiler ===
-            ConsoleDecompiler decompiler = new ConsoleDecompiler(outputDir.toFile(), options(), fernLogger);
-            decompiler.addSource(jarFile.toFile());
-            decompiler.decompileContext();
+        Fernflower fernflower = new Fernflower(provider, saver, options(), fernLogger,
+            new MethodTimeLimit(MAX_SECONDS_PER_METHOD));
+        try {
+            fernflower.addSource(new File(path));
+            fernflower.decompileContext();
             log("[Decompiler] Decompilation completed.");
-
-            // === Locate FernFlower's output JAR ===
-            Path outputJar = outputDir.resolve("temp.jar");
-            if (!Files.exists(outputJar)) {
-                // Try to find any .jar in outputDir
-                try (var stream = Files.list(outputDir)) {
-                    outputJar = stream.filter(p -> p.toString().endsWith(".jar")).findFirst().orElse(null);
-                }
-            }
-
-            if (outputJar == null || !Files.exists(outputJar)) {
-                log("[Decompiler] No decompiled JAR found in " + outputDir);
-                return null;
-            }
-
-            // === Extract .java files ===
-            Path extractDir = outputDir.resolve("extracted");
-            Files.createDirectories(extractDir);
-            extractJar(outputJar.toFile(), extractDir.toFile());
-
-            // === Find the first .java file and return its contents ===
-            Path javaFile;
-            try (var stream = Files.walk(extractDir)) {
-                javaFile = stream
-                    .filter(p -> p.toString().endsWith(".java"))
-                    .findFirst()
-                    .orElse(null);
-            }
-
-            if (javaFile == null) {
-                log("[Decompiler] No .java files found after extraction");
-                return null;
-            }
-
-            String source = Files.readString(javaFile, StandardCharsets.UTF_8);
-
-            // Delete the output JAR after extraction
-            try {
-                Files.deleteIfExists(outputJar);
-                log("[Decompiler] Deleted output JAR: " + outputJar);
-            } catch (IOException ignored) {
-            }
-
-            return source;
-
         } catch (Throwable t) {
             log("[Decompiler] Exception during decompilation", t);
             return null;
         } finally {
-            try {
-                deleteRecursive(tempRoot);
-            } catch (IOException ignored) {
-            }
+            fernflower.clearContext();
         }
+        if (saver.source == null) {
+            log("[Decompiler] FernFlower wrote no Java for " + internalName);
+        }
+        return saver.source;
     }
 
     private static Map<String, Object> options() {
@@ -196,46 +140,76 @@ public class JetBrainsDecompilerService {
         // the bytecode-to-source mapping turned on too.
         options.put("bsm", "1");
         options.put("__dump_original_lines__", "1");
-        options.put("mpm", String.valueOf(MAX_SECONDS_PER_METHOD));
         return options;
     }
 
     /**
-     * Extracts all entries from a JAR/ZIP file into a target directory.
+     * Stops a method that takes longer than the limit. FernFlower's own keeps one start time, but Rikr's copy of
+     * FernFlower decompiles a class's methods in parallel (docs/decisions/0012), so each thread keeps its own.
      */
-    private void extractJar(File zipFile, File outputDir) throws IOException {
-        try (ZipInputStream zis = new ZipInputStream(new FileInputStream(zipFile))) {
-            ZipEntry entry;
-            byte[] buffer = new byte[4096];
+    private static final class MethodTimeLimit implements CancellationManager {
+        private final long limitNanos;
+        private final ThreadLocal<Long> started = new ThreadLocal<>();
 
-            while ((entry = zis.getNextEntry()) != null) {
-                File newFile = new File(outputDir, entry.getName());
-                if (entry.isDirectory()) {
-                    newFile.mkdirs();
-                } else {
-                    new File(newFile.getParent()).mkdirs();
-                    try (BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(newFile))) {
-                        int len;
-                        while ((len = zis.read(buffer)) > 0) {
-                            bos.write(buffer, 0, len);
-                        }
-                    }
-                }
-                zis.closeEntry();
+        MethodTimeLimit(int seconds) {
+            limitNanos = TimeUnit.SECONDS.toNanos(seconds);
+        }
+
+        @Override
+        public void checkCanceled() {
+            Long start = started.get();
+            if (start != null && System.nanoTime() - start > limitNanos) {
+                throw new TimeExceedException();
             }
+        }
+
+        @Override
+        public void startMethod(String className, String methodName) {
+            started.set(System.nanoTime());
+        }
+
+        @Override
+        public void finishMethod(String className, String methodName) {
+            started.remove();
         }
     }
 
-    private void deleteRecursive(Path path) throws IOException {
-        if (path == null || !Files.exists(path)) return;
-        try (var paths = Files.walk(path)) {
-            paths.sorted((a, b) -> b.compareTo(a)) // delete children before parents
-                .forEach(p -> {
-                    try {
-                        Files.deleteIfExists(p);
-                    } catch (IOException ignored) {
-                    }
-                });
+    // Keeps the Java of the one class decompiled; FernFlower calls nothing else for a class added on its own.
+    private static final class SourceSaver implements IResultSaver {
+        private String source;
+
+        @Override
+        public void saveClassFile(String path, String qualifiedName, String entryName, String content, int[] mapping) {
+            source = content;
+        }
+
+        @Override
+        public void saveFolder(String path) {
+        }
+
+        @Override
+        public void copyFile(String source, String path, String entryName) {
+        }
+
+        @Override
+        public void createArchive(String path, String archiveName, Manifest manifest) {
+        }
+
+        @Override
+        public void saveDirEntry(String path, String archiveName, String entryName) {
+        }
+
+        @Override
+        public void copyEntry(String source, String path, String archiveName, String entry) {
+        }
+
+        @Override
+        public void saveClassEntry(String path, String archiveName, String qualifiedName, String entryName,
+                                   String content) {
+        }
+
+        @Override
+        public void closeArchive(String path, String archiveName) {
         }
     }
 }

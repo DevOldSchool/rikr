@@ -28,7 +28,7 @@
         <spotless.version>3.10.4</spotless.version>
         <coverage.core.lines>0.85</coverage.core.lines>
         <coverage.core.branches>0.55</coverage.core.branches>
-        <!-- src/main/java/org/jetbrains holds a patched copy of one of its classes: update the copy with it. -->
+        <!-- src/main/java/org/jetbrains holds patched copies of some of its classes: update the copies with it. -->
         <fernflower.version>261.26222.65</fernflower.version>
         <maven.antrun.version>3.1.0</maven.antrun.version>
     </properties>
@@ -73,6 +73,13 @@
             <groupId>com.jetbrains.intellij.java</groupId>
             <artifactId>java-decompiler-engine</artifactId>
             <version>${fernflower.version}</version>
+        </dependency>
+        <dependency>
+            <!-- The patched FernFlower classes use JetBrains' annotations, which aren't needed at run time. -->
+            <groupId>org.jetbrains</groupId>
+            <artifactId>annotations</artifactId>
+            <version>26.0.2</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>com.google.code.gson</groupId>
@@ -184,7 +191,7 @@
                         <arg>-XDcompilePolicy=simple</arg>
                         <arg>-XDaddTypeAnnotationsToSymbol=true</arg>
                         <arg>--should-stop=ifError=FLOW</arg>
-                        <!-- The patched FernFlower class is JetBrains' code, kept as close to theirs as possible. -->
+                        <!-- The patched FernFlower classes are JetBrains' code, kept as close to theirs as possible. -->
                         <arg>-Xplugin:ErrorProne -XepExcludedPaths:.*/src/main/java/org/jetbrains/.*</arg>
                     </compilerArgs>
                     <annotationProcessorPaths>
