@@ -1,6 +1,7 @@
 package org.de.rikr.utilities;
 
 import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.MethodInsnNode;
@@ -17,6 +18,14 @@ import java.util.Map;
 import java.util.Set;
 
 public class ClassNodeUtil {
+    /**
+     * A type's name without its package, such as {@code int}, {@code String} or {@code byte[]}.
+     */
+    public static String simpleName(Type type) {
+        String name = type.getClassName();
+        return name.substring(name.lastIndexOf('.') + 1);
+    }
+
     public static String getPattern(ClassNode classNode, FieldNode fieldNode, MethodNode methodNode) {
         if (classNode != null && !Modifier.isInterface(classNode.access)) {
             return getClassPattern(classNode);

@@ -7,6 +7,7 @@ import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.MethodNode;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -165,7 +166,7 @@ final class CodeLink {
             if (javaLines.isEmpty()) {
                 javaLines.addAll(outside);
             }
-            javaLines.sort((left, right) -> Integer.compare(left.start(), right.start()));
+            javaLines.sort(Comparator.comparingInt(Range::start));
         }
         boolean byLine = !javaLines.isEmpty();
         // After the declaration's name, which would otherwise match a call or field of the same name.
@@ -499,7 +500,7 @@ final class CodeLink {
                 .ifPresent(method -> methods.add(new JavaMethod(method, staticBlock.start(),
                     new Range(staticBlock.start(), staticBlock.end()))));
         }
-        methods.sort((left, right) -> Integer.compare(left.start(), right.start()));
+        methods.sort(Comparator.comparingInt(JavaMethod::start));
         return List.copyOf(methods);
     }
 

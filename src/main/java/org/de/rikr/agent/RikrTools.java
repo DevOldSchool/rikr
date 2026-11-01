@@ -571,7 +571,7 @@ final class RikrTools implements AutoCloseable {
         out.append(results.size()).append(" result lines").append(results.size() > limit ? ", showing " + limit : "")
             .append('\n');
         for (SearchResult result : results.subList(0, Math.min(limit, results.size()))) {
-            out.append("  ".repeat(result.indentLevel())).append(result.icon().name().toLowerCase(Locale.ROOT))
+            out.repeat("  ", result.indentLevel()).append(result.icon().name().toLowerCase(Locale.ROOT))
                 .append(": ").append(result.text());
             if (result.indentLevel() == 0 && result.classNode() != null) {
                 project.jars().jarOf(result.classNode()).ifPresent(jar -> out.append("  [").append(jar).append(']'));

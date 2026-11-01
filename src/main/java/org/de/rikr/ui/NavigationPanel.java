@@ -1,6 +1,5 @@
 package org.de.rikr.ui;
 
-import org.de.rikr.Rikr;
 import org.de.rikr.resources.Images;
 import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;
@@ -10,7 +9,6 @@ import java.awt.*;
 import java.awt.event.ActionListener;
 
 public class NavigationPanel extends JPanel {
-    private final Rikr controller;
     private final JButton projectButton;
     private final JButton searchButton;
     private final JButton mappingButton;
@@ -20,7 +18,6 @@ public class NavigationPanel extends JPanel {
     private SelectedTab selectedTab = SelectedTab.PROJECT;
 
     public NavigationPanel(
-        Rikr controller,
         ActionListener projectAction,
         ActionListener searchAction,
         ActionListener mappingAction,
@@ -28,8 +25,6 @@ public class NavigationPanel extends JPanel {
         ActionListener bookmarksAction,
         ActionListener controlFlowAction
     ) {
-        this.controller = controller;
-
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
         setBackground(Theme.BACKGROUND_COLOR);
         setBorder(null);
@@ -94,9 +89,7 @@ public class NavigationPanel extends JPanel {
         applyTheme();
 
         // React to theme changes
-        SettingsManager.addListener(s -> {
-            applyTheme();
-        });
+        SettingsManager.addListener(s -> applyTheme());
     }
 
     public void init() {
@@ -168,7 +161,6 @@ public class NavigationPanel extends JPanel {
                 case REFERENCES -> selectReferencesTab();
                 case BOOKMARKS -> selectBookmarksTab();
                 case CONTROL_FLOW -> selectControlFlowTab();
-                default -> selectProjectTab();
             }
         } catch (IllegalArgumentException exception) {
             selectProjectTab();

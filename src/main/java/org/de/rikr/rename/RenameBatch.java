@@ -1,5 +1,6 @@
 package org.de.rikr.rename;
 
+import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.commons.Remapper;
 
 import java.util.LinkedHashMap;
@@ -53,7 +54,7 @@ public record RenameBatch(
      * Maps old class names to new ones, leaving other names alone.
      */
     public Remapper classRemapper() {
-        return new Remapper() {
+        return new Remapper(Opcodes.ASM9) {
             @Override
             public String map(String internalName) {
                 return classes.getOrDefault(internalName, internalName);

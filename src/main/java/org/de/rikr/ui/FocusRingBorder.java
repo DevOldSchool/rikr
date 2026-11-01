@@ -49,9 +49,4 @@ public class FocusRingBorder extends AbstractBorder {
         insets.set(INSET, INSET, INSET, INSET);
         return insets;
     }
-
-    @Override
-    public boolean isBorderOpaque() {
-        return false;
-    }
 }

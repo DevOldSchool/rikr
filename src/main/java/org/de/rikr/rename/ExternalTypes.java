@@ -7,6 +7,7 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -57,9 +58,7 @@ final class ExternalTypes {
             if (current.getSuperclass() != null) {
                 pending.add(current.getSuperclass());
             }
-            for (Class<?> interfaceType : current.getInterfaces()) {
-                pending.add(interfaceType);
-            }
+            pending.addAll(List.of(current.getInterfaces()));
         }
         return Set.copyOf(methods);
     }

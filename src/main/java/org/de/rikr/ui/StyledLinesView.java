@@ -45,7 +45,6 @@ final class StyledLinesView extends View implements TabExpander {
     private FontMetrics metrics;
     private int spaceAbove;
     private int lineHeight;
-    private int rowHeight;
     private int longestLine = -1;
     private float tabBase;
 
@@ -77,7 +76,7 @@ final class StyledLinesView extends View implements TabExpander {
         int spaceBelow = (int) StyleConstants.getSpaceBelow(paragraph);
         int fontHeight = metrics.getHeight();
         // As ParagraphView does: a row is the font's height plus that times the line spacing, rounded towards 0.
-        rowHeight = fontHeight + (short) (fontHeight * StyleConstants.getLineSpacing(paragraph));
+        int rowHeight = fontHeight + (short) (fontHeight * StyleConstants.getLineSpacing(paragraph));
         lineHeight = Math.max(1, spaceAbove + rowHeight + spaceBelow);
         measured = true;
     }

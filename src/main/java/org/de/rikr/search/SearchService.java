@@ -258,9 +258,9 @@ public class SearchService {
         if (matches(desc, query)
             || matches(simple, query)
             || matches(withAt, query)
-            || (fqcn != null && matches(fqcn, query))
-            || (fullDescSignature != null && matches(fullDescSignature, query))
-            || (fullFqcnSignature != null && matches(fullFqcnSignature, query))
+            || matches(fqcn, query)
+            || matches(fullDescSignature, query)
+            || matches(fullFqcnSignature, query)
             || annotationElementsMatch(annotationNode, query)) {
             acc.add(annotationSearchResult(classNode, fieldNode, methodNode, withAt));
         }

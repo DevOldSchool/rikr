@@ -1,5 +1,6 @@
 package org.de.rikr.ui;
 
+import org.de.rikr.utilities.ClassNodeUtil;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldNode;
@@ -43,15 +44,15 @@ final class GoToDialog {
 
         String detail() {
             if (field != null) {
-                return simpleType(Type.getType(field.desc)) + "   in " + owner.name;
+                return ClassNodeUtil.simpleName(Type.getType(field.desc)) + "   in " + owner.name;
             }
             if (method != null) {
                 Type type = Type.getMethodType(method.desc);
                 List<String> arguments = new ArrayList<>();
                 for (Type argument : type.getArgumentTypes()) {
-                    arguments.add(simpleType(argument));
+                    arguments.add(ClassNodeUtil.simpleName(argument));
                 }
-                return "(" + String.join(", ", arguments) + ") " + simpleType(type.getReturnType()) + "   in "
+                return "(" + String.join(", ", arguments) + ") " + ClassNodeUtil.simpleName(type.getReturnType()) + "   in "
                     + owner.name;
             }
             return owner.name.contains("/") ? owner.name + "   class" : "class";
@@ -220,11 +221,6 @@ final class GoToDialog {
             return ClassNodeImages.getMethodNodeImage(target.method());
         }
         return ClassNodeImages.getImage("class");
-    }
-
-    private static String simpleType(Type type) {
-        String name = type.getClassName();
-        return name.substring(name.lastIndexOf('.') + 1);
     }
 
     private static String escape(String text) {

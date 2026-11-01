@@ -3,6 +3,7 @@ package org.de.rikr.bookmark;
 import org.de.rikr.rename.RenameBatch;
 import org.de.rikr.rename.RenameOperation;
 import org.de.rikr.rename.RenameType;
+import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.commons.Remapper;
 import org.objectweb.asm.commons.SimpleRemapper;
 
@@ -54,7 +55,7 @@ public class BookmarkService {
             if (!bookmark.jarName().equals(operation.jarName())) {
                 updated.add(bookmark);
             } else if (operation.type() == RenameType.CLASS) {
-                Remapper remapper = new SimpleRemapper(from, to);
+                Remapper remapper = new SimpleRemapper(Opcodes.ASM9, from, to);
                 updated.add(new ProjectBookmark(
                     bookmark.type(),
                     bookmark.jarName(),

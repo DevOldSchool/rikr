@@ -1,5 +1,6 @@
 package org.de.rikr.mapping.format;
 
+import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.commons.Remapper;
 
 import java.util.HashMap;
@@ -33,7 +34,7 @@ public record NameMappings(List<ClassMapping> classes) {
         for (ClassMapping mapping : classes) {
             names.put(mapping.original(), mapping.named());
         }
-        return new Remapper() {
+        return new Remapper(Opcodes.ASM9) {
             @Override
             public String map(String internalName) {
                 return names.getOrDefault(internalName, internalName);

@@ -223,7 +223,7 @@ public class TreePopupMenu extends JPopupMenu {
     }
 
     private void removeGrouping(DefaultMutableTreeNode node) {
-        if (node instanceof JarMutableTreeNode jarNode) {
+        if (node instanceof JarMutableTreeNode) {
             controller.getUserInterface().getTreePanel().updateTree(controller.jars().classesByJar(), false, false);
         }
     }

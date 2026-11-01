@@ -84,7 +84,7 @@ class DecompilerCacheServiceTest {
             new SourceCache(first, SourceCache.DEFAULT_LIMIT_BYTES, log::add), log::add)) {
             service.configureDiskCache(second, SourceCache.DEFAULT_LIMIT_BYTES);
 
-            assertTrue(service.decompileClassAsync(simpleClass("d")).join().success());
+            assertTrue(service.decompileClassAsync(simpleClass("d")).join().success(), log.toString());
         } finally {
             if (override != null) {
                 System.setProperty(SourceCache.DIRECTORY_PROPERTY, override);

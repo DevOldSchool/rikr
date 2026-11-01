@@ -51,7 +51,6 @@ public class ContentPanel extends JScrollPane {
     private ClassNode displayedClass;
     // The symbols of the bytecode text on screen; null while Java is shown.
     private BytecodeText displayedBytecode;
-    private LineNumberComponent lineNumberComponent;
     // The simulator's current instruction, painted across the whole line; null when nothing is marked.
     private Object markedLine;
 
@@ -92,8 +91,7 @@ public class ContentPanel extends JScrollPane {
         contentPane.setComponentPopupMenu(null);
 
         // Add line number component
-        lineNumberComponent = new LineNumberComponent(contentPane);
-        setRowHeaderView(lineNumberComponent);
+        setRowHeaderView(new LineNumberComponent(contentPane));
 
         // Apply colors now and on theme change
         applyTheme();
@@ -362,7 +360,7 @@ public class ContentPanel extends JScrollPane {
     private void selectShownTextAfterPattern(String pattern, String textToSelect) {
         Highlighter hilite = contentPane.getHighlighter();
         Document doc = contentPane.getDocument();
-        String text = null;
+        String text;
         try {
             text = doc.getText(0, doc.getLength());
         } catch (BadLocationException e) {

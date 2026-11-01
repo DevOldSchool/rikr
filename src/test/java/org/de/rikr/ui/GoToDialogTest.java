@@ -7,6 +7,7 @@ import org.objectweb.asm.tree.MethodNode;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -24,7 +25,7 @@ class GoToDialogTest {
         GoToDialog.Target prefix = new GoToDialog.Target("a.jar", clientLoader, null, null);
         GoToDialog.Target contains = new GoToDialog.Target("a.jar", myClient, null, null);
 
-        List<GoToDialog.Target> ranked = List.of(contains, prefix, exactMethod, exactClass).stream()
+        List<GoToDialog.Target> ranked = Stream.of(contains, prefix, exactMethod, exactClass)
             .sorted(Comparator.comparingInt(target -> GoToDialog.rank(target, "client")))
             .toList();
 

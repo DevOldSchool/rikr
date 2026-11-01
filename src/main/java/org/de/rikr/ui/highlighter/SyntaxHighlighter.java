@@ -20,7 +20,6 @@ public class SyntaxHighlighter {
     private static Font defaultFont;
     private ArrayList<int[]> commentRegions;
     private ArrayList<int[]> stringRegions;
-    private ArrayList<int[]> annotationRegions;
 
     public SyntaxHighlighter() {
         defaultFont = SettingsManager.getEditorFont();
@@ -168,7 +167,6 @@ public class SyntaxHighlighter {
     }
 
     private void highlightAnnotations(StyledDocument doc, String content, AttributeSet annotationStyle) {
-        annotationRegions = new ArrayList<>();
         // Patterns:
         // 1) Java-style annotations: @Qualified.OrSimple_Name
         // 2) JVM descriptor annotations as in examples: @Lorg/de/mapping/Name;
@@ -182,7 +180,6 @@ public class SyntaxHighlighter {
             int end = matcher.end();
             if (!isWithinComment(start, commentRegions) && !isWithinString(start, stringRegions)) {
                 doc.setCharacterAttributes(start, end - start, annotationStyle, false);
-                annotationRegions.add(new int[]{start, end});
             }
         }
     }

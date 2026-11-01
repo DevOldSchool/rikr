@@ -130,10 +130,9 @@ public class Rikr {
         }
     }
 
-    public boolean toggleBookmark(ProjectBookmark bookmark) {
+    public void toggleBookmark(ProjectBookmark bookmark) {
         boolean added = project.bookmarks().toggle(bookmark);
         log((added ? "Bookmarked " : "Removed bookmark ") + bookmark);
-        return added;
     }
 
     public boolean openBookmark(ProjectBookmark bookmark) {
@@ -315,8 +314,8 @@ public class Rikr {
                 userInterface.updateTree(project.jars().classesByJar());
                 project.warmUpDecompiler(loaded.jars());
             }
-            case ProjectEvent.JarRemoved removed -> refreshProjectState();
-            case ProjectEvent.ClassRemoved removed -> {
+            case ProjectEvent.JarRemoved ignored -> refreshProjectState();
+            case ProjectEvent.ClassRemoved ignored -> {
             }
             case ProjectEvent.Renamed renamed -> {
                 // A class rename can move a class to another package, so the tree is rebuilt; it keeps its place.
@@ -331,8 +330,8 @@ public class Rikr {
                 userInterface.refreshControlFlow();
                 refreshProjectState();
             }
-            case ProjectEvent.JarsSaved saved -> refreshProjectState();
-            case ProjectEvent.BookmarksChanged changed -> userInterface.refreshBookmarks();
+            case ProjectEvent.JarsSaved ignored -> refreshProjectState();
+            case ProjectEvent.BookmarksChanged ignored -> userInterface.refreshBookmarks();
         }
     }
 

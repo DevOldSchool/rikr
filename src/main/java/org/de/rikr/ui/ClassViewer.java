@@ -130,7 +130,6 @@ public class ClassViewer {
 
         // Create the navigation panel
         navigationPanel = new NavigationPanel(
-            controller,
             e -> showWorkspace(projectPanel, rightPanel, projectPanel),
             e -> showWorkspace(searchPanel, rightPanel, searchPanel, searchColumnWidth()),
             e -> showMappingWorkspace(),

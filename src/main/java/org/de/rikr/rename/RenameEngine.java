@@ -1,5 +1,6 @@
 package org.de.rikr.rename;
 
+import org.objectweb.asm.Handle;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.commons.ClassRemapper;
@@ -90,7 +91,8 @@ public final class RenameEngine {
             }
 
             @Override
-            public String mapInvokeDynamicMethodName(String methodName, String methodDescriptor) {
+            public String mapInvokeDynamicMethodName(String methodName, String methodDescriptor, Handle bootstrap,
+                Object... bootstrapArguments) {
                 // A dynamic constant passes its field descriptor here; its name is no method's.
                 if (!methodDescriptor.startsWith("(")) {
                     return methodName;
@@ -154,7 +156,8 @@ public final class RenameEngine {
             }
 
             @Override
-            public String mapInvokeDynamicMethodName(String methodName, String methodDescriptor) {
+            public String mapInvokeDynamicMethodName(String methodName, String methodDescriptor, Handle bootstrap,
+                Object... bootstrapArguments) {
                 if (!methodDescriptor.startsWith("(")) {
                     return methodName;
                 }
@@ -376,6 +379,10 @@ public final class RenameEngine {
 
     private abstract static class CountingRemapper extends Remapper {
         private int hits;
+
+        CountingRemapper() {
+            super(Opcodes.ASM9);
+        }
 
         protected String hit(String newName) {
             hits++;

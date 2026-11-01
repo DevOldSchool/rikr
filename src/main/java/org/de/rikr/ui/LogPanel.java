@@ -23,7 +23,6 @@ public class LogPanel extends JScrollPane implements Logger {
     private final StyledDocument document;
 
     private final DateFormat dateFormat;
-    private Date date;
 
     public LogPanel() {
         setBorder(null);
@@ -114,7 +113,7 @@ public class LogPanel extends JScrollPane implements Logger {
     public void log(String message) {
         SwingUtilities.invokeLater(() -> {
             try {
-                date = new Date();
+                Date date = new Date();
 
                 SimpleAttributeSet tsAttrs = new SimpleAttributeSet();
                 StyleConstants.setForeground(tsAttrs, Theme.CONTENT_HIGHLIGHT_TEXT_COLOR);

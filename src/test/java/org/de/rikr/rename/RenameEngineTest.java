@@ -3,6 +3,7 @@ package org.de.rikr.rename;
 import org.junit.jupiter.api.Test;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.Handle;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
@@ -164,6 +165,26 @@ class RenameEngineTest {
     }
 
     @Test
+    void renamingAnInterfaceMethodRenamesTheLambdasThatImplementIt() throws Exception {
+        List<ClassNode> classes = lambdaProgram();
+        assertEquals(7, run(classes));
+
+        engine.renameMethod(classes, "i", "get", "()I", "value", true);
+
+        assertEquals(7, run(classes), "a lambda left on the old name would throw AbstractMethodError");
+    }
+
+    @Test
+    void batchRenamesTheLambdasThatImplementARenamedMethod() throws Exception {
+        List<ClassNode> classes = lambdaProgram();
+
+        engine.renameBatch(classes, new RenameBatch("app.jar", "test", Map.of(), List.of(),
+            List.of(new RenameBatch.MemberRename("i", "get", "()I", "value"))), true);
+
+        assertEquals(7, run(classes));
+    }
+
+    @Test
     void privateAndStaticMethodsAreRenamedAlone() {
         ClassNode base = classNode("p", "java/lang/Object", Opcodes.ACC_PUBLIC);
         base.methods.add(new MethodNode(Opcodes.ACC_PRIVATE, "x", "()V", null, null));
@@ -251,6 +272,50 @@ class RenameEngineTest {
 
         List<ClassNode> nodes = new ArrayList<>();
         for (byte[] bytes : classes) {
+            ClassNode node = new ClassNode();
+            new ClassReader(bytes).accept(node, 0);
+            nodes.add(node);
+        }
+        return nodes;
+    }
+
+    /**
+     * interface i { int get(); }
+     * c { static int run() { i x = () -> 7; return x.get(); } }
+     */
+    static List<ClassNode> lambdaProgram() {
+        ClassWriter i = writer();
+        i.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC | Opcodes.ACC_INTERFACE | Opcodes.ACC_ABSTRACT, "i", null,
+            "java/lang/Object", null);
+        i.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_ABSTRACT, "get", "()I", null, null).visitEnd();
+        i.visitEnd();
+
+        ClassWriter c = writer();
+        c.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, "c", null, "java/lang/Object", null);
+        constructor(c, "java/lang/Object");
+        MethodVisitor body = c.visitMethod(Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC | Opcodes.ACC_SYNTHETIC,
+            "lambda$0", "()I", null, null);
+        body.visitCode();
+        body.visitIntInsn(Opcodes.BIPUSH, 7);
+        body.visitInsn(Opcodes.IRETURN);
+        body.visitMaxs(0, 0);
+        body.visitEnd();
+        MethodVisitor run = c.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "run", "()I", null, null);
+        run.visitCode();
+        Handle metafactory = new Handle(Opcodes.H_INVOKESTATIC, "java/lang/invoke/LambdaMetafactory", "metafactory",
+            "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;"
+                + "Ljava/lang/invoke/MethodType;Ljava/lang/invoke/MethodHandle;Ljava/lang/invoke/MethodType;)"
+                + "Ljava/lang/invoke/CallSite;", false);
+        run.visitInvokeDynamicInsn("get", "()Li;", metafactory, Type.getMethodType("()I"),
+            new Handle(Opcodes.H_INVOKESTATIC, "c", "lambda$0", "()I", false), Type.getMethodType("()I"));
+        run.visitMethodInsn(Opcodes.INVOKEINTERFACE, "i", "get", "()I", true);
+        run.visitInsn(Opcodes.IRETURN);
+        run.visitMaxs(0, 0);
+        run.visitEnd();
+        c.visitEnd();
+
+        List<ClassNode> nodes = new ArrayList<>();
+        for (byte[] bytes : List.of(i.toByteArray(), c.toByteArray())) {
             ClassNode node = new ClassNode();
             new ClassReader(bytes).accept(node, 0);
             nodes.add(node);

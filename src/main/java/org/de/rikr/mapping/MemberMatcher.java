@@ -315,7 +315,7 @@ public class MemberMatcher {
         private final Function<String, String> translate;
         private Parameters parameters = Parameters.ANY_LAST_TYPE;
         private boolean ignoreMultipliers;
-        private final Remapper remapper = new Remapper() {
+        private final Remapper remapper = new Remapper(Opcodes.ASM9) {
             @Override
             public String map(String internalName) {
                 return type(internalName);

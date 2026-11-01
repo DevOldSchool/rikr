@@ -1,5 +1,6 @@
 package org.de.rikr.ui;
 
+import org.de.rikr.utilities.ClassNodeUtil;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldNode;
@@ -45,7 +46,7 @@ final class ClassDetails {
             if (Modifier.isStatic(field.access)) {
                 details.append("static ");
             }
-            details.append(simple(Type.getType(field.desc))).append(' ').append(field.name).append('\n');
+            details.append(ClassNodeUtil.simpleName(Type.getType(field.desc))).append(' ').append(field.name).append('\n');
         }
         details.append('\n').append(METHODS).append(classNode.methods.size()).append("):\n");
         for (MethodNode method : classNode.methods) {
@@ -56,9 +57,9 @@ final class ClassDetails {
             Type type = Type.getMethodType(method.desc);
             List<String> arguments = new ArrayList<>();
             for (Type argument : type.getArgumentTypes()) {
-                arguments.add(simple(argument));
+                arguments.add(ClassNodeUtil.simpleName(argument));
             }
-            details.append(simple(type.getReturnType())).append(' ').append(method.name)
+            details.append(ClassNodeUtil.simpleName(type.getReturnType())).append(' ').append(method.name)
                 .append('(').append(String.join(", ", arguments)).append(")\n");
         }
         return details.toString();
@@ -125,11 +126,6 @@ final class ClassDetails {
             }
         }
         return members;
-    }
-
-    private static String simple(Type type) {
-        String name = type.getClassName();
-        return name.substring(name.lastIndexOf('.') + 1);
     }
 
     private static String kind(ClassNode classNode) {

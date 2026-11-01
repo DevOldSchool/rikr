@@ -376,8 +376,8 @@ class MemberMatcherTest {
         ClassNode classNode = classNode(name);
         classNode.fields.add(new FieldNode(Opcodes.ACC_PUBLIC, first, "I", null, null));
         classNode.fields.add(new FieldNode(Opcodes.ACC_PUBLIC, second, "I", null, null));
-        classNode.methods.add(reading(name, "readByte", 1));
-        classNode.methods.add(reading(name, "readShort", 2));
+        classNode.methods.add(reading("readByte", 1));
+        classNode.methods.add(reading("readShort", 2));
         MethodNode decode = new MethodNode(Opcodes.ACC_PUBLIC, "decode", "()V", null, null);
         for (String[] field : new String[][]{{first, "readByte"}, {second, "readShort"}}) {
             decode.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
@@ -405,7 +405,7 @@ class MemberMatcherTest {
     }
 
     // A method that returns its own small constant, so methods of different names have different code.
-    private static MethodNode reading(String owner, String name, int value) {
+    private static MethodNode reading(String name, int value) {
         MethodNode method = new MethodNode(Opcodes.ACC_PUBLIC, name, "()I", null, null);
         method.instructions.add(new IntInsnNode(Opcodes.BIPUSH, value * 40));
         method.instructions.add(new LdcInsnNode(name));

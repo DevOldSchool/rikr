@@ -11,6 +11,7 @@ import org.de.rikr.theme.Theme;
 import org.de.rikr.ui.graph.DrawnGraph;
 import org.de.rikr.ui.graph.GraphLegend;
 import org.de.rikr.ui.graph.GraphView;
+import org.de.rikr.utilities.ClassNodeUtil;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.MethodNode;
@@ -293,10 +294,10 @@ public class FlowPanel extends JPanel {
      * A call graph is left alone: it is something the person built by expanding calls.
      */
     public void methodOpened(String jar, ClassNode owner, MethodNode method) {
-        if (!(current instanceof FlowView)) {
+        if (!(current instanceof FlowView shown)) {
             return;
         }
-        if (current instanceof FlowView shown && shown.owner() == owner && shown.method() == method) {
+        if (shown.owner() == owner && shown.method() == method) {
             return;
         }
         if (isShowing()) {
@@ -664,14 +665,9 @@ public class FlowPanel extends JPanel {
         Type type = Type.getMethodType(descriptor);
         List<String> arguments = new ArrayList<>();
         for (Type argument : type.getArgumentTypes()) {
-            arguments.add(simpleName(argument));
+            arguments.add(ClassNodeUtil.simpleName(argument));
         }
-        return "(" + String.join(", ", arguments) + ") " + simpleName(type.getReturnType());
-    }
-
-    private static String simpleName(Type type) {
-        String name = type.getClassName();
-        return name.substring(name.lastIndexOf('.') + 1);
+        return "(" + String.join(", ", arguments) + ") " + ClassNodeUtil.simpleName(type.getReturnType());
     }
 
     private static String kindName(EntryPoint.Kind kind) {

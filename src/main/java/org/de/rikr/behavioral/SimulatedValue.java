@@ -1,5 +1,6 @@
 package org.de.rikr.behavioral;
 
+import org.de.rikr.utilities.ClassNodeUtil;
 import org.objectweb.asm.Type;
 
 /**
@@ -22,7 +23,7 @@ public sealed interface SimulatedValue {
 
         @Override
         public String toString() {
-            return "unknown " + simpleName(type) + (source == null ? "" : " (" + source + ")");
+            return "unknown " + ClassNodeUtil.simpleName(type) + (source == null ? "" : " (" + source + ")");
         }
     }
 
@@ -32,7 +33,7 @@ public sealed interface SimulatedValue {
     record ObjectRef(int id, Type type) implements SimulatedValue {
         @Override
         public String toString() {
-            return id == 0 ? "this" : "new " + simpleName(type) + " #" + id;
+            return id == 0 ? "this" : "new " + ClassNodeUtil.simpleName(type) + " #" + id;
         }
     }
 
@@ -44,7 +45,7 @@ public sealed interface SimulatedValue {
     record ArrayRef(int id, Type type, Integer length) implements SimulatedValue {
         @Override
         public String toString() {
-            String element = simpleName(type.getElementType()) + "[]".repeat(type.getDimensions() - 1);
+            String element = ClassNodeUtil.simpleName(type.getElementType()) + "[]".repeat(type.getDimensions() - 1);
             return element + "[" + (length == null ? "?" : length) + "] #" + id;
         }
     }
@@ -55,7 +56,7 @@ public sealed interface SimulatedValue {
     record ClassConstant(Type type) implements SimulatedValue {
         @Override
         public String toString() {
-            return simpleName(type) + ".class";
+            return ClassNodeUtil.simpleName(type) + ".class";
         }
     }
 
@@ -69,13 +70,5 @@ public sealed interface SimulatedValue {
             case Unknown unknown -> unknown.type().getSize();
             case null, default -> 1;
         };
-    }
-
-    /**
-     * A type's name without its package, such as {@code int}, {@code String} or {@code byte[]}.
-     */
-    static String simpleName(Type type) {
-        String name = type.getClassName();
-        return name.substring(name.lastIndexOf('.') + 1);
     }
 }

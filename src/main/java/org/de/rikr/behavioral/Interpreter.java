@@ -184,8 +184,7 @@ final class Interpreter {
             }
             case Opcodes.IINC -> {
                 IincInsnNode increment = (IincInsnNode) instruction;
-                Object value = frame.locals.get(increment.var);
-                frame.locals.put(increment.var, value instanceof Integer number
+                frame.locals.compute(increment.var, (slot, value) -> value instanceof Integer number
                     ? (Object) (number + increment.incr) : new Unknown(Type.INT_TYPE));
             }
 
@@ -383,7 +382,7 @@ final class Interpreter {
                 Object array = pop();
                 requireNonNull(array, "reading the length of an array");
                 push(array instanceof ArrayRef ref && ref.length() != null
-                    ? (Object) ref.length() : new Unknown(Type.INT_TYPE));
+                    ? ref.length() : new Unknown(Type.INT_TYPE));
             }
             case Opcodes.CHECKCAST -> {
                 Type type = Type.getObjectType(((TypeInsnNode) instruction).desc);

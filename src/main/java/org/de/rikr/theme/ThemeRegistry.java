@@ -5,7 +5,6 @@ import org.de.rikr.theme.providers.LightThemeProvider;
 import org.de.rikr.theme.providers.SystemThemeProvider;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
@@ -54,7 +53,7 @@ public final class ThemeRegistry {
 
     public static List<ThemeProvider> list() {
         synchronized (PROVIDERS) {
-            return Collections.unmodifiableList(new ArrayList<>(PROVIDERS));
+            return List.copyOf(PROVIDERS);
         }
     }
 }

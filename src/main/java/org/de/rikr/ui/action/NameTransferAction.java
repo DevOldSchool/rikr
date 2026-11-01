@@ -49,7 +49,7 @@ public final class NameTransferAction {
         RenameOperations.NameTransfer loaded = controller.renames().planNameTransfer(sourceJar, targetJar,
             classMappings, matches, true);
         if (given.batch().size() == 0 && loaded.batch().size() == 0) {
-            String message = describe(sourceJar, targetJar, matches, given) + String.format("%n%nNothing to rename: "
+            String message = describe(targetJar, matches, given) + String.format("%n%nNothing to rename: "
                 + "no matched class or member of %s has a name to carry that %s doesn't have.", sourceJar, targetJar);
             JOptionPane.showMessageDialog(parent, message, TITLE, JOptionPane.INFORMATION_MESSAGE);
             onFinished.accept("Nothing to carry from " + sourceJar + ".");
@@ -73,7 +73,7 @@ public final class NameTransferAction {
         Runnable refresh = () -> {
             RenameOperations.NameTransfer transfer = includeLoaded.isSelected() ? loaded : given;
             summary.setText(String.format("Give %s the names from %s?%n%n", targetJar, sourceJar)
-                + describe(sourceJar, targetJar, matches, transfer)
+                + describe(targetJar, matches, transfer)
                 + "\n\nMembers are matched by what their code does and how they are used, so check the ones that "
                 + "matter.\nUndo reverts the whole rename.");
             rename.setText(transfer.batch().size() == 0 ? "Nothing to rename"
@@ -115,7 +115,7 @@ public final class NameTransferAction {
         }
     }
 
-    private static String describe(String sourceJar, String targetJar, MemberMatches matches,
+    private static String describe(String targetJar, MemberMatches matches,
         RenameOperations.NameTransfer transfer) {
         RenameBatch batch = transfer.batch();
         String kept = transfer.alreadyNamed() == 0 ? "" : String.format(

@@ -101,7 +101,7 @@ public final class EntryPoints {
             }
         }
         return found.values().stream()
-            .sorted(Comparator.comparing((EntryPoint entry) -> entry.kind()))
+            .sorted(Comparator.comparing(EntryPoint::kind))
             .toList();
     }
 

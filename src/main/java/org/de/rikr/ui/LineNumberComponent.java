@@ -20,7 +20,6 @@ public class LineNumberComponent extends JComponent {
     private static final int MARGIN = 5;
     private final JTextPane textPane;
     private final Font defaultFont;
-    private FontMetrics fontMetrics;
     private int fontLeading;
     private int fontDescent;
     private final int lineHeightOffset;
@@ -75,7 +74,7 @@ public class LineNumberComponent extends JComponent {
     }
 
     private void updateFontMetrics(Font font) {
-        fontMetrics = getFontMetrics(font);
+        FontMetrics fontMetrics = getFontMetrics(font);
         fontLeading = fontMetrics.getLeading();
         fontDescent = fontMetrics.getDescent();
         updatePreferredWidth();

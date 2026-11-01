@@ -173,9 +173,8 @@ public class SearchPanel extends JPanel {
 
                 controller.getUserInterface().displayBytecode(selectedItem.getClassNode());
 
-                SwingUtilities.invokeLater(() -> {
-                    controller.getUserInterface().getContentPanel().selectTextAfterPattern(selectedItem.getPattern(), selectedItem.getName());
-                });
+                SwingUtilities.invokeLater(() -> controller.getUserInterface().getContentPanel()
+                    .selectTextAfterPattern(selectedItem.getPattern(), selectedItem.getName()));
             }
         });
     }

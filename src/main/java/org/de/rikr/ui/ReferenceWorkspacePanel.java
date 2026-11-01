@@ -243,13 +243,13 @@ public class ReferenceWorkspacePanel extends JPanel {
 
     private void openSelectedResult(JList<Object> resultList) {
         Object selected = resultList.getSelectedValue();
-        if (selected instanceof ClassHeader header) {
-            if (header.classNode() != null) {
+        if (selected instanceof ClassHeader classHeader) {
+            if (classHeader.classNode() != null) {
                 opening = true;
                 try {
                     controller.getUserInterface().openReferenceResult(new ReferenceResult(ReferenceKind.EXTENDS,
-                        header.className(), header.classNode(),
-                        ClassNodeUtil.getPattern(header.classNode(), null, null), header.classNode().name));
+                        classHeader.className(), classHeader.classNode(),
+                        ClassNodeUtil.getPattern(classHeader.classNode(), null, null), classHeader.classNode().name));
                 } finally {
                     opening = false;
                 }
@@ -309,7 +309,7 @@ public class ReferenceWorkspacePanel extends JPanel {
         if (open < 0 && space > 0) {
             // A field with its descriptor, such as "b Lwab;".
             try {
-                return member.substring(0, space) + " " + simpleType(Type.getType(member.substring(space + 1)));
+                return member.substring(0, space) + " " + ClassNodeUtil.simpleName(Type.getType(member.substring(space + 1)));
             } catch (RuntimeException exception) {
                 return member;
             }
@@ -321,18 +321,13 @@ public class ReferenceWorkspacePanel extends JPanel {
             Type type = Type.getMethodType(member.substring(open));
             List<String> arguments = new ArrayList<>();
             for (Type argument : type.getArgumentTypes()) {
-                arguments.add(simpleType(argument));
+                arguments.add(ClassNodeUtil.simpleName(argument));
             }
             return member.substring(0, open) + "(" + String.join(", ", arguments) + ") "
-                + simpleType(type.getReturnType());
+                + ClassNodeUtil.simpleName(type.getReturnType());
         } catch (RuntimeException exception) {
             return member;
         }
-    }
-
-    private static String simpleType(Type type) {
-        String name = type.getClassName();
-        return name.substring(name.lastIndexOf('.') + 1);
     }
 
     static String kindText(ReferenceKind kind) {

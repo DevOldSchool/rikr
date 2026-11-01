@@ -207,9 +207,9 @@ public class Project implements AutoCloseable {
                     }
                 }
             }
-            case ProjectEvent.JarsSaved saved -> {
+            case ProjectEvent.JarsSaved ignored -> {
             }
-            case ProjectEvent.BookmarksChanged changed -> {
+            case ProjectEvent.BookmarksChanged ignored -> {
             }
         }
     }

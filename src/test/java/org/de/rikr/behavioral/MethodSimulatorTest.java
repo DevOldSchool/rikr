@@ -19,7 +19,7 @@ import org.objectweb.asm.tree.MethodNode;
 import org.objectweb.asm.tree.TableSwitchInsnNode;
 import org.objectweb.asm.tree.VarInsnNode;
 
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -196,7 +196,7 @@ class MethodSimulatorTest {
         // Nulls are values too.
         MethodSimulator nulls = runAll(new MethodSimulator(null, staticMethod(
             new InsnNode(Opcodes.ACONST_NULL), new InsnNode(Opcodes.DUP), new InsnNode(Opcodes.POP))));
-        assertEquals(Arrays.asList((Object) null), nulls.getStack());
+        assertEquals(Collections.singletonList(null), nulls.getStack());
     }
 
     @Test
