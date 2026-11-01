@@ -45,8 +45,8 @@ public class MemberMatcher {
     private static final int STRING_WEIGHT = 4;
     private static final int REFERENCE_WEIGHT = 2;
     private static final int CALLER_WEIGHT = 3;
-    // Shares of methods ending in an int, short or byte parameter that tell a JAR with unused parameters from one
-    // without: about three in four against one in three in Old School RuneScape's clients.
+    // Shares of calls ending in an int, short or byte argument that tell a JAR with unused parameters from one
+    // without: about three in four against one in three in the clients measured.
     private static final double HAS_UNUSED_PARAMETERS = 0.6;
     private static final double LACKS_UNUSED_PARAMETERS = 0.4;
     private static final int ROUNDS = 2;
@@ -99,10 +99,12 @@ public class MemberMatcher {
                     }
                     // Constructors and static initializers keep their names, so they only match their own kind.
                     String special = method.name.startsWith("<") ? method.name : "";
-                    String key = (isStatic ? "static " : side.type(owner.name) + " ") + special
-                        + side.methodKey(method.desc);
-                    methodGroups.computeIfAbsent(key, ignored -> new Group<>())
-                        .side(isSource).add(new Member<>(owner, method));
+                    Member<MethodNode> member = new Member<>(owner, method);
+                    for (String methodKey : side.methodKeys(method)) {
+                        String key = (isStatic ? "static " : side.type(owner.name) + " ") + special + methodKey;
+                        Group<Member<MethodNode>> group = methodGroups.computeIfAbsent(key, ignored -> new Group<>());
+                        (side.mayBeCopy(owner, method) ? group.fallback(isSource) : group.side(isSource)).add(member);
+                    }
                     if (isSource) {
                         sourceMethods++;
                     }
@@ -122,6 +124,8 @@ public class MemberMatcher {
             }
         }
 
+        // A method that may be a copy is a candidate only where no called method of its shape is.
+        methodGroups.values().forEach(Group::useFallbacksWhereEmpty);
         Map<MethodNode, Map<String, Integer>> code = new IdentityHashMap<>();
         for (Group<Member<MethodNode>> group : methodGroups.values()) {
             group.sources.forEach(member -> code.put(member.node(), source.features(member.owner(), member.node())));
@@ -204,7 +208,31 @@ public class MemberMatcher {
             pairs.addAll(assign(group, (left, right) ->
                 scoreMethods(left, right, features.get(left.node()), features.get(right.node()))));
         }
-        return pairs;
+        return oneMatchEach(pairs);
+    }
+
+    /**
+     * A method compared under two descriptors may have matched in both groups. It keeps its strongest match, or
+     * none when two are as strong.
+     */
+    private static <N> List<Pair<N>> oneMatchEach(List<Pair<N>> pairs) {
+        Map<N, Integer> strongest = new IdentityHashMap<>();
+        Map<N, Integer> timesStrongest = new IdentityHashMap<>();
+        for (Pair<N> pair : pairs) {
+            for (N node : List.of(pair.source().node(), pair.target().node())) {
+                int best = strongest.getOrDefault(node, -1);
+                if (pair.percent() > best) {
+                    strongest.put(node, pair.percent());
+                    timesStrongest.put(node, 1);
+                } else if (pair.percent() == best) {
+                    timesStrongest.merge(node, 1, Integer::sum);
+                }
+            }
+        }
+        return pairs.stream()
+            .filter(pair -> List.of(pair.source().node(), pair.target().node()).stream()
+                .allMatch(node -> strongest.get(node) == pair.percent() && timesStrongest.get(node) == 1))
+            .toList();
     }
 
     private Score scoreMethods(
@@ -315,6 +343,8 @@ public class MemberMatcher {
         private final Function<String, String> translate;
         private Parameters parameters = Parameters.ANY_LAST_TYPE;
         private boolean ignoreMultipliers;
+        // Name and descriptor of each method called in the JAR to the classes it is called on.
+        private Map<String, Set<String>> callOwners;
         private final Remapper remapper = new Remapper(Opcodes.ASM9) {
             @Override
             public String map(String internalName) {
@@ -351,17 +381,116 @@ public class MemberMatcher {
         }
 
         /**
-         * The method descriptor written for comparison, with a last parameter of int, short or byte written as "~".
-         * Obfuscators that add an unused parameter to check callers choose its type anew in every release.
+         * The method descriptors a method is compared under, with a last parameter of int, short or byte written as
+         * "~": obfuscators that add an unused parameter to check callers choose its type anew in every release. In
+         * a JAR whose unused parameters the other JAR lacks, that parameter is left out instead. Some methods there
+         * end in a real int parameter, though, so a method that reads its last parameter is compared both with and
+         * without it; the first descriptor is the likelier one.
          */
-        String methodKey(String descriptor) {
-            String mapped = methodDescriptor(descriptor);
+        List<String> methodKeys(MethodNode method) {
+            String mapped = methodDescriptor(method.desc);
             if (parameters == Parameters.EXACT || !endsWithSmallParameter(mapped)) {
-                return mapped;
+                return List.of(mapped);
             }
             int close = mapped.indexOf(')');
-            return mapped.substring(0, close - 1) + (parameters == Parameters.DROP_LAST ? "" : "~")
-                + mapped.substring(close);
+            if (parameters == Parameters.ANY_LAST_TYPE) {
+                return List.of(mapped.substring(0, close - 1) + "~" + mapped.substring(close));
+            }
+            String dropped = mapped.substring(0, close - 1) + mapped.substring(close);
+            return lastParameterLooksUnused(method) ? List.of(dropped) : List.of(mapped, dropped);
+        }
+
+        /**
+         * Whether a method is one an obfuscator may have copied, in a JAR it added unused parameters to: one no
+         * code of the JAR calls. Recent obfuscated clients declare uncalled copies of methods without the unused
+         * parameter. Those copies lack its checks too, so they are even more like the other JAR's methods than
+         * the methods they copy.
+         */
+        boolean mayBeCopy(ClassNode owner, MethodNode method) {
+            return parameters == Parameters.DROP_LAST && !method.name.startsWith("<") && !isCalled(owner, method);
+        }
+
+        // Called on its own class or one related to it: a call on a superclass may run an override, and a call on
+        // a subclass may run an inherited method. Obfuscated names are short, so unrelated classes share them.
+        private boolean isCalled(ClassNode owner, MethodNode method) {
+            if (callOwners == null) {
+                callOwners = new HashMap<>();
+                for (ClassNode caller : classes) {
+                    for (MethodNode callerMethod : caller.methods) {
+                        for (AbstractInsnNode instruction : callerMethod.instructions) {
+                            if (instruction instanceof MethodInsnNode call && byName.containsKey(call.owner)) {
+                                callOwners.computeIfAbsent(call.name + call.desc, ignored -> new HashSet<>())
+                                    .add(call.owner);
+                            }
+                        }
+                    }
+                }
+            }
+            for (String callOwner : callOwners.getOrDefault(method.name + method.desc, Set.of())) {
+                if (inherits(callOwner, owner.name) || inherits(owner.name, callOwner)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private boolean inherits(String subclass, String superclass) {
+            Set<String> visited = new HashSet<>();
+            List<String> pending = new ArrayList<>(List.of(subclass));
+            while (!pending.isEmpty()) {
+                String name = pending.removeFirst();
+                if (name.equals(superclass)) {
+                    return true;
+                }
+                ClassNode classNode = byName.get(name);
+                if (classNode != null && visited.add(name)) {
+                    if (classNode.superName != null) {
+                        pending.add(classNode.superName);
+                    }
+                    pending.addAll(classNode.interfaces);
+                }
+            }
+            return false;
+        }
+
+        /**
+         * Whether a method never reads its last parameter or only compares it with a constant, as the checks
+         * obfuscators add do. A method without code can't tell, so it is taken to have one, like most methods of
+         * a JAR with unused parameters.
+         */
+        static boolean lastParameterLooksUnused(MethodNode method) {
+            if (method.instructions.size() == 0) {
+                return true;
+            }
+            Type[] parameters = Type.getArgumentTypes(method.desc);
+            int slot = (method.access & Opcodes.ACC_STATIC) != 0 ? 0 : 1;
+            for (int index = 0; index < parameters.length - 1; index++) {
+                slot += parameters[index].getSize();
+            }
+            for (AbstractInsnNode instruction : method.instructions) {
+                if (instruction instanceof IincInsnNode increment && increment.var == slot) {
+                    return false;
+                }
+                if (instruction instanceof VarInsnNode variable && variable.var == slot) {
+                    if (variable.getOpcode() != Opcodes.ILOAD) {
+                        return false;
+                    }
+                    AbstractInsnNode next = step(variable, false);
+                    AbstractInsnNode previous = step(variable, true);
+                    boolean constantAfter = next != null && smallOrLdcInt(next)
+                        && step(next, false) instanceof JumpInsnNode;
+                    boolean constantBefore = previous != null && smallOrLdcInt(previous)
+                        && next instanceof JumpInsnNode;
+                    if (!constantAfter && !constantBefore) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        private static boolean smallOrLdcInt(AbstractInsnNode instruction) {
+            return smallConstant(instruction) != null || isConstant(instruction);
         }
 
         private static boolean endsWithSmallParameter(String descriptor) {
@@ -374,21 +503,26 @@ public class MemberMatcher {
                 && descriptor.lastIndexOf('L', close - 1) <= descriptor.lastIndexOf(';', close - 1);
         }
 
-        // Obfuscators that add an unused parameter add it to most methods; plain code ends few that way.
+        // Obfuscators that add an unused parameter pass it in most calls; plain code ends few that way. Calls are
+        // counted, not declarations, because recent obfuscated clients also declare uncalled copies of methods
+        // without the parameter, which bring the share of declarations down to that of plain code.
         double shareEndingInSmallParameter() {
-            int methods = 0;
+            int calls = 0;
             int ending = 0;
             for (ClassNode owner : classes) {
                 for (MethodNode method : owner.methods) {
-                    if (!method.name.startsWith("<")) {
-                        methods++;
-                        if (endsWithSmallParameter(method.desc)) {
-                            ending++;
+                    for (AbstractInsnNode instruction : method.instructions) {
+                        if (instruction instanceof MethodInsnNode call && byName.containsKey(call.owner)
+                            && !call.name.startsWith("<")) {
+                            calls++;
+                            if (endsWithSmallParameter(call.desc)) {
+                                ending++;
+                            }
                         }
                     }
                 }
             }
-            return methods == 0 ? 0 : (double) ending / methods;
+            return calls == 0 ? 0 : (double) ending / calls;
         }
 
         // Obfuscators that multiply fields by constants leave several of those constants in each method.
@@ -448,7 +582,7 @@ public class MemberMatcher {
                     }
                     case IntInsnNode value -> add(features, "int " + opcode + " " + value.operand, 1);
                     case MethodInsnNode call -> add(features, "call " + member(call.owner, call.name)
-                        + methodDescriptor(call.desc), REFERENCE_WEIGHT);
+                        + callKey(call), REFERENCE_WEIGHT);
                     case FieldInsnNode access -> add(features, "field " + opcode + " "
                         + member(access.owner, access.name) + ":" + descriptor(access.desc), REFERENCE_WEIGHT);
                     case TypeInsnNode type -> add(features, "type " + opcode + " "
@@ -460,6 +594,12 @@ public class MemberMatcher {
                 }
             }
             return features;
+        }
+
+        // A call into the JAR is written like the key of the method it calls, so an unused argument doesn't count.
+        private String callKey(MethodInsnNode call) {
+            MethodNode called = byName.containsKey(call.owner) ? resolveMethod(call) : null;
+            return called != null ? methodKeys(called).getFirst() : methodDescriptor(call.desc);
         }
 
         /**
@@ -719,9 +859,25 @@ public class MemberMatcher {
     private static final class Group<M> {
         private final List<M> sources = new ArrayList<>();
         private final List<M> targets = new ArrayList<>();
+        // Members that are candidates only when their side of the group has no others.
+        private final List<M> fallbackSources = new ArrayList<>();
+        private final List<M> fallbackTargets = new ArrayList<>();
 
         List<M> side(boolean source) {
             return source ? sources : targets;
+        }
+
+        List<M> fallback(boolean source) {
+            return source ? fallbackSources : fallbackTargets;
+        }
+
+        void useFallbacksWhereEmpty() {
+            if (sources.isEmpty()) {
+                sources.addAll(fallbackSources);
+            }
+            if (targets.isEmpty()) {
+                targets.addAll(fallbackTargets);
+            }
         }
     }
 

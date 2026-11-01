@@ -130,11 +130,59 @@ class MemberMatcherTest {
             source.methods.add(obfuscated);
             target.methods.add(staticReturning("n" + text, "(Ljava/lang/String;)Ljava/lang/String;", text));
         }
+        source.methods.add(callingEach("a", "o", true));
+        target.methods.add(callingEach("b", "n", false));
 
         MemberMatches matches = matcher.match(List.of(source), List.of(target), Map.of("a", "b"));
 
         assertEquals("ntwo", method(matches, "otwo").orElseThrow().target().name());
-        assertEquals(3, matches.methods().size());
+        assertEquals("start", method(matches, "start").orElseThrow().target().name());
+        assertEquals(4, matches.methods().size());
+    }
+
+    @Test
+    void matchesTheCalledMethodRatherThanAnUncalledCopyWithoutTheUnusedParameter() {
+        // Recent obfuscated clients declare uncalled copies of methods without the unused parameter, as many as
+        // the methods that have it, so only the calls show which JAR has unused parameters.
+        ClassNode source = classNode("a");
+        ClassNode target = classNode("b");
+        for (String text : List.of("one", "two", "three")) {
+            source.methods.add(staticReturning("p" + text, "(Ljava/lang/String;)Ljava/lang/String;", text));
+            target.methods.add(staticReturning("r" + text, "(Ljava/lang/String;I)Ljava/lang/String;", text));
+            target.methods.add(staticReturning("c" + text, "(Ljava/lang/String;)Ljava/lang/String;", text));
+        }
+        source.methods.add(callingEach("a", "p", false));
+        target.methods.add(callingEach("b", "r", true));
+
+        MemberMatches matches = matcher.match(List.of(source), List.of(target), Map.of("a", "b"));
+
+        assertEquals("rone", method(matches, "pone").orElseThrow().target().name());
+        assertEquals("rtwo", method(matches, "ptwo").orElseThrow().target().name());
+        assertEquals("rthree", method(matches, "pthree").orElseThrow().target().name());
+    }
+
+    @Test
+    void keepsALastIntParameterTheMethodUsesInTheJarWithUnusedParameters() {
+        ClassNode source = classNode("a");
+        ClassNode target = classNode("b");
+        for (String text : List.of("one", "two", "three")) {
+            source.methods.add(staticReturning("p" + text, "(Ljava/lang/String;)Ljava/lang/String;", text));
+            target.methods.add(staticReturning("r" + text, "(Ljava/lang/String;I)Ljava/lang/String;", text));
+        }
+        source.methods.add(callingEach("a", "p", false));
+        target.methods.add(callingEach("b", "r", true));
+        // The target's methods use every parameter, so each is compared both with and without its last one.
+        source.methods.add(addingParameters("draw", 2));
+        source.methods.add(addingParameters("single", 1));
+        target.methods.add(addingParameters("same", 2));
+        target.methods.add(addingParameters("longer", 3));
+
+        MemberMatches matches = matcher.match(List.of(source), List.of(target), Map.of("a", "b"));
+
+        assertEquals("rone", method(matches, "pone").orElseThrow().target().name());
+        assertEquals("same", method(matches, "draw").orElseThrow().target().name());
+        // same() is also a candidate for single() without its last parameter, but keeps its closer match.
+        assertTrue(method(matches, "single").isEmpty());
     }
 
     @Test
@@ -289,6 +337,38 @@ class MemberMatcherTest {
         method.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, owner, callee, "()Ljava/lang/String;"));
         method.instructions.add(new InsnNode(Opcodes.POP));
         method.instructions.add(new InsnNode(Opcodes.RETURN));
+        return method;
+    }
+
+    // A static start() that calls prefix + one, two and three, passing an unused constant last when asked to.
+    private static MethodNode callingEach(String owner, String prefix, boolean unusedParameter) {
+        MethodNode method = new MethodNode(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "start", "()V", null, null);
+        String descriptor = unusedParameter ? "(Ljava/lang/String;I)Ljava/lang/String;"
+            : "(Ljava/lang/String;)Ljava/lang/String;";
+        for (String text : List.of("one", "two", "three")) {
+            method.instructions.add(new LdcInsnNode("argument"));
+            if (unusedParameter) {
+                method.instructions.add(new IntInsnNode(Opcodes.BIPUSH, 42));
+            }
+            method.instructions.add(new MethodInsnNode(Opcodes.INVOKESTATIC, owner, prefix + text, descriptor));
+            method.instructions.add(new InsnNode(Opcodes.POP));
+        }
+        method.instructions.add(new InsnNode(Opcodes.RETURN));
+        return method;
+    }
+
+    // A static method taking that many ints, which adds them all and returns "drawn".
+    private static MethodNode addingParameters(String name, int count) {
+        MethodNode method = new MethodNode(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, name,
+            "(" + "I".repeat(count) + ")Ljava/lang/String;", null, null);
+        method.instructions.add(new VarInsnNode(Opcodes.ILOAD, 0));
+        for (int parameter = 1; parameter < count; parameter++) {
+            method.instructions.add(new VarInsnNode(Opcodes.ILOAD, parameter));
+            method.instructions.add(new InsnNode(Opcodes.IADD));
+        }
+        method.instructions.add(new InsnNode(Opcodes.POP));
+        method.instructions.add(new LdcInsnNode("drawn"));
+        method.instructions.add(new InsnNode(Opcodes.ARETURN));
         return method;
     }
 
