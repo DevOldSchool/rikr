@@ -60,6 +60,10 @@ public class MenuBar extends JMenuBar {
     private final JMenuItem removeGroupingItem = new JMenuItem("Remove Grouping");
     private final JMenuItem undoItem;
     private final JMenuItem redoItem;
+    // While an editable text field has the focus, Undo and Redo act on its typing and never on a rename.
+    private final TextUndo textUndo = new TextUndo(this::refreshUndoRedo);
+    private Optional<RenameStep> nextUndo = Optional.empty();
+    private Optional<RenameStep> nextRedo = Optional.empty();
     private final JCheckBoxMenuItem annotationItem = new JCheckBoxMenuItem("Strip Annotations When Loading");
 
     public MenuBar(Rikr controller, Actions actions) {
@@ -80,8 +84,20 @@ public class MenuBar extends JMenuBar {
         fileMenu.add(item("Overwrite Original JAR...", 0, 0, actions.overwriteOriginalJar()));
 
         JMenu editMenu = new JMenu("Edit");
-        undoItem = item("Undo Rename", KeyEvent.VK_Z, MENU, actions.undoRename());
-        redoItem = item("Redo Rename", KeyEvent.VK_Z, MENU | KeyEvent.SHIFT_DOWN_MASK, actions.redoRename());
+        undoItem = item("Undo Rename", KeyEvent.VK_Z, MENU, () -> {
+            if (textUndo.active()) {
+                textUndo.undo();
+            } else {
+                actions.undoRename().run();
+            }
+        });
+        redoItem = item("Redo Rename", KeyEvent.VK_Z, MENU | KeyEvent.SHIFT_DOWN_MASK, () -> {
+            if (textUndo.active()) {
+                textUndo.redo();
+            } else {
+                actions.redoRename().run();
+            }
+        });
         editMenu.add(undoItem);
         editMenu.add(redoItem);
         updateUndoRedo(Optional.empty(), Optional.empty());
@@ -171,10 +187,27 @@ public class MenuBar extends JMenuBar {
      * Name the step Undo and Redo would act on, so the menu says what will change before it is chosen.
      */
     public void updateUndoRedo(Optional<RenameStep> undo, Optional<RenameStep> redo) {
-        undoItem.setText(undo.map(step -> "Undo " + describe(step)).orElse("Undo Rename"));
-        undoItem.setEnabled(undo.isPresent());
-        redoItem.setText(redo.map(step -> "Redo " + describe(step)).orElse("Redo Rename"));
-        redoItem.setEnabled(redo.isPresent());
+        nextUndo = undo;
+        nextRedo = redo;
+        refreshUndoRedo();
+    }
+
+    private void refreshUndoRedo() {
+        // The focus can move while the menu bar is still being built.
+        if (undoItem == null) {
+            return;
+        }
+        if (textUndo.active()) {
+            undoItem.setText("Undo Typing");
+            undoItem.setEnabled(textUndo.canUndo());
+            redoItem.setText("Redo Typing");
+            redoItem.setEnabled(textUndo.canRedo());
+            return;
+        }
+        undoItem.setText(nextUndo.map(step -> "Undo " + describe(step)).orElse("Undo Rename"));
+        undoItem.setEnabled(nextUndo.isPresent());
+        redoItem.setText(nextRedo.map(step -> "Redo " + describe(step)).orElse("Redo Rename"));
+        redoItem.setEnabled(nextRedo.isPresent());
     }
 
     static String describe(RenameStep step) {

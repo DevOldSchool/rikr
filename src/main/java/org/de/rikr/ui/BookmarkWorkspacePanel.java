@@ -18,10 +18,12 @@ public class BookmarkWorkspacePanel extends JPanel {
     private final JButton remove = new JButton("Remove");
     private final JButton open = new JButton("Open");
     private final JLabel emptyLabel = new JLabel(
-        "<html><div style='text-align:center'>No bookmarks yet.<br><br>Right-click a class, field or method "
-            + "and choose Toggle Bookmark.</div></html>", SwingConstants.CENTER);
+        "<html><div style='text-align:center'>No bookmarks yet.<br><br>Select a class, field or method and "
+            + "press F3, or right-click it and choose Add Bookmark.</div></html>", SwingConstants.CENTER);
     private final CardLayout cards = new CardLayout();
     private ClassNode openClass;
+    // Remove and Open have nothing to act on with no bookmarks, so they are hidden rather than disabled.
+    private final JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT));
     private final JPanel content = new JPanel(cards);
 
     public BookmarkWorkspacePanel(Rikr controller) {
@@ -40,14 +42,15 @@ public class BookmarkWorkspacePanel extends JPanel {
             public Component getListCellRendererComponent(JList<?> owner, Object value, int index, boolean selected,
                                                           boolean focused) {
                 JLabel label = (JLabel) super.getListCellRendererComponent(owner, value, index, selected, focused);
-                if (value instanceof ProjectBookmark bookmark && openClass != null
-                    && bookmark.className().equals(openClass.name)
-                    && controller.jars().jarOf(openClass).map(bookmark.jarName()::equals).orElse(false)) {
-                    label.setFont(label.getFont().deriveFont(Font.BOLD));
-                    label.setToolTipText("In the open class");
-                } else {
-                    label.setToolTipText(null);
+                if (!(value instanceof ProjectBookmark bookmark)) {
+                    return label;
                 }
+                boolean inOpenClass = openClass != null && bookmark.className().equals(openClass.name)
+                    && controller.jars().jarOf(openClass).map(bookmark.jarName()::equals).orElse(false);
+                String name = escape(bookmark.label());
+                label.setText("<html>" + (inOpenClass ? "<b>" + name + "</b>" : name) + " <span style='color:"
+                    + SecondaryText.color(owner, selected) + "'>" + escape(bookmark.jarName()) + "</span></html>");
+                label.setToolTipText(inOpenClass ? "In the open class" : null);
                 return label;
             }
         });
@@ -57,7 +60,6 @@ public class BookmarkWorkspacePanel extends JPanel {
         content.add(emptyLabel, "empty");
         add(content, BorderLayout.CENTER);
 
-        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         remove.addActionListener(event -> removeSelected());
         open.addActionListener(event -> openSelected());
         actions.add(remove);
@@ -104,6 +106,7 @@ public class BookmarkWorkspacePanel extends JPanel {
 
     private void showListOrEmptyState() {
         cards.show(content, model.isEmpty() ? "empty" : "list");
+        actions.setVisible(!model.isEmpty());
         updateButtons();
     }
 
@@ -131,6 +134,10 @@ public class BookmarkWorkspacePanel extends JPanel {
         if (bookmark != null) {
             controller.bookmarks().remove(bookmark);
         }
+    }
+
+    private static String escape(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     private void applyTheme() {

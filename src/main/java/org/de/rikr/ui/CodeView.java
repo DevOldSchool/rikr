@@ -13,6 +13,7 @@ import org.objectweb.asm.tree.MethodNode;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.List;
 
 /**
  * Shows the selected class as bytecode, optionally with its decompiled Java beside it. With no class open it shows
@@ -60,6 +61,12 @@ public class CodeView extends JPanel {
         withJava.setToolTipText("Show the decompiled Java beside the bytecode (Shift+Cmd+J)");
         bytecodeOnly.addActionListener(event -> setJavaShown(false));
         withJava.addActionListener(event -> setJavaShown(true));
+        // The chosen view takes the selection colours, so which one is on reads at a glance in every theme; the
+        // look and feel's own selected toggle differs from an unselected one by a faint shade only.
+        for (JToggleButton view : List.of(bytecodeOnly, withJava)) {
+            view.putClientProperty("FlatLaf.style",
+                "selectedBackground: $List.selectionBackground; selectedForeground: $List.selectionForeground");
+        }
         JPanel switcher = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 2));
         switcher.setOpaque(false);
         switcher.getAccessibleContext().setAccessibleName("Code view");

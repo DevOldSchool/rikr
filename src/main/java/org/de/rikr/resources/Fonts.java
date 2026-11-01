@@ -22,7 +22,7 @@ public class Fonts {
             String fontName = data[0];
             String fontPath = data[1];
 
-            Font font = loadFont(fontPath).deriveFont(13f);
+            Font font = loadFont(fontPath).deriveFont((float) org.de.rikr.settings.Settings.DEFAULT_FONT_SIZE);
             FONTS.put(fontName, font);
         }
     }

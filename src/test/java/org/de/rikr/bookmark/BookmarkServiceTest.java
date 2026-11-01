@@ -61,4 +61,14 @@ class BookmarkServiceTest {
             service.getBookmarks()
         );
     }
+
+    @Test
+    void labelsMembersWithJavaTypes() {
+        assertEquals("a.B", new ProjectBookmark(ProjectBookmarkType.CLASS, "app.jar", "a/B", null, null).label());
+        assertEquals("a.B.count : int",
+            new ProjectBookmark(ProjectBookmarkType.FIELD, "app.jar", "a/B", "count", "I").label());
+        assertEquals("a.B.run(int, String[], java.util.List) : a.C",
+            new ProjectBookmark(ProjectBookmarkType.METHOD, "app.jar", "a/B", "run",
+                "(I[Ljava/lang/String;Ljava/util/List;)La/C;").label());
+    }
 }

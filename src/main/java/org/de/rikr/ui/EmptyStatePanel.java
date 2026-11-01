@@ -86,7 +86,9 @@ public class EmptyStatePanel extends JPanel {
     public void update(boolean jarsLoaded, List<File> recentProjects) {
         if (jarsLoaded) {
             title.setText("Choose a class to open");
-            detail.setText("Select one in the project tree, or press Cmd+K to go to a class or member by name.");
+            // Two short lines rather than one long one, which a narrow or scaled-up window would cut off.
+            detail.setText("<html><div style='text-align:center'>Select one in the project tree,<br>"
+                + "or press Cmd+K to go to a class or member by name.</div></html>");
         } else {
             title.setText("Open a JAR to start");
             detail.setText("Or drop .jar and .class files anywhere here.");

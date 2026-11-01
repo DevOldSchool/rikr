@@ -2,6 +2,8 @@ package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
 
+import com.formdev.flatlaf.util.UIScale;
+
 import javax.swing.*;
 import java.awt.*;
 import java.util.Map;
@@ -38,14 +40,14 @@ public class InformationFrame extends JFrame {
 
     private void addInfo(JPanel panel, GridBagConstraints gbc, String labelText, String valueText, int y) {
         JLabel label = new JLabel(labelText);
-        label.setFont(new Font("Arial", Font.BOLD, 14));
+        label.setFont(new Font("Arial", Font.BOLD, UIScale.scale(14)));
         gbc.gridx = 0;
         gbc.gridy = y;
         gbc.anchor = GridBagConstraints.WEST;
         panel.add(label, gbc);
 
         JLabel value = new JLabel(valueText);
-        value.setFont(new Font("Arial", Font.PLAIN, 14));
+        value.setFont(new Font("Arial", Font.PLAIN, UIScale.scale(14)));
         gbc.gridx = 1;
         gbc.anchor = GridBagConstraints.EAST;
         panel.add(value, gbc);

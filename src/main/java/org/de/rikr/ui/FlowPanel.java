@@ -79,6 +79,7 @@ public class FlowPanel extends JPanel {
     private final JLabel title = new JLabel("Pick an entry point, or right-click a method in the project tree.");
     private final JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT));
     private final GraphLegend legend = new GraphLegend();
+    private final JLabel keys = new JLabel(GraphView.keyHint());
     private Runnable viewListener = () -> {
     };
     private FlowView pending;
@@ -190,6 +191,11 @@ public class FlowPanel extends JPanel {
         caption.setOpaque(false);
         caption.add(title, BorderLayout.CENTER);
         caption.add(legend, BorderLayout.EAST);
+        // The graph's keys are said while it has the focus, where someone using the keyboard is looking.
+        keys.setBorder(BorderFactory.createEmptyBorder(0, 8, 4, 8));
+        keys.setVisible(false);
+        view.onFocusChange(keys::setVisible);
+        caption.add(keys, BorderLayout.SOUTH);
         header.add(caption, BorderLayout.SOUTH);
         header.setOpaque(false);
         add(header, BorderLayout.NORTH);
@@ -773,6 +779,7 @@ public class FlowPanel extends JPanel {
     private void applyTheme() {
         setBackground(Theme.BACKGROUND_COLOR);
         toolbar.setBackground(Theme.BACKGROUND_COLOR);
+        keys.setForeground(Theme.CONTENT_HIGHLIGHT_TEXT_COLOR);
         repaint();
     }
 }

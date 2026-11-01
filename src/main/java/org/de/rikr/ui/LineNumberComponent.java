@@ -1,6 +1,6 @@
 package org.de.rikr.ui;
 
-import org.de.rikr.resources.Fonts;
+import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;
 
 import javax.swing.*;
@@ -19,7 +19,8 @@ public class LineNumberComponent extends JComponent {
 
     private static final int MARGIN = 5;
     private final JTextPane textPane;
-    private final Font defaultFont;
+    // The code's own font, so the numbers line up with it and grow with it when Rikr is scaled up.
+    private Font defaultFont;
     private int fontLeading;
     private int fontDescent;
     private final int lineHeightOffset;
@@ -28,9 +29,14 @@ public class LineNumberComponent extends JComponent {
     public LineNumberComponent(JTextPane textPane) {
         this.textPane = textPane;
 
-        defaultFont = Fonts.getDefaultFont();
+        defaultFont = SettingsManager.getEditorFont();
         setFont(defaultFont);
         updateFontMetrics(defaultFont);
+        SettingsManager.addListener(settings -> {
+            defaultFont = SettingsManager.getEditorFont();
+            setFont(defaultFont);
+            updateFontMetrics(defaultFont);
+        });
 
         DocumentListener changes = new DocumentListener() {
             @Override

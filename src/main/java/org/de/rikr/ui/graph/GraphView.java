@@ -6,6 +6,9 @@ import org.de.rikr.theme.Theme;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
@@ -15,7 +18,9 @@ import java.util.List;
 
 /**
  * Draws a {@link DrawnGraph} laid out in layers, in a scroll pane. Drag to pan, Ctrl or Cmd with the wheel to zoom,
- * click to select, double-click or right-click to act on a node, and click a node's badge to expand it.
+ * click to select, double-click or right-click to act on a node, and click a node's badge to expand it. From the
+ * keyboard, once the graph has the focus: the arrow keys move to the nearest node that way, Enter opens it, Space
+ * expands it, Shift+F10 or the context-menu key shows its menu, and + , - and 0 zoom in, out and to fit.
  */
 public class GraphView extends JScrollPane {
     private static final int PADDING = 8;
@@ -136,7 +141,92 @@ public class GraphView extends JScrollPane {
 
     public void select(int node) {
         selected = node;
+        selectionChanged();
+    }
+
+    /**
+     * Words for the graph's keys, to show while it has the focus.
+     */
+    public static String keyHint() {
+        return "Arrow keys move · Enter opens · Space expands · Shift+F10 menu · + − 0 zoom";
+    }
+
+    /**
+     * Told when the graph gains or loses the keyboard focus, so a hint about its keys can be shown meanwhile.
+     */
+    public void onFocusChange(java.util.function.Consumer<Boolean> focused) {
+        canvas.addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusGained(FocusEvent event) {
+                focused.accept(true);
+            }
+
+            @Override
+            public void focusLost(FocusEvent event) {
+                focused.accept(false);
+            }
+        });
+    }
+
+    private void selectionChanged() {
         canvas.repaint();
+        overview.repaint();
+        // Screen readers hear the selected node, since the drawing itself says nothing to them.
+        String said = graph == null || selected < 0 ? null : String.join(", ", graph.nodes().get(selected).lines());
+        canvas.getAccessibleContext().setAccessibleDescription(said);
+    }
+
+    private void revealSelected() {
+        if (layout == null || selected < 0) {
+            return;
+        }
+        Rectangle box = layout.boxes().get(selected);
+        canvas.scrollRectToVisible(new Rectangle((int) (box.x * scale) - 40, (int) (box.y * scale) - 40,
+            (int) (box.width * scale) + 80, (int) (box.height * scale) + 80));
+    }
+
+    /**
+     * Move the selection to the nearest node in a direction, (dx, dy) one of the four unit steps. Nodes far off the
+     * line count as further, so Down follows the column rather than jumping sideways; Left and Right only reach nodes
+     * within 45 degrees of level.
+     */
+    private void moveSelection(int dx, int dy) {
+        if (layout == null || layout.boxes().isEmpty()) {
+            return;
+        }
+        if (selected < 0) {
+            selected = 0;
+        } else {
+            Rectangle from = layout.boxes().get(selected);
+            double fromX = from.getCenterX();
+            double fromY = from.getCenterY();
+            int best = -1;
+            double bestScore = Double.MAX_VALUE;
+            for (int index = 0; index < layout.boxes().size(); index++) {
+                Rectangle box = layout.boxes().get(index);
+                double along = (box.getCenterX() - fromX) * dx + (box.getCenterY() - fromY) * dy;
+                double across = Math.abs((box.getCenterX() - fromX) * dy + (box.getCenterY() - fromY) * dx);
+                // Sideways moves stay beside the selected node: layers run down the page, so a node above or
+                // below is never what Left or Right means.
+                if (index == selected || along <= 0 || dx != 0 && across > along) {
+                    continue;
+                }
+                double score = along + 2 * across;
+                if (score < bestScore) {
+                    bestScore = score;
+                    best = index;
+                }
+            }
+            if (best < 0) {
+                return;
+            }
+            selected = best;
+        }
+        if (scale < MIN_READABLE_SCALE) {
+            zoomTo(MIN_READABLE_SCALE, null);
+        }
+        revealSelected();
+        selectionChanged();
     }
 
     /**
@@ -181,10 +271,8 @@ public class GraphView extends JScrollPane {
                 if (scale < MIN_READABLE_SCALE) {
                     zoomTo(MIN_READABLE_SCALE, null);
                 }
-                Rectangle box = layout.boxes().get(node);
-                canvas.scrollRectToVisible(new Rectangle((int) (box.x * scale) - 40, (int) (box.y * scale) - 40,
-                    (int) (box.width * scale) + 80, (int) (box.height * scale) + 80));
-                canvas.repaint();
+                revealSelected();
+                selectionChanged();
                 return true;
             }
         }
@@ -269,15 +357,37 @@ public class GraphView extends JScrollPane {
             metrics.getHeight());
     }
 
-    private final class Canvas extends JComponent {
+    // A JPanel, since a bare JComponent has no accessible context to name.
+    private final class Canvas extends JPanel {
         private Point dragStart;
 
         Canvas() {
+            super(null);
             setOpaque(true);
+            setFocusable(true);
+            getAccessibleContext().setAccessibleName("Graph");
+            bindKeys();
+            addFocusListener(new FocusAdapter() {
+                @Override
+                public void focusGained(FocusEvent event) {
+                    if (selected < 0 && layout != null && !layout.boxes().isEmpty()) {
+                        selected = 0;
+                        revealSelected();
+                        selectionChanged();
+                    }
+                    repaint();
+                }
+
+                @Override
+                public void focusLost(FocusEvent event) {
+                    repaint();
+                }
+            });
             MouseAdapter mouse = new MouseAdapter() {
                 @Override
                 public void mousePressed(MouseEvent event) {
                     dragStart = event.getLocationOnScreen();
+                    requestFocusInWindow();
                     if (event.isPopupTrigger()) {
                         showMenu(event);
                     }
@@ -313,7 +423,7 @@ public class GraphView extends JScrollPane {
                     }
                     int node = nodeAt(event.getPoint());
                     selected = node;
-                    repaint();
+                    selectionChanged();
                     if (node < 0) {
                         return;
                     }
@@ -345,10 +455,63 @@ public class GraphView extends JScrollPane {
                 return;
             }
             selected = node;
-            repaint();
+            selectionChanged();
             JPopupMenu menu = listener.menu(node);
             if (menu != null) {
                 menu.show(this, event.getX(), event.getY());
+            }
+        }
+
+        private void bindKeys() {
+            bind("UP", "rikr.up", () -> moveSelection(0, -1));
+            bind("DOWN", "rikr.down", () -> moveSelection(0, 1));
+            bind("LEFT", "rikr.left", () -> moveSelection(-1, 0));
+            bind("RIGHT", "rikr.right", () -> moveSelection(1, 0));
+            bind("ENTER", "rikr.open", () -> {
+                if (selected >= 0) {
+                    listener.doubleClicked(selected);
+                }
+            });
+            bind("SPACE", "rikr.expand", () -> {
+                if (selected >= 0 && graph.nodes().get(selected).badge() != null) {
+                    listener.badgeClicked(selected);
+                }
+            });
+            bind("shift F10", "rikr.menu", this::showMenuForSelection);
+            bind("CONTEXT_MENU", "rikr.menu", this::showMenuForSelection);
+            getInputMap().put(KeyStroke.getKeyStroke('+'), "rikr.zoomIn");
+            getInputMap().put(KeyStroke.getKeyStroke('='), "rikr.zoomIn");
+            getInputMap().put(KeyStroke.getKeyStroke('-'), "rikr.zoomOut");
+            getInputMap().put(KeyStroke.getKeyStroke('0'), "rikr.fit");
+            action("rikr.zoomIn", GraphView.this::zoomIn);
+            action("rikr.zoomOut", GraphView.this::zoomOut);
+            action("rikr.fit", GraphView.this::fit);
+        }
+
+        private void bind(String key, String name, Runnable run) {
+            getInputMap().put(KeyStroke.getKeyStroke(key), name);
+            action(name, run);
+        }
+
+        private void action(String name, Runnable run) {
+            getActionMap().put(name, new AbstractAction() {
+                @Override
+                public void actionPerformed(ActionEvent event) {
+                    if (layout != null) {
+                        run.run();
+                    }
+                }
+            });
+        }
+
+        private void showMenuForSelection() {
+            if (selected < 0) {
+                return;
+            }
+            JPopupMenu menu = listener.menu(selected);
+            if (menu != null) {
+                Rectangle box = layout.boxes().get(selected);
+                menu.show(this, (int) ((box.x + PADDING) * scale), (int) ((box.y + box.height) * scale));
             }
         }
 
@@ -409,6 +572,14 @@ public class GraphView extends JScrollPane {
                     new float[]{4f, 4f}, 0f)
                 : new BasicStroke(1f));
             g.drawRoundRect(box.x, box.y, box.width, box.height, 8, 8);
+            // While the graph has the focus, the selected node gets the focus ring as well, so it is clear that
+            // the arrow keys act here.
+            if (isSelected && isFocusOwner()) {
+                Color focus = UIManager.getColor("Component.focusColor");
+                g.setColor(focus != null ? focus : Theme.SEARCH_BUTTON_SELECTED_COLOR);
+                g.setStroke(new BasicStroke(2f));
+                g.drawRoundRect(box.x - 4, box.y - 4, box.width + 8, box.height + 8, 12, 12);
+            }
             String[] lines = shownLines.get(index);
             Rectangle badge = badgeBounds(index);
             if (titlesOnly) {

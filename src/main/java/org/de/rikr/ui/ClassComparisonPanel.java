@@ -1,6 +1,7 @@
 package org.de.rikr.ui;
 
 import org.de.rikr.mapping.MemberAlignment;
+import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.theme.Theme;
 import org.objectweb.asm.tree.ClassNode;
 
@@ -48,7 +49,9 @@ final class ClassComparisonPanel extends JScrollPane {
     void applyTheme() {
         table.setBackground(Theme.CONTENT_BACKGROUND_COLOR);
         getViewport().setBackground(Theme.CONTENT_BACKGROUND_COLOR);
-        Font font = new Font(Font.MONOSPACED, Font.PLAIN, 12);
+        // A size smaller than the code's, from the editor font, so it grows with it when Rikr is scaled up.
+        Font editor = SettingsManager.getEditorFont();
+        Font font = editor.deriveFont(Math.max(10f, editor.getSize2D() - 1));
         table.setFont(font);
         table.setRowHeight(table.getFontMetrics(font).getHeight() + 6);
         repaint();

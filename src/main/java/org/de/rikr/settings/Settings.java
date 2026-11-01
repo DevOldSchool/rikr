@@ -16,6 +16,8 @@ public class Settings {
     private static final String KEY_FONT_FAMILY = "font.family";
     private static final String KEY_FONT_SIZE = "font.size";
     private static final String KEY_THEME_ID = "theme.id";
+    /** The editor font size until one is chosen in Settings. */
+    public static final int DEFAULT_FONT_SIZE = 13;
 
     private String fontFamily;
     private int fontSize;
@@ -24,7 +26,7 @@ public class Settings {
 
     public Settings() {
         this.fontFamily = Fonts.getDefaultFont() != null ? Fonts.getDefaultFont().getFamily() : "JetBrains Mono";
-        this.fontSize = Fonts.getDefaultFont() != null ? Fonts.getDefaultFont().getSize() : 13;
+        this.fontSize = DEFAULT_FONT_SIZE;
         this.themeId = "dark.flatij";
     }
 

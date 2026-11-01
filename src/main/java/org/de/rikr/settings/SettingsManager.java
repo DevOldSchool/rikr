@@ -9,6 +9,7 @@ import org.de.rikr.theme.laf.LafDefaults;
 import org.de.rikr.theme.SystemAppearance;
 import org.de.rikr.theme.providers.SystemThemeProvider;
 import com.formdev.flatlaf.FlatLaf;
+import com.formdev.flatlaf.util.UIScale;
 
 import javax.swing.*;
 import java.awt.*;
@@ -107,13 +108,21 @@ public class SettingsManager {
 
     public static Font getEditorFont() {
         String family = current.getFontFamily();
-        int size = current.getFontSize();
+        float size = editorFontSize(current.getFontSize(), UIScale.getUserScaleFactor());
         if (family == null || family.isEmpty()) {
             Font font = Fonts.getDefaultFont();
-            return font != null ? font : new Font(Font.MONOSPACED, Font.PLAIN, 13);
+            return font != null ? font.deriveFont(size) : new Font(Font.MONOSPACED, Font.PLAIN, Math.round(size));
         }
 
-        return new Font(family, Font.PLAIN, size);
+        return new Font(family, Font.PLAIN, 1).deriveFont(size);
+    }
+
+    /**
+     * The editor font's size on screen. Left at the default, it follows the interface scale, so code is as large as
+     * everything else when Rikr is scaled up; a size chosen in Settings is used as it is.
+     */
+    static float editorFontSize(int chosen, float interfaceScale) {
+        return chosen == Settings.DEFAULT_FONT_SIZE ? chosen * interfaceScale : chosen;
     }
 
     private static void notifyListeners() {
