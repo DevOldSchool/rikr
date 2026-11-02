@@ -78,7 +78,7 @@
             <!-- The patched FernFlower classes use JetBrains' annotations, which aren't needed at run time. -->
             <groupId>org.jetbrains</groupId>
             <artifactId>annotations</artifactId>
-            <version>26.0.2</version>
+            <version>26.1.0</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
