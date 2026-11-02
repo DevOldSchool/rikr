@@ -23,7 +23,7 @@ public class BookmarkWorkspacePanel extends JPanel {
     private final CardLayout cards = new CardLayout();
     private ClassNode openClass;
     // Remove and Open have nothing to act on with no bookmarks, so they are hidden rather than disabled.
-    private final JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+    private final JPanel actions = new JPanel(new BorderLayout());
     private final JPanel content = new JPanel(cards);
 
     public BookmarkWorkspacePanel(Rikr controller) {
@@ -50,7 +50,20 @@ public class BookmarkWorkspacePanel extends JPanel {
                 String name = escape(bookmark.label());
                 label.setText("<html>" + (inOpenClass ? "<b>" + name + "</b>" : name) + " <span style='color:"
                     + SecondaryText.color(owner, selected) + "'>" + escape(bookmark.jarName()) + "</span></html>");
-                label.setToolTipText(inOpenClass ? "In the open class" : null);
+                // The same icons as the project tree, so a class, field and method look as they do there.
+                String kind = switch (bookmark.type()) {
+                    case CLASS -> "Class";
+                    case FIELD -> "Field";
+                    case METHOD -> "Method";
+                };
+                label.setIcon(ClassNodeImages.getImage(switch (bookmark.type()) {
+                    case CLASS -> "class";
+                    case FIELD -> "field_default";
+                    case METHOD -> "method_default";
+                }));
+                label.setToolTipText(kind + (inOpenClass ? ", in the open class" : ""));
+                label.getAccessibleContext().setAccessibleName(kind + " " + bookmark.label() + " in "
+                    + bookmark.jarName() + (inOpenClass ? ", in the open class" : ""));
                 return label;
             }
         });
@@ -62,8 +75,12 @@ public class BookmarkWorkspacePanel extends JPanel {
 
         remove.addActionListener(event -> removeSelected());
         open.addActionListener(event -> openSelected());
-        actions.add(remove);
-        actions.add(open);
+        // Remove stands apart from Open, so the button used most is never next to the one that deletes.
+        actions.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
+        actions.add(remove, BorderLayout.WEST);
+        actions.add(open, BorderLayout.EAST);
+        remove.setToolTipText("Remove the selected bookmark (Delete)");
+        open.setToolTipText("Open the selected bookmark (Enter)");
         add(actions, BorderLayout.SOUTH);
 
         list.addMouseListener(new java.awt.event.MouseAdapter() {

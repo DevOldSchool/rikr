@@ -243,10 +243,20 @@ public class CodeView extends JPanel {
     }
 
     public void showReference(ReferenceResult result) {
-        display(result.navigationClass());
+        showReference(result, true);
+    }
+
+    /**
+     * @param focus whether to move the keyboard focus to the code
+     */
+    public void showReference(ReferenceResult result, boolean focus) {
+        if (displayedClass != result.navigationClass()) {
+            display(result.navigationClass());
+        }
         SwingUtilities.invokeLater(() -> bytecodePanel.selectTextAfterPattern(
             result.navigationPattern(),
-            result.highlightText()
+            result.highlightText(),
+            focus
         ));
     }
 

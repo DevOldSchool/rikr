@@ -5,6 +5,8 @@ import org.de.rikr.Rikr;
 import org.de.rikr.rename.RenameBatch;
 import org.de.rikr.rename.RenameOperation;
 import org.de.rikr.rename.RenameStep;
+import org.de.rikr.settings.Settings;
+import org.de.rikr.settings.SettingsManager;
 import org.de.rikr.ui.action.SymbolActions;
 
 import javax.swing.*;
@@ -54,6 +56,7 @@ public class MenuBar extends JMenuBar {
     private static final int MENU = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
 
     private final JCheckBoxMenuItem splitAsmJavaItem = new JCheckBoxMenuItem("Split Bytecode and Java");
+    private final JCheckBoxMenuItem dimAnnotationsItem = new JCheckBoxMenuItem("Dim Annotations");
     private final Rikr controller;
     private final JMenuItem groupBySuperclassItem = new JMenuItem("Group by Superclass");
     private final JMenuItem groupByInterfaceItem = new JMenuItem("Group by Interface");
@@ -77,7 +80,10 @@ public class MenuBar extends JMenuBar {
         fileMenu.add(item("Save Project As...", KeyEvent.VK_S, MENU | KeyEvent.SHIFT_DOWN_MASK,
             actions.saveProjectAs()));
         fileMenu.addSeparator();
-        fileMenu.add(item("Export Class...", KeyEvent.VK_S, MENU | KeyEvent.CTRL_DOWN_MASK, actions.exportClass()));
+        // Ctrl+Cmd+S on macOS. Elsewhere the menu key is Ctrl, so Ctrl would only repeat it and clash with Save.
+        int exportClassKeys = SystemInfo.isMacOS ? MENU | KeyEvent.CTRL_DOWN_MASK
+            : MENU | KeyEvent.ALT_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK;
+        fileMenu.add(item("Export Class...", KeyEvent.VK_S, exportClassKeys, actions.exportClass()));
         fileMenu.add(item("Export JAR...", KeyEvent.VK_S, MENU | KeyEvent.ALT_DOWN_MASK, actions.exportJar()));
         fileMenu.addSeparator();
         // Rewrites a file the user loaded, so it is never one keystroke away; it confirms first.
@@ -136,6 +142,14 @@ public class MenuBar extends JMenuBar {
         viewMenu.addSeparator();
         splitAsmJavaItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_J, MENU | KeyEvent.SHIFT_DOWN_MASK));
         viewMenu.add(splitAsmJavaItem);
+        dimAnnotationsItem.setSelected(SettingsManager.getCurrent().isDimAnnotations());
+        dimAnnotationsItem.setToolTipText("Show annotation lines in the comment colour, so declarations stand out");
+        dimAnnotationsItem.addActionListener(event -> {
+            Settings settings = SettingsManager.getCurrent();
+            settings.setDimAnnotations(dimAnnotationsItem.isSelected());
+            SettingsManager.saveAndNotify(settings);
+        });
+        viewMenu.add(dimAnnotationsItem);
 
         // Acts on the selection in the tree or the name at the caret in the code, whichever has the focus.
         JMenu codeMenu = new JMenu("Code");

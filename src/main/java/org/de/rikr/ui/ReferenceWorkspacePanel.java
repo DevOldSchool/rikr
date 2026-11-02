@@ -24,9 +24,11 @@ import java.util.Map;
 
 public class ReferenceWorkspacePanel extends JPanel {
     private final Rikr controller;
-    private final JLabel targetLabel = new JLabel("Right-click a class, field, or method and choose Show References.");
+    private static final String PROMPT = "Right-click a class, field, or method and choose Show References.";
+    private final JLabel targetLabel = new JLabel(PROMPT);
     private final JTabbedPane resultTabs = new JTabbedPane();
-    private final JLabel statusLabel = new JLabel("Double-click a result or press Enter to open it.");
+    private static final String HINT = "Select a result to show it in the code above. Enter moves to the code.";
+    private final JLabel statusLabel = new JLabel(HINT);
     private final JPanel header = new JPanel(new BorderLayout());
     private final JPanel footer = new JPanel(new BorderLayout());
     private final List<JList<Object>> resultLists = new ArrayList<>();
@@ -85,6 +87,11 @@ public class ReferenceWorkspacePanel extends JPanel {
 
         add(header, BorderLayout.NORTH);
         add(resultTabs, BorderLayout.CENTER);
+        resultTabs.addChangeListener(event -> {
+            if (resultTabs.isShowing()) {
+                showSelected();
+            }
+        });
         add(footer, BorderLayout.SOUTH);
         showEmptyState();
 
@@ -107,6 +114,24 @@ public class ReferenceWorkspacePanel extends JPanel {
     public void methodOpened(String jarName, ClassNode owner, MethodNode method) {
         if (follow.isSelected() && !opening) {
             showMethodReferences(jarName, owner, method);
+        }
+    }
+
+    /**
+     * What the results are for, such as "Method: a.b(I)V in client.jar", for the status bar.
+     */
+    public String subject() {
+        return PROMPT.equals(targetLabel.getText()) ? null : targetLabel.getText();
+    }
+
+    /**
+     * Show the selected result of the tab on screen in the code, without moving the focus. Called when the panel
+     * comes on screen, since a selection made while it was hidden showed nothing.
+     */
+    public void showSelected() {
+        int tab = resultTabs.getSelectedIndex();
+        if (tab >= 0 && tab < resultLists.size()) {
+            openSelectedResult(resultLists.get(tab), false);
         }
     }
 
@@ -183,7 +208,7 @@ public class ReferenceWorkspacePanel extends JPanel {
     private void resetTabs() {
         resultTabs.removeAll();
         resultLists.clear();
-        statusLabel.setText("Double-click a result or press Enter to open it.");
+        statusLabel.setText(HINT);
     }
 
     /**
@@ -209,8 +234,15 @@ public class ReferenceWorkspacePanel extends JPanel {
             @Override
             public void mouseClicked(MouseEvent event) {
                 if (event.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(event)) {
-                    openSelectedResult(resultList);
+                    openSelectedResult(resultList, true);
                 }
+            }
+        });
+        // The code above follows the selection, so stepping through results with the arrow keys reads each one
+        // without leaving the list.
+        resultList.addListSelectionListener(event -> {
+            if (!event.getValueIsAdjusting() && resultList.isShowing()) {
+                openSelectedResult(resultList, false);
             }
         });
 
@@ -222,7 +254,7 @@ public class ReferenceWorkspacePanel extends JPanel {
         resultList.getActionMap().put(openAction, new AbstractAction() {
             @Override
             public void actionPerformed(java.awt.event.ActionEvent event) {
-                openSelectedResult(resultList);
+                openSelectedResult(resultList, true);
             }
         });
 
@@ -254,7 +286,10 @@ public class ReferenceWorkspacePanel extends JPanel {
         }
     }
 
-    private void openSelectedResult(JList<Object> resultList) {
+    /**
+     * @param focus whether to move the keyboard focus to the code, as opening does; showing a selection does not
+     */
+    private void openSelectedResult(JList<Object> resultList, boolean focus) {
         Object selected = resultList.getSelectedValue();
         if (selected instanceof ClassHeader classHeader) {
             if (classHeader.classNode() != null) {
@@ -262,7 +297,8 @@ public class ReferenceWorkspacePanel extends JPanel {
                 try {
                     controller.getUserInterface().openReferenceResult(new ReferenceResult(ReferenceKind.EXTENDS,
                         classHeader.className(), classHeader.classNode(),
-                        ClassNodeUtil.getPattern(classHeader.classNode(), null, null), classHeader.classNode().name));
+                        ClassNodeUtil.getPattern(classHeader.classNode(), null, null), classHeader.classNode().name),
+                        focus);
                 } finally {
                     opening = false;
                 }
@@ -274,13 +310,16 @@ public class ReferenceWorkspacePanel extends JPanel {
         }
         ReferenceResult result = row.result();
         if (!result.isNavigable()) {
-            Toolkit.getDefaultToolkit().beep();
+            if (focus) {
+                Toolkit.getDefaultToolkit().beep();
+            }
             statusLabel.setText("The referenced class is not loaded in this JAR.");
             return;
         }
+        statusLabel.setText(HINT);
         opening = true;
         try {
-            controller.getUserInterface().openReferenceResult(result);
+            controller.getUserInterface().openReferenceResult(result, focus);
         } finally {
             opening = false;
         }

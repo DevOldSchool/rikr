@@ -64,6 +64,11 @@ public class SyntaxHighlighter {
         StyleConstants.setForeground(annotationStyle, Theme.SYNTAX_HIGHLIGHT_ANNOTATION_COLOR);
         StyleConstants.setBold(annotationStyle, true);
 
+        // Dimmed, an annotation line takes the comment colour, so the declarations it sits between stand out.
+        SimpleAttributeSet dimmedAnnotationStyle = new SimpleAttributeSet();
+        StyleConstants.setForeground(dimmedAnnotationStyle, Theme.SYNTAX_HIGHLIGHT_COMMENT_COLOR);
+        StyleConstants.setBold(dimmedAnnotationStyle, false);
+
         // Insert content with default style
         try {
             doc.insertString(0, content, defaultStyle);
@@ -77,7 +82,11 @@ public class SyntaxHighlighter {
         // Apply syntax highlighting (order matters)
         highlightComments(doc, content, commentStyle);
         highlightStrings(doc, content, stringStyle);
-        highlightAnnotations(doc, content, annotationStyle);
+        if (SettingsManager.getCurrent().isDimAnnotations()) {
+            dimAnnotationLines(doc, content, dimmedAnnotationStyle);
+        } else {
+            highlightAnnotations(doc, content, annotationStyle);
+        }
         highlightKeywords(doc, content, keywordStyle);
         highlightNumbers(doc, content, numberStyle);
     }
@@ -180,6 +189,22 @@ public class SyntaxHighlighter {
             int end = matcher.end();
             if (!isWithinComment(start, commentRegions) && !isWithinString(start, stringRegions)) {
                 doc.setCharacterAttributes(start, end - start, annotationStyle, false);
+            }
+        }
+    }
+
+    // An annotation printed on a line of its own, with its arguments; keywords and numbers in it stay dimmed too,
+    // since the line is counted as a comment.
+    private static final Pattern ANNOTATION_LINE = Pattern.compile("(?m)^[ \\t]*(@[A-Za-z_$][^\\n]*)$");
+
+    private void dimAnnotationLines(StyledDocument doc, String content, AttributeSet dimmedStyle) {
+        Matcher matcher = ANNOTATION_LINE.matcher(content);
+        while (matcher.find()) {
+            int start = matcher.start(1);
+            int end = matcher.end(1);
+            if (!isWithinComment(start, commentRegions)) {
+                doc.setCharacterAttributes(start, end - start, dimmedStyle, false);
+                commentRegions.add(new int[]{start, end});
             }
         }
     }

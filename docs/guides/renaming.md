@@ -4,9 +4,9 @@
 
 Select a class, field or method in the project tree, or put the caret on its name in the bytecode view, and choose
 **Code > Rename…** (`Shift+F6`) or **Rename…** from the right-click menu. In the bytecode view this renames exactly
-the symbol under the caret. Renames are previewed before they change bytecode: the preview checks
-JVM names and collisions with other members and classes, and shows how many references and classes change. Every
-reference in the JAR is updated, including overrides.
+the symbol under the caret. The name is checked as it is typed: a name that is not a valid JVM name, or that collides
+with another member or class, is said under the field, and a usable one shows how many references and classes change
+(hover over that line for the classes). Enter renames. Every reference in the JAR is updated, including overrides.
 
 **Edit > Undo** (`Cmd+Z`) reverses the latest rename or import, and **Edit > Redo** (`Shift+Cmd+Z`) applies it again;
 the menu names the step, such as "Undo Rename y.c → value". A new rename clears Redo. A `*` beside a JAR marks

@@ -8,9 +8,10 @@ Hierarchy** (`Shift+Cmd+R`) opens the workspace.
 - **Fields** separate reads from writes.
 - **Methods** separate callers from callees.
 
-Results are grouped by the class they are in, with each member's parameter and return types and how it uses the
-target. Double-click a result, or select it and press `Enter`, to open and highlight that member; double-click a
-class heading to open the class. Tick **Follow the open class** to show the references of each class you open.
+The results sit under the code. They are grouped by the class they are in, with each member's parameter and return
+types and how it uses the target. Selecting a result shows and highlights it in the code above, so the arrow keys
+step through them without leaving the list; `Enter` or a double-click also moves the caret into the code. Selecting
+a class heading shows the class. Tick **Follow the open class** to show the references of each class you open.
 
 **Find Extenders**, **Find Implementors** and **Find Similar Classes in Other JARs** in the tree's right-click menu
 list their results here too.

@@ -436,7 +436,7 @@ public class MappingWorkspacePanel extends JPanel {
             sourceClass,
             candidate.classNode()
         );
-        statusLabel.setText("Rejected " + sourceClass.name + " -> " + candidate.classNode().name);
+        statusLabel.setText("Rejected " + sourceClass.name + " → " + candidate.classNode().name);
         repaintLists();
         updateDetailsAndControls();
     }
@@ -606,7 +606,7 @@ public class MappingWorkspacePanel extends JPanel {
             Optional<ClassMappingDecision> accepted = acceptedMapping(sourceClass);
             accepted.ifPresentOrElse(
                 mapping -> statusLabel.setText(
-                    "Accepted: " + mapping.sourceClassName() + " -> " + mapping.targetClassName()
+                    "Accepted: " + mapping.sourceClassName() + " → " + mapping.targetClassName()
                         + " (" + mapping.similarityPercent() + "%)"
                 ),
                 () -> statusLabel.setText(candidatePrompt(sourceClass, candidate) + hiddenNote(sourceClass))
@@ -736,6 +736,11 @@ public class MappingWorkspacePanel extends JPanel {
         JLabel label = new JLabel(text);
         label.setLabelFor(control);
         control.getAccessibleContext().setAccessibleName(text);
+        // A spinner's focus goes to its text field, which a screen reader names on its own.
+        if (control instanceof JSpinner spinner && spinner.getEditor() instanceof JSpinner.DefaultEditor editor) {
+            editor.getTextField().getAccessibleContext().setAccessibleName(text);
+            label.setLabelFor(editor.getTextField());
+        }
         return label;
     }
 

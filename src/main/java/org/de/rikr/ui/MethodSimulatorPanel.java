@@ -41,6 +41,7 @@ public class MethodSimulatorPanel extends JPanel {
     private final JTextArea localVariableArea = textArea("Local variables");
     private final JLabel stackHeading = heading("Operand stack");
     private final JLabel localVariableHeading = heading("Local variables");
+    private final JPanel controls = new JPanel(new BorderLayout());
 
     private ClassNode owner;
     private MethodNode methodNode;
@@ -56,7 +57,15 @@ public class MethodSimulatorPanel extends JPanel {
         this.controller = controller;
         setLayout(new BorderLayout());
 
-        JScrollPane stackScrollPane = new JScrollPane(stackArea);
+        // As tall as the stack is, up to half the panel, so a short stack leaves no gap above the variables.
+        JScrollPane stackScrollPane = new JScrollPane(stackArea) {
+            @Override
+            public Dimension getPreferredSize() {
+                Dimension size = super.getPreferredSize();
+                int half = MethodSimulatorPanel.this.getHeight() / 2;
+                return half > 0 ? new Dimension(size.width, Math.min(size.height, half)) : size;
+            }
+        };
         stackScrollPane.setBorder(BorderFactory.createEmptyBorder(0, 0, 1, 0));
         JScrollPane localVariableScrollPane = new JScrollPane(localVariableArea);
         localVariableScrollPane.setBorder(BorderFactory.createEmptyBorder(1, 0, 0, 0));
@@ -77,12 +86,17 @@ public class MethodSimulatorPanel extends JPanel {
         choice.add(jump);
         choice.add(next);
         choice.setVisible(false);
-        top.add(choice, BorderLayout.SOUTH);
+        controls.setOpaque(false);
+        JPanel below = new JPanel(new BorderLayout());
+        below.setOpaque(false);
+        below.add(choice, BorderLayout.NORTH);
+        below.add(controls, BorderLayout.SOUTH);
+        top.add(below, BorderLayout.SOUTH);
 
-        JPanel sections = new JPanel(new GridLayout(2, 1));
+        JPanel sections = new JPanel(new BorderLayout());
         sections.setOpaque(false);
-        sections.add(section(stackHeading, stackScrollPane));
-        sections.add(section(localVariableHeading, localVariableScrollPane));
+        sections.add(section(stackHeading, stackScrollPane), BorderLayout.NORTH);
+        sections.add(section(localVariableHeading, localVariableScrollPane), BorderLayout.CENTER);
 
         add(top, BorderLayout.NORTH);
         add(sections, BorderLayout.CENTER);
@@ -122,6 +136,15 @@ public class MethodSimulatorPanel extends JPanel {
         panel.add(heading, BorderLayout.NORTH);
         panel.add(content, BorderLayout.CENTER);
         return panel;
+    }
+
+    /**
+     * Put the step buttons under the method's name, beside what they change.
+     */
+    public void setControls(JComponent bar) {
+        controls.removeAll();
+        controls.add(bar, BorderLayout.CENTER);
+        controls.revalidate();
     }
 
     /**

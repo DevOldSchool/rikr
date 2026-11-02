@@ -1,12 +1,12 @@
 package org.de.rikr.ui.handler;
 
 import org.de.rikr.Rikr;
-import org.de.rikr.rename.RenamePreview;
 import org.de.rikr.rename.RenameResult;
 import org.de.rikr.symbol.Declaration;
 import org.de.rikr.symbol.Symbol;
 import org.de.rikr.symbol.SymbolResolver;
 import org.de.rikr.ui.ContentPanel;
+import org.de.rikr.ui.RenameDialog;
 import org.de.rikr.ui.model.SymbolTarget;
 import org.de.rikr.ui.model.TreeNodes;
 import org.objectweb.asm.tree.ClassNode;
@@ -123,81 +123,41 @@ public class RenameActionHandler implements ActionListener {
     }
 
     /**
-     * Ask for a new name, show what changes, and rename.
+     * Ask for a new name, checked and with what it changes shown while it is typed, and rename.
      *
      * @param fromCode whether the target was chosen in the code, which then keeps its place
      * @param caret    where in the code to put the caret back
      */
     public void rename(SymbolTarget target, boolean fromCode, int caret) {
         JFrame frame = controller.getUserInterface().getFrame();
-        Object input = JOptionPane.showInputDialog(
-            frame, "New name for " + target.name() + ":", "Rename", JOptionPane.PLAIN_MESSAGE, null, null,
-            target.name()
-        );
-        if (input == null || input.toString().trim().isEmpty()) {
-            return;
-        }
-        String newName = input.toString().trim();
-
-        RenamePreview preview = controller.renames().preview(target.jar(), target.declaration(), newName);
-        if (!preview.valid()) {
-            JOptionPane.showMessageDialog(frame, preview.validationMessage(), "Rename Not Available",
-                JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-        if (!confirm(frame, preview)) {
+        Optional<String> newName = RenameDialog.ask(frame, target.name(),
+            name -> controller.renames().preview(target.jar(), target.declaration(), name));
+        if (newName.isEmpty()) {
             return;
         }
 
-        // Renames keep node identity, so the same class node can be shown again afterwards.
+        // Renames keep node identity, so the same class node can be shown again afterwards; its old name has to be
+        // read now, since the node carries the new one after.
+        String oldName = target.name();
         ClassNode displayed = fromCode ? contentPanel.getDisplayedClass() : target.declaration().owner();
-        RenameResult result = controller.renames().rename(target.jar(), target.declaration(), newName);
+        RenameResult result = controller.renames().rename(target.jar(), target.declaration(), newName.get());
         if (target.declaration() instanceof Declaration.ClassDeclaration declaration
             && Modifier.isInterface(declaration.owner().access)) {
             result = result.withType("interface");
         }
         controller.log(String.format(
-            "Renamed %d %s references in %d files.",
+            "Renamed %s to %s: %d %s references in %d %s.",
+            oldName,
+            newName.get(),
             result.referenceCount(),
             result.type(),
-            result.fileCount()
+            result.fileCount(),
+            result.fileCount() == 1 ? "class" : "classes"
         ));
         controller.getUserInterface().displayBytecode(displayed);
         if (fromCode) {
             contentPanel.restoreCaret(caret);
         }
-    }
-
-    /**
-     * Show what the rename changes and ask to go ahead. The class list scrolls, so the dialog fits the screen
-     * however many classes a widely used name touches.
-     */
-    private static boolean confirm(JFrame frame, RenamePreview preview) {
-        JPanel panel = new JPanel(new BorderLayout(0, 8));
-        int classes = preview.affectedClasses().size();
-        panel.add(new JLabel("<html><b>Rename " + escape(preview.oldName()) + " to " + escape(preview.newName())
-            + "?</b><br><br>" + plural(preview.referenceCount(), "reference") + " in "
-            + plural(preview.fileCount(), "class") + " change.</html>"), BorderLayout.NORTH);
-        if (classes > 0) {
-            JList<String> list = new JList<>(preview.affectedClasses().toArray(String[]::new));
-            list.setVisibleRowCount(Math.min(classes, 10));
-            list.getAccessibleContext().setAccessibleName("Classes that change");
-            JScrollPane scroll = new JScrollPane(list);
-            scroll.setPreferredSize(new Dimension(360, scroll.getPreferredSize().height));
-            panel.add(scroll, BorderLayout.CENTER);
-        }
-        Object[] options = {"Rename", "Cancel"};
-        int choice = JOptionPane.showOptionDialog(frame, panel, "Rename", JOptionPane.DEFAULT_OPTION,
-            JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
-        return choice == 0;
-    }
-
-    private static String plural(long count, String noun) {
-        return count + " " + noun + (count == 1 ? "" : noun.endsWith("s") ? "es" : "s");
-    }
-
-    private static String escape(String text) {
-        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     private void warn(String message) {

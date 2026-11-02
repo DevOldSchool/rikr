@@ -53,6 +53,8 @@ public class ClassViewer {
     private final FlowPanel flowPanel;
     private final MethodSimulatorPanel methodSimulatorPanel;
     private final JPanel rightPanel;
+    // References sit under the code, so a result can be read where it is without losing the list.
+    private final JSplitPane referencesSplit;
     private final SimulatorBar simulatorBar;
     private final ClassFileActions classFileActions;
     private final ProjectSessionActions projectSessionActions;
@@ -110,6 +112,7 @@ public class ClassViewer {
         codeView = new CodeView(controller, emptyState);
         searchBar = new SearchBar(controller, e -> toggleSearchBarVisibility(false));
         logPanel = new LogPanel();
+        logPanel.setHideAction(() -> toggleLogVisibility(true));
         projectPanel = new JPanel(new BorderLayout());
         projectPanel.add(treePanel, BorderLayout.CENTER);
         searchPanel = new SearchPanel(controller);
@@ -134,14 +137,20 @@ public class ClassViewer {
         // The code view takes any change in window width; the simulator keeps the width it was given.
         contentSplitPane.setResizeWeight(1.0);
         rightPanel.add(contentSplitPane, BorderLayout.CENTER);
-        rightPanel.add(simulatorBar, BorderLayout.SOUTH);
+        // The step buttons sit in the simulator, beside the stack and variables they change.
+        methodSimulatorPanel.setControls(simulatorBar);
+
+        referencesSplit = new SplitPane(JSplitPane.VERTICAL_SPLIT, 10);
+        referencesSplit.setDividerSize(1);
+        referencesSplit.setResizeWeight(0.55);
+        referencesSplit.setBottomComponent(referenceWorkspacePanel);
 
         // Create the navigation panel
         navigationPanel = new NavigationPanel(
             e -> showWorkspace(projectPanel, rightPanel, projectPanel),
             e -> showWorkspace(searchPanel, rightPanel, searchPanel, searchColumnWidth()),
             e -> showMappingWorkspace(),
-            e -> showWorkspace(projectPanel, referenceWorkspacePanel, referenceWorkspacePanel),
+            e -> showReferencesWorkspace(),
             e -> {
                 bookmarkWorkspacePanel.refresh();
                 showWorkspace(bookmarkWorkspacePanel, rightPanel, bookmarkWorkspacePanel);
@@ -259,6 +268,11 @@ public class ClassViewer {
             e -> codeView.setJavaShown(menuBar.getSplitAsmJavaItem().isSelected())
         );
 
+        for (JComponent workspace : List.of(projectPanel, rightPanel, referencesSplit, searchPanel,
+            mappingWorkspacePanel, bookmarkWorkspacePanel, namingWorkspacePanel, flowPanel, logPanel,
+            methodSimulatorPanel)) {
+            SettingsManager.markThemed(workspace);
+        }
         applyTheme();
         SettingsManager.addListener(s -> applyTheme());
     }
@@ -382,7 +396,8 @@ public class ClassViewer {
             case "SEARCH" -> "Search";
             case "MAPPING" -> "Cross-JAR mappings";
             case "BOOKMARKS" -> "Bookmarks";
-            case "REFERENCES" -> subject == null ? "References" : "References · " + subject;
+            case "REFERENCES" -> referenceWorkspacePanel.subject() == null ? "References"
+                : "References · " + referenceWorkspacePanel.subject();
             case "CONTROL_FLOW" -> flowPanel.describeView() == null ? "Entry points and flow"
                 : flowPanel.describeView();
             default -> subject == null ? "" : "Bytecode · " + subject;
@@ -508,9 +523,18 @@ public class ClassViewer {
         navigationPanel.selectReferencesTab();
     }
 
-    public void openReferenceResult(ReferenceResult result) {
-        navigationPanel.selectProjectTab();
-        codeView.showReference(result);
+    /**
+     * Show a result in the code. In the References workspace the code is above the list, so it stays; from
+     * elsewhere the Project workspace opens.
+     *
+     * @param focus whether to move the keyboard focus to the code
+     */
+    public void openReferenceResult(ReferenceResult result, boolean focus) {
+        if (!"REFERENCES".equals(navigationPanel.getSelectedTabId())) {
+            navigationPanel.selectProjectTab();
+        }
+        codeView.showReference(result, focus);
+        updateStatusContext();
     }
 
     public boolean openBookmark(ProjectBookmark bookmark, ClassNode owner) {
@@ -539,6 +563,9 @@ public class ClassViewer {
         leftSplitPane.setRightComponent(left);
         mainSplitPane.setRightComponent(right);
         mainSplitPane.setDividerLocation(dividerLocation);
+        // A theme change only reaches what is in the window, so panels that were away catch up here.
+        SettingsManager.refreshThemeIfStale(left);
+        SettingsManager.refreshThemeIfStale(right);
         SettingsManager.refreshThemeFor(opened);
         frame.revalidate();
         frame.repaint();
@@ -546,6 +573,63 @@ public class ClassViewer {
             flowPanel.showPending();
         }
         updateStatusContext();
+        SwingUtilities.invokeLater(() -> keepFocusIn(opened));
+    }
+
+    // When the component that had the focus left the window with the old workspace, the focus would move to
+    // whatever is next, such as the status bar's Log button; move it into the workspace that took its place.
+    private void keepFocusIn(JComponent opened) {
+        Component owner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getPermanentFocusOwner();
+        boolean lost = owner == null || !owner.isShowing()
+            || SwingUtilities.isDescendingFrom(owner, statusBar);
+        if (!lost || !frame.isActive()) {
+            return;
+        }
+        // What the workspace is about comes first; a search field only when there is nothing else.
+        Component first = firstFocusable(opened, false);
+        if (first == null) {
+            first = firstFocusable(opened, true);
+        }
+        if (first != null) {
+            first.requestFocusInWindow();
+        }
+    }
+
+    // The first list, tree, table, graph or code in layout order, or with fields, the first text field.
+    private static Component firstFocusable(Container container, boolean fields) {
+        for (Component child : container.getComponents()) {
+            if (!child.isShowing() || !child.isEnabled()) {
+                continue;
+            }
+            if (child instanceof org.de.rikr.ui.graph.GraphView graph) {
+                return graph.getViewport().getView();
+            }
+            boolean wanted = fields ? child instanceof JTextField
+                : child instanceof JList<?> || child instanceof JTree || child instanceof JTable
+                || child instanceof javax.swing.text.JTextComponent && !(child instanceof JTextField);
+            if (wanted && child.isFocusable()) {
+                return child;
+            }
+            if (child instanceof Container nested) {
+                Component found = firstFocusable(nested, fields);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    private void showReferencesWorkspace() {
+        // The code panel belongs to whichever workspace shows it last, so put it back above the list each time.
+        referencesSplit.setTopComponent(rightPanel);
+        showWorkspace(projectPanel, referencesSplit, referenceWorkspacePanel);
+        SwingUtilities.invokeLater(() -> {
+            if (referencesSplit.getHeight() > 0 && referencesSplit.getDividerLocation() <= 0) {
+                referencesSplit.setDividerLocation(0.55);
+            }
+            referenceWorkspacePanel.showSelected();
+        });
     }
 
     // Mapping compares two classes side by side and never uses the tree, so it gets the whole width.
@@ -578,6 +662,7 @@ public class ClassViewer {
             logPanel.setVisible(false);
         } else {
             verticalSplitPane.setBottomComponent(logPanel);
+            SettingsManager.refreshThemeIfStale(logPanel);
             verticalSplitPane.setDividerLocation(600);
             verticalSplitPane.setDividerSize(1);
             logPanel.setVisible(true);
@@ -596,6 +681,7 @@ public class ClassViewer {
             toggleSimulatorBarVisibility(false);
         } else {
             contentSplitPane.setRightComponent(methodSimulatorPanel);
+            SettingsManager.refreshThemeIfStale(methodSimulatorPanel);
             contentSplitPane.setDividerSize(1);
             contentSplitPane.setDividerLocation(Math.max(0, contentSplitPane.getWidth() - simulatorWidth()
                 - contentSplitPane.getDividerSize()));

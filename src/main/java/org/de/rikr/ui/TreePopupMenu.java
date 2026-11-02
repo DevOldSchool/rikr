@@ -134,6 +134,9 @@ public class TreePopupMenu extends JPopupMenu {
         });
         // Removing is kept apart from the rest, last, so it is not chosen by mistake for Rename.
         if (node instanceof ClassMutableTreeNode || node instanceof JarMutableTreeNode) {
+            // Says what goes, and the ellipsis that it asks first.
+            removeItem.setText(node instanceof JarMutableTreeNode ? "Remove JAR from Project…"
+                : "Remove Class from JAR…");
             addSeparator();
             add(removeItem);
         }

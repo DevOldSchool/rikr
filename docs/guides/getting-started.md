@@ -44,8 +44,9 @@ on the right-click menu of the tree and of the code; `Shift+F10` opens it from t
 ## Log and settings
 
 The status bar shows the latest message and when background work is running; click it, or use **Window > Show or Hide
-Log** (`Cmd+L`), to see the full log. Font, size, theme and syntax colors are in **Settings** (`Cmd+,`): in the Rikr
-menu on macOS, and in the Edit menu elsewhere.
+Log** (`Cmd+L`), to see the full log. The log's header filters its lines, copies them and clears it. The editor font, its size, the theme and the decompiled Java cache are in
+**Settings** (`Cmd+,`): in the Rikr menu on macOS, and in the Edit menu elsewhere. **View > Dim Annotations** shows
+annotation lines in the comment colour, so the declarations between them stand out.
 
 ## Shortcuts
 
@@ -53,7 +54,7 @@ menu on macOS, and in the Edit menu elsewhere.
 |---|---|
 | `Cmd+O` / `Shift+Cmd+O` | Open JAR or class / open project |
 | `Cmd+S` / `Shift+Cmd+S` | Save project / save project as |
-| `Ctrl+Cmd+S` / `Alt+Cmd+S` | Export class / export JAR |
+| `Ctrl+Cmd+S` / `Alt+Cmd+S` | Export class / export JAR (on Windows and Linux, `Ctrl+Alt+Shift+S` / `Ctrl+Alt+S`) |
 | `Cmd+Z` / `Shift+Cmd+Z` | Undo / redo the last rename or import (typing, in a text field) |
 | `Cmd+F`, `Cmd+G`, `Shift+Cmd+G` | Find in class, next and previous match |
 | `Cmd+K` | Go to class or member |

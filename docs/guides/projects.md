@@ -16,5 +16,6 @@ or opening another project asks whether to save first.
 ## Bookmarks
 
 Choose **Code > Add or Remove Bookmark** (`F3`) on a class, field or method, or **Add Bookmark** from its right-click
-menu, then open **View > Bookmarks** (`Shift+Cmd+B`) to go back to saved places. Bookmarks follow their members
+menu, then open **View > Bookmarks** (`Shift+Cmd+B`) to go back to saved places. Each shows the tree's icon for a
+class, field or method; `Enter` opens the selected one and `Delete` removes it. Bookmarks follow their members
 through renames.

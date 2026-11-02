@@ -24,8 +24,13 @@ public class SimulatorBar extends JPanel {
         JButton closeButton = new JButton("Close");
         closeButton.addActionListener(closeListener);
 
-        // Left is earlier, as in debuggers and media players.
-        topPanel = new JPanel();
+        stepBackwardsButton.setToolTipText("Undo the last step");
+        stepForwardsButton.setToolTipText("Run the next instruction");
+        closeButton.setToolTipText("Stop simulating and close the simulator");
+        // Left is earlier, as in debuggers and media players. Left-aligned, so the panel can be narrow; the buttons
+        // wrap rather than being cut off.
+        topPanel = new JPanel(new WrapLayout(FlowLayout.LEFT, 6, 4));
+        WrapLayout.followWidth(topPanel);
         topPanel.add(stepBackwardsButton);
         topPanel.add(stepForwardsButton);
         topPanel.add(closeButton);

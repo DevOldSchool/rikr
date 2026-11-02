@@ -16,7 +16,9 @@ For a method selected in the tree or under the caret, **Code > Show Call Graph**
 
 A control flow graph shows a method's basic blocks, with branches taken in green, branches not taken in red, switch
 cases in blue and exception handlers dashed; untick **Exception edges** to hide the handlers. Right-click a block to
-follow the methods it calls, and double-click it to see it in the bytecode view. **Back** retraces the path.
+follow the methods it calls, and double-click it to see it in the bytecode view. **Back** retraces the path. A block
+shows its first eight instructions and how many more it has, so the graph's branching shows on the first screen;
+hover over it for the whole block.
 
 **Fit** shows the whole graph when its text stays readable; a larger graph is fitted to its width and opens at the
 top, with an overview in the corner to click or drag around. Type in **Find in graph** and press `Enter` to go to the
@@ -25,7 +27,7 @@ next block or method containing that text.
 ## Simulate a method
 
 Choose **Code > Simulate Method**, or **Simulate Method** from a method's right-click menu, to step through it
-without running it. **Step forwards** and **Step backwards** move one instruction at a time while the panel shows the
-operand stack and local variables. At a branch whose outcome can't be known, choose **Jump** or **Don't jump**.
+without running it. **Step forwards** and **Step backwards**, under the method's name in the simulator, move one
+instruction at a time while the panel shows the operand stack and local variables. At a branch whose outcome can't be known, choose **Jump** or **Don't jump**.
 Values that depend on something outside the method, such as a parameter or a call's result, show as unknown rather
 than guessed; calls are not followed.

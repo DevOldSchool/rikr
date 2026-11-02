@@ -268,6 +268,7 @@ public class ContentPanel extends JScrollPane {
         // Highlights hold positions in the old document, which mean nothing in the new one.
         contentPane.getHighlighter().removeAllHighlights();
         markedLine = null;
+        targetHighlight = null;
         contentPane.setDocument(replacement);
         document = replacement;
     }
@@ -401,11 +402,22 @@ public class ContentPanel extends JScrollPane {
         }
     }
 
+    // The mark selectTextAfterPattern last put on a name, removed when it marks another.
+    private Object targetHighlight;
+
     public void selectTextAfterPattern(String pattern, String textToSelect) {
-        whenShown(() -> selectShownTextAfterPattern(pattern, textToSelect));
+        selectTextAfterPattern(pattern, textToSelect, true);
     }
 
-    private void selectShownTextAfterPattern(String pattern, String textToSelect) {
+    /**
+     * @param focus whether to move the keyboard focus to the code; false keeps it where it is, such as in a list
+     *              of results being stepped through
+     */
+    public void selectTextAfterPattern(String pattern, String textToSelect, boolean focus) {
+        whenShown(() -> selectShownTextAfterPattern(pattern, textToSelect, focus));
+    }
+
+    private void selectShownTextAfterPattern(String pattern, String textToSelect, boolean focus) {
         Highlighter hilite = contentPane.getHighlighter();
         Document doc = contentPane.getDocument();
         String text;
@@ -444,14 +456,27 @@ public class ContentPanel extends JScrollPane {
                     int selectStart = patternPos + selectPos;
                     int selectEnd = selectStart + textToSelect.length();
                     try {
-                        hilite.addHighlight(selectStart, selectEnd, new DefaultHighlighter.DefaultHighlightPainter(Theme.CONTENT_SELECTED_HIGHLIGHT_COLOR));
+                        // One target at a time: stepping through results in the same class moves the mark.
+                        if (targetHighlight != null) {
+                            hilite.removeHighlight(targetHighlight);
+                        }
+                        targetHighlight = hilite.addHighlight(selectStart, selectEnd,
+                            new DefaultHighlighter.DefaultHighlightPainter(Theme.CONTENT_SELECTED_HIGHLIGHT_COLOR));
                     } catch (BadLocationException e) {
                         throw new RuntimeException(e);
                     }
 
                     // Set the caret position to the start of the textToSelect
-                    contentPane.grabFocus();
+                    if (focus) {
+                        contentPane.grabFocus();
+                    }
                     contentPane.setCaretPosition(selectStart);
+                    try {
+                        // The caret only scrolls its view while it has the focus, so scroll explicitly.
+                        contentPane.scrollRectToVisible(contentPane.modelToView2D(selectStart).getBounds());
+                    } catch (BadLocationException ignored) {
+                        // The caret is still placed.
+                    }
                     break;
                 } else {
                     selectPos += textToSelect.length();

@@ -16,12 +16,15 @@ public class Settings {
     private static final String KEY_FONT_FAMILY = "font.family";
     private static final String KEY_FONT_SIZE = "font.size";
     private static final String KEY_THEME_ID = "theme.id";
+    private static final String KEY_DIM_ANNOTATIONS = "code.dimAnnotations";
     /** The editor font size until one is chosen in Settings. */
     public static final int DEFAULT_FONT_SIZE = 13;
 
     private String fontFamily;
     private int fontSize;
     private String themeId;
+    // Obfuscation maps often annotate every member, which buries the declarations; dimmed by default.
+    private boolean dimAnnotations = true;
     private DecompilerCacheSettings decompilerCache = DecompilerCacheSettings.defaults();
 
     public Settings() {
@@ -53,6 +56,14 @@ public class Settings {
 
     public void setThemeId(String themeId) {
         this.themeId = themeId;
+    }
+
+    public boolean isDimAnnotations() {
+        return dimAnnotations;
+    }
+
+    public void setDimAnnotations(boolean dimAnnotations) {
+        this.dimAnnotations = dimAnnotations;
     }
 
     public DecompilerCacheSettings getDecompilerCache() {
@@ -96,6 +107,7 @@ public class Settings {
             if (loadedId != null && !loadedId.isEmpty()) {
                 settings.themeId = loadedId;
             }
+            settings.dimAnnotations = Boolean.parseBoolean(props.getProperty(KEY_DIM_ANNOTATIONS, "true"));
             settings.decompilerCache = DecompilerCacheSettings.fromProperties(props);
 
             return settings;
@@ -107,6 +119,7 @@ public class Settings {
             props.setProperty(KEY_FONT_SIZE, Integer.toString(settings.fontSize));
             String id = (settings.themeId != null && !settings.themeId.isEmpty()) ? settings.themeId : "dark.flatij";
             props.setProperty(KEY_THEME_ID, id);
+            props.setProperty(KEY_DIM_ANNOTATIONS, Boolean.toString(settings.dimAnnotations));
             settings.decompilerCache.writeTo(props);
 
             try {

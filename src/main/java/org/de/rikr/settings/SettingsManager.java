@@ -46,7 +46,22 @@ public class SettingsManager {
         notifyListeners();
     }
 
+    // Counts look-and-feel changes, so a panel that was off screen during one can tell it missed it.
+    private static int themeGeneration;
+    private static final String THEMED_GENERATION = "rikr.themeGeneration";
+
+    /**
+     * Save a change that does not touch the look and feel, such as a view option, and tell the views. Cheaper
+     * than {@link #applyAndSave}, which lays out every window again.
+     */
+    public static void saveAndNotify(Settings settings) {
+        current = settings;
+        Settings.Store.save(settings);
+        notifyListeners();
+    }
+
     public static void applyThemeStartup() {
+        themeGeneration++;
         ThemeProvider provider = resolveProvider();
         if (provider == null) {
             provider = ThemeRegistry.getById("dark.flatij");
@@ -132,6 +147,28 @@ public class SettingsManager {
             } catch (Exception ignored) {
             }
         }
+    }
+
+    /**
+     * Record that the component has the current theme. Call when it is made, for a panel that is not always in
+     * the window and so is missed by a theme change made while it is away.
+     */
+    public static void markThemed(JComponent component) {
+        component.putClientProperty(THEMED_GENERATION, themeGeneration);
+    }
+
+    /**
+     * Bring a panel coming back on screen up to the current theme if a theme change happened while it was away.
+     * Only panels {@link #markThemed marked} are checked; the update is skipped when nothing changed, since it
+     * lays out the whole subtree again.
+     */
+    public static void refreshThemeIfStale(Component component) {
+        if (!(component instanceof JComponent panel)
+            || !(panel.getClientProperty(THEMED_GENERATION) instanceof Integer seen) || seen == themeGeneration) {
+            return;
+        }
+        markThemed(panel);
+        refreshThemeFor(panel);
     }
 
     public static void refreshThemeFor(Component componentSubtree) {

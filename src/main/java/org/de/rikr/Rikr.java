@@ -125,7 +125,7 @@ public class Rikr {
         }
         switch (value.step()) {
             case RenameOperation operation ->
-                log("Undid rename " + operation.newName() + " -> " + operation.oldName() + ".");
+                log("Undid rename " + operation.newName() + " → " + operation.oldName() + ".");
             case RenameBatch batch -> log("Undid the import of " + batch.source() + ".");
         }
     }
@@ -150,14 +150,16 @@ public class Rikr {
         }
         switch (value.step()) {
             case RenameOperation operation ->
-                log("Redid rename " + operation.oldName() + " -> " + operation.newName() + ".");
+                log("Redid rename " + operation.oldName() + " → " + operation.newName() + ".");
             case RenameBatch batch -> log("Redid the import of " + batch.source() + ".");
         }
     }
 
     public void toggleBookmark(ProjectBookmark bookmark) {
         boolean added = project.bookmarks().toggle(bookmark);
-        log((added ? "Bookmarked " : "Removed bookmark ") + bookmark);
+        String target = bookmark.className()
+            + (bookmark.memberName() == null ? "" : "." + bookmark.memberName());
+        log((added ? "Bookmarked " : "Removed the bookmark on ") + target + " in " + bookmark.jarName() + ".");
     }
 
     public boolean openBookmark(ProjectBookmark bookmark) {

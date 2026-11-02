@@ -38,6 +38,9 @@ import java.util.Set;
  */
 public class FlowPanel extends JPanel {
     private static final int MAX_CALL_GRAPH_NODES = 400;
+    // Long blocks are cut short so a graph shows its branching on the first screen; the tooltip and a double-click
+    // show the whole block.
+    private static final int BLOCK_LINES = 8;
     private static final int CALLS_PER_ROW = 6;
     private static final Color TRUE_COLOR = new Color(98, 180, 98);
     private static final Color FALSE_COLOR = new Color(214, 96, 96);
@@ -77,7 +80,8 @@ public class FlowPanel extends JPanel {
     private final JCheckBox exceptionEdges = new JCheckBox("Exception edges", true);
     private final JLabel zoomLabel = new JLabel("100%");
     private final JLabel title = new JLabel("Pick an entry point, or right-click a method in the project tree.");
-    private final JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT));
+    // Wraps rather than clips: at the default window width the find field and the toggles need a second row.
+    private final JPanel toolbar = new JPanel(new WrapLayout(FlowLayout.LEFT, 5, 5));
     private final GraphLegend legend = new GraphLegend();
     private final JLabel keys = new JLabel(GraphView.keyHint());
     private Runnable viewListener = () -> {
@@ -186,6 +190,7 @@ public class FlowPanel extends JPanel {
         toolbar.add(exceptionEdges);
         JPanel header = new JPanel(new BorderLayout());
         header.add(toolbar, BorderLayout.NORTH);
+        WrapLayout.followWidth(toolbar);
         title.setBorder(BorderFactory.createEmptyBorder(0, 8, 4, 8));
         JPanel caption = new JPanel(new BorderLayout());
         caption.setOpaque(false);
@@ -566,7 +571,7 @@ public class FlowPanel extends JPanel {
                 header.append("   unreachable");
             }
             lines.add(header.toString());
-            int shown = Math.min(block.lines().size(), 30);
+            int shown = Math.min(block.lines().size(), BLOCK_LINES);
             lines.addAll(block.lines().subList(0, shown));
             if (block.lines().size() > shown) {
                 lines.add("… " + (block.lines().size() - shown) + " more instructions");
