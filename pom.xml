@@ -30,7 +30,7 @@
         <coverage.core.branches>0.55</coverage.core.branches>
         <!-- src/main/java/org/jetbrains holds patched copies of some of its classes: update the copies with it. -->
         <fernflower.version>261.26222.65</fernflower.version>
-        <maven.antrun.version>3.1.0</maven.antrun.version>
+        <maven.antrun.version>3.2.0</maven.antrun.version>
     </properties>
 
     <dependencies>
