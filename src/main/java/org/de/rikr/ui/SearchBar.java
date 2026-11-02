@@ -1,6 +1,8 @@
 package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
+import org.de.rikr.settings.SettingsManager;
+import org.de.rikr.theme.Theme;
 
 import javax.swing.*;
 import javax.swing.text.*;
@@ -10,21 +12,24 @@ import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class SearchBar extends JPanel {
+    private static final Logger LOGGER = Logger.getLogger(SearchBar.class.getName());
+
     private final Rikr controller;
     private final JTextField searchField;
     private final JButton upButton;
     private final JButton downButton;
     private final JLabel resultCounter;
-    private final JButton matchCaseButton;
-    private final JButton matchWordButton;
+    private final MatchOptions matchOptions;
     private boolean matchCase;
     private boolean matchWord;
 
     private final List<int[]> searchResults;
     private int currentResultIndex;
-    private final Color defaultBackgroundColor;
+    private final JPanel topPanel;
 
     public SearchBar(Rikr controller, ActionListener closeListener) {
         this.controller = controller;
@@ -32,31 +37,27 @@ public class SearchBar extends JPanel {
         setLayout(new BorderLayout());
 
         // Initialize components
-        searchField = new JTextField(20);
-        searchField.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
-        matchCaseButton = new JButton(Images.getImage("match-case"));
-        matchCaseButton.setToolTipText("Match Case");
-        matchCaseButton.setBorderPainted(false);
-        matchWordButton = new JButton(Images.getImage("match-word"));
-        matchWordButton.setToolTipText("Match Words");
-        matchWordButton.setBorderPainted(false);
-        resultCounter = new JLabel("0/0");
-        upButton = new JButton("Up");
-        upButton.setBorderPainted(false);
-        downButton = new JButton("Down");
-        downButton.setBorderPainted(false);
+        searchField = new JTextField(26);
+        SearchFields.style(searchField, "Find in this class");
+        matchOptions = new MatchOptions(searchField, options -> {
+            matchCase = options.matchCase();
+            matchWord = options.matchWord();
+            search();
+        });
+        resultCounter = new JLabel(" ");
+        upButton = new JButton("Previous");
+        upButton.setToolTipText("Previous match (Shift+Cmd+G)");
+        downButton = new JButton("Next");
+        downButton.setToolTipText("Next match (Cmd+G)");
         JButton closeButton = new JButton("Close");
-        closeButton.setBorderPainted(false);
 
         closeButton.addActionListener(closeListener);
 
         searchResults = new ArrayList<>();
         currentResultIndex = -1;
 
-        JPanel topPanel = new JPanel();
+        topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
         topPanel.add(searchField);
-        topPanel.add(matchCaseButton);
-        topPanel.add(matchWordButton);
         topPanel.add(resultCounter);
         topPanel.add(upButton);
         topPanel.add(downButton);
@@ -65,10 +66,12 @@ public class SearchBar extends JPanel {
 
         add(topPanel, BorderLayout.NORTH);
 
-        defaultBackgroundColor = matchCaseButton.getBackground();
 
         matchCase = false;
         matchWord = false;
+
+        applyTheme();
+        SettingsManager.addListener(s -> applyTheme());
     }
 
     public void init() {
@@ -83,22 +86,16 @@ public class SearchBar extends JPanel {
             }
         });
 
-        matchCaseButton.addActionListener(e -> {
-            matchCase = !matchCase;
-            toggleButton(matchCaseButton, matchCase);
-        });
-
-        matchWordButton.addActionListener(e -> {
-            matchWord = !matchWord;
-            toggleButton(matchWordButton, matchWord);
-        });
 
         upButton.addActionListener(e -> navigateResults(-1));
         downButton.addActionListener(e -> navigateResults(1));
     }
 
     public void focus() {
-        searchField.requestFocus();
+        int length = searchField.getText() != null ? searchField.getText().length() : 0;
+        searchField.setCaretPosition(length);
+        searchField.moveCaretPosition(length);
+        searchField.requestFocusInWindow();
     }
 
     public void search() {
@@ -120,6 +117,10 @@ public class SearchBar extends JPanel {
         }
 
         updateResultCounter();
+        // Show the first match as the person types, as find bars in editors and browsers do.
+        if (!searchResults.isEmpty()) {
+            navigateResults(1);
+        }
     }
 
     private void removeHighlights(JTextComponent textComp) {
@@ -166,8 +167,15 @@ public class SearchBar extends JPanel {
                 pos = endPos;
             }
         } catch (BadLocationException e) {
-            e.printStackTrace();
+            LOGGER.log(Level.WARNING, "Failed to highlight search results.", e);
         }
+    }
+
+    /**
+     * Move to the next match (1) or the previous one (-1).
+     */
+    public void navigate(int direction) {
+        navigateResults(direction);
     }
 
     private void navigateResults(int direction) {
@@ -191,17 +199,23 @@ public class SearchBar extends JPanel {
 
     private void updateResultCounter() {
         int totalResults = searchResults.size();
-        int currentIndex = totalResults > 0 ? currentResultIndex + 1 : 0;
-        resultCounter.setText(currentIndex + "/" + totalResults);
+        if (searchField.getText().isEmpty()) {
+            resultCounter.setText(" ");
+        } else if (totalResults == 0) {
+            resultCounter.setText("No matches");
+        } else if (currentResultIndex < 0) {
+            resultCounter.setText(totalResults + (totalResults == 1 ? " match" : " matches"));
+        } else {
+            resultCounter.setText((currentResultIndex + 1) + " of " + totalResults);
+        }
     }
 
-    private void toggleButton(JButton button, boolean toggle) {
-        if (toggle) {
-            button.setBackground(Theme.SEARCH_BUTTON_SELECTED_COLOR);
-        } else {
-            button.setBackground(defaultBackgroundColor);
-        }
+    private void applyTheme() {
+        topPanel.setBackground(Theme.BACKGROUND_COLOR);
+        SearchFields.applyTheme(searchField);
+        matchOptions.applyTheme();
 
-        search();
+        revalidate();
+        repaint();
     }
 }

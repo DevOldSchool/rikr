@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# Checks that the FernFlower classes Rikr patches, under src/main/java/org/jetbrains, are JetBrains' source for
+# fernflower.version in pom.xml with the diffs in patches/fernflower applied. See docs/decisions/0010.
+#
+#   bin/check-patches            check every patched class (the default)
+#   bin/check-patches update     write the diffs again from the patched classes, after changing one of them
+#   bin/check-patches upgrade    after changing fernflower.version: apply the diffs to the new version's source and
+#                                write the results over the patched classes; stops if a diff no longer applies
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+mode="${1:-check}"
+case "$mode" in
+    check | update | upgrade) ;;
+    *) echo "usage: bin/check-patches [check|update|upgrade]" >&2; exit 2 ;;
+esac
+
+version="$(sed -n 's:.*<fernflower.version>\(.*\)</fernflower.version>.*:\1:p' "$root/pom.xml")"
+if [ -z "$version" ]; then
+    echo "No fernflower.version in pom.xml" >&2
+    exit 1
+fi
+
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+
+# JetBrains publishes the source next to the engine in the IntelliJ repository, which pom.xml names.
+(cd "$root" && mvn -q dependency:copy \
+    -Dartifact="com.jetbrains.intellij.java:java-decompiler-engine:$version:jar:sources" \
+    -DoutputDirectory="$work") >&2
+sources="$work/java-decompiler-engine-$version-sources.jar"
+
+failed=0
+for patch in "$root"/patches/fernflower/*.patch; do
+    # The patched file's path, relative to src/main/java, is in the diff's "+++ b/..." line.
+    path="$(sed -n 's:^+++ b/\([^[:space:]]*\).*:\1:p' "$patch" | head -n 1)"
+    copy="$root/src/main/java/$path"
+    upstream="$work/upstream/$path"
+    unzip -q -o "$sources" "$path" -d "$work/upstream"
+
+    if [ "$mode" = update ]; then
+        diff -u --label "a/$path" --label "b/$path" "$upstream" "$copy" > "$patch" || true
+        echo "Wrote $(basename "$patch") from $path"
+        continue
+    fi
+
+    patched="$work/patched/$path"
+    mkdir -p "$(dirname "$patched")"
+    cp "$upstream" "$patched"
+    if ! patch -s -p1 -d "$work/patched" --no-backup-if-mismatch < "$patch"; then
+        echo "$(basename "$patch") no longer applies to FernFlower $version: make its changes to the new" \
+            "$path by hand, then run bin/check-patches update" >&2
+        failed=1
+        continue
+    fi
+
+    if [ "$mode" = upgrade ]; then
+        cp "$patched" "$copy"
+        echo "Patched $path from FernFlower $version"
+    elif ! diff -q "$patched" "$copy" > /dev/null; then
+        echo "$path isn't FernFlower $version with $(basename "$patch") applied. After changing the class, run" \
+            "bin/check-patches update; after changing fernflower.version, run bin/check-patches upgrade" >&2
+        diff -u "$patched" "$copy" >&2 || true
+        failed=1
+    else
+        echo "$path matches FernFlower $version with $(basename "$patch")"
+    fi
+done
+exit "$failed"

@@ -1,0 +1,62 @@
+--- a/org/jetbrains/java/decompiler/modules/decompiler/SimplifyExprentsHelper.java
++++ b/org/jetbrains/java/decompiler/modules/decompiler/SimplifyExprentsHelper.java
+@@ -1,4 +1,7 @@
+ // Copyright 2000-2024 JetBrains s.r.o. and contributors. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
++// Rikr: a copy of FernFlower's SimplifyExprentsHelper, patched where marked "Rikr:" so obfuscated array
++// initializers can't exhaust the heap. The build puts it in place of the original; see
++// docs/decisions/0010 and patches/fernflower.
+ package org.jetbrains.java.decompiler.modules.decompiler;
+ 
+ import org.jetbrains.java.decompiler.code.CodeConstants;
+@@ -234,7 +237,8 @@
+                   arrExpr.getIndex().type == Exprent.EXPRENT_CONST) {
+                 int constValue = ((ConstExprent)arrExpr.getIndex()).getIntValue();
+ 
+-                if (constValue < newExpr.getLstArrayElements().size()) {
++                // Rikr: negative indices too.
++                if (constValue >= 0 && constValue < newExpr.getLstArrayElements().size()) {
+                   Exprent init = newExpr.getLstArrayElements().get(constValue);
+                   if (init.type == Exprent.EXPRENT_CONST) {
+                     ConstExprent cinit = (ConstExprent)init;
+@@ -270,6 +274,9 @@
+     return false;
+   }
+ 
++  // Rikr: the most elements an array initializer may leave at their default value.
++  private static final int MAX_UNSET_INITIALIZER_ELEMENTS = 1000;
++
+   private static int isArrayInitializer(List<Exprent> list, int index) {
+     Exprent current = list.get(index);
+     if (current.type == Exprent.EXPRENT_ASSIGNMENT) {
+@@ -282,7 +289,8 @@
+             newExpr.getLstDims().get(0).type == Exprent.EXPRENT_CONST) {
+ 
+           int size = (Integer)((ConstExprent)newExpr.getLstDims().get(0)).getValue();
+-          if (size == 0) {
++          // Rikr: negative sizes too, which obfuscators write in code that never runs.
++          if (size <= 0) {
+             return 0;
+           }
+ 
+@@ -302,7 +310,8 @@
+                     arrExpr.getIndex().type == Exprent.EXPRENT_CONST) {
+                   // TODO: check for a number type. Failure extremely improbable, but nevertheless...
+                   int constValue = ((ConstExprent)arrExpr.getIndex()).getIntValue();
+-                  if (constValue < size && !mapInit.containsKey(constValue)) {
++                  // Rikr: negative indices too, as in obfuscators' dummy code; they made the initializer throw.
++                  if (constValue >= 0 && constValue < size && !mapInit.containsKey(constValue)) {
+                     if (!aas.getRight().containsExprent(arrVar)) {
+                       mapInit.put(constValue, aas.getRight());
+                       found = true;
+@@ -321,7 +330,10 @@
+ 
+           double fraction = ((double)mapInit.size()) / size;
+ 
+-          if ((arrVar.isStack() && fraction > 0) || (size <= 7 && fraction >= 0.3) || (size > 7 && fraction >= 0.7)) {
++          // Rikr: an initializer lists every element, so one for a large array that is mostly unset would be huge:
++          // obfuscators write sizes such as new T[940935738] for an array of 135. Its stores are shown as they are.
++          boolean fewUnset = size - mapInit.size() <= MAX_UNSET_INITIALIZER_ELEMENTS;
++          if ((arrVar.isStack() && fraction > 0 && fewUnset) || (size <= 7 && fraction >= 0.3) || (size > 7 && fraction >= 0.7 && fewUnset)) {
+             List<Exprent> lstRet = new ArrayList<>();
+ 
+             VarType arrayType = newExpr.getNewType().decreaseArrayDim();

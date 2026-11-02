@@ -1,0 +1,56 @@
+--- a/org/jetbrains/java/decompiler/main/DecompilerContext.java
++++ b/org/jetbrains/java/decompiler/main/DecompilerContext.java
+@@ -1,4 +1,7 @@
+ // Copyright 2000-2024 JetBrains s.r.o. and contributors. Use of this source code is governed by the Apache 2.0 license.
++// Rikr: a copy of FernFlower's DecompilerContext, patched where marked "Rikr:" so a class's methods can be decompiled
++// in parallel, each in a context of its own. The build puts it in place of the original; see docs/decisions/0012 and
++// patches/fernflower.
+ package org.jetbrains.java.decompiler.main;
+ 
+ import org.jetbrains.annotations.NotNull;
+@@ -67,6 +70,28 @@
+     this.limitsContainer = new LimitContainer(this.properties);
+   }
+ 
++  // Rikr: the class's context for decompiling one method on a thread of its own. It shares everything but the
++  // method's state and the import collector; ClassWrapper adds the copy's imports back.
++  private DecompilerContext(DecompilerContext context, VarProcessor varProcessor) {
++    this.properties = context.properties;
++    this.logger = context.logger;
++    this.structContext = context.structContext;
++    this.classProcessor = context.classProcessor;
++    this.poolInterceptor = context.poolInterceptor;
++    this.cancellationManager = context.cancellationManager;
++    this.renamerFactory = context.renamerFactory;
++    this.importCollector = context.importCollector == null ? null : context.importCollector.forMethod();
++    this.varProcessor = varProcessor;
++    this.counterContainer = new CounterContainer();
++    this.bytecodeSourceMapper = context.bytecodeSourceMapper;
++    this.limitsContainer = context.limitsContainer;
++  }
++
++  // Rikr: see the constructor above.
++  public static DecompilerContext forMethod(VarProcessor varProcessor) {
++    return new DecompilerContext(getCurrentContext(), varProcessor);
++  }
++
+   // *****************************************************************************
+   // context setup and update
+   // *****************************************************************************
+@@ -98,6 +123,16 @@
+     context.counterContainer = new CounterContainer();
+   }
+ 
++  // Rikr: makes a method decompiled in a context of its own the current one, as startMethod does.
++  public static void startMethod(DecompilerContext methodContext) {
++    DecompilerContext context = getCurrentContext();
++    context.varProcessor = methodContext.varProcessor;
++    context.counterContainer = methodContext.counterContainer;
++    if (context.importCollector != null && methodContext.importCollector != null) {
++      context.importCollector.addNamesFrom(methodContext.importCollector);
++    }
++  }
++
+   // *****************************************************************************
+   // context access
+   // *****************************************************************************

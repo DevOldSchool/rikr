@@ -1,37 +1,53 @@
 package org.de.rikr.ui;
 
+import org.de.rikr.settings.SettingsManager;
+import org.de.rikr.theme.Theme;
+
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.text.Document;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.Element;
 import java.awt.*;
 import java.awt.geom.Rectangle2D;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class LineNumberComponent extends JComponent {
+    private static final Logger LOGGER = Logger.getLogger(LineNumberComponent.class.getName());
+
     private static final int MARGIN = 5;
     private final JTextPane textPane;
-    private final Font defaultFont;
-    private FontMetrics fontMetrics;
+    // The code's own font, so the numbers line up with it and grow with it when Rikr is scaled up.
+    private Font defaultFont;
     private int fontLeading;
     private int fontDescent;
     private final int lineHeightOffset;
+    private int preferredWidth;
 
     public LineNumberComponent(JTextPane textPane) {
         this.textPane = textPane;
 
-        defaultFont = Fonts.getDefaultFont();
+        defaultFont = SettingsManager.getEditorFont();
         setFont(defaultFont);
         updateFontMetrics(defaultFont);
+        SettingsManager.addListener(settings -> {
+            defaultFont = SettingsManager.getEditorFont();
+            setFont(defaultFont);
+            updateFontMetrics(defaultFont);
+        });
 
-        textPane.getDocument().addDocumentListener(new DocumentListener() {
+        DocumentListener changes = new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
+                updatePreferredWidth();
                 repaint();
             }
 
             @Override
             public void removeUpdate(DocumentEvent e) {
+                updatePreferredWidth();
                 repaint();
             }
 
@@ -39,6 +55,18 @@ public class LineNumberComponent extends JComponent {
             public void changedUpdate(DocumentEvent e) {
                 repaint();
             }
+        };
+        textPane.getDocument().addDocumentListener(changes);
+        // The pane is given a new document for each class it shows.
+        textPane.addPropertyChangeListener("document", event -> {
+            if (event.getOldValue() instanceof Document old) {
+                old.removeDocumentListener(changes);
+            }
+            if (event.getNewValue() instanceof Document replacement) {
+                replacement.addDocumentListener(changes);
+            }
+            updatePreferredWidth();
+            repaint();
         });
 
         textPane.addCaretListener(e -> repaint());
@@ -52,9 +80,10 @@ public class LineNumberComponent extends JComponent {
     }
 
     private void updateFontMetrics(Font font) {
-        fontMetrics = getFontMetrics(font);
+        FontMetrics fontMetrics = getFontMetrics(font);
         fontLeading = fontMetrics.getLeading();
         fontDescent = fontMetrics.getDescent();
+        updatePreferredWidth();
         repaint();
     }
 
@@ -66,21 +95,25 @@ public class LineNumberComponent extends JComponent {
         g.fillRect(clip.x, clip.y, clip.width, clip.height);
 
         // Draw line highlight
-        Rectangle2D caretRectangle;
+        Rectangle2D caretRectangle = null;
         try {
             caretRectangle = textPane.modelToView2D(textPane.getCaretPosition());
         } catch (BadLocationException e) {
-            throw new RuntimeException(e);
+            // Ignore and skip highlight if caret position is invalid
         }
 
-        g.setColor(Theme.BACKGROUND_COLOR);
-        g.fillRect(0, (int) caretRectangle.getY(), this.getWidth(), (int) caretRectangle.getHeight() + lineHeightOffset);
+        if (caretRectangle != null) {
+            g.setColor(Theme.BACKGROUND_COLOR);
+            g.fillRect(0, (int) caretRectangle.getY(), this.getWidth(), (int) caretRectangle.getHeight() + lineHeightOffset);
+        }
 
         // Draw line numbers
         g.setFont(defaultFont);
 
         int startOffset = textPane.viewToModel2D(new Point(0, clip.y));
         int endOffset = textPane.viewToModel2D(new Point(0, clip.y + clip.height));
+        if (startOffset < 0) startOffset = 0;
+        if (endOffset < 0) endOffset = textPane.getDocument().getLength();
 
         Element root = textPane.getDocument().getDefaultRootElement();
         int startLine = root.getElementIndex(startOffset);
@@ -93,7 +126,7 @@ public class LineNumberComponent extends JComponent {
                 Rectangle2D elementRectangle = textPane.modelToView2D(root.getElement(i).getStartOffset());
 
                 if (elementRectangle != null) {
-                    if (caretRectangle.getY() == elementRectangle.getY()) {
+                    if (caretRectangle != null && caretRectangle.getY() == elementRectangle.getY()) {
                         g.setColor(Theme.CONTENT_HIGHLIGHT_TEXT_COLOR);
                     }
                     String lineNumber = String.valueOf(i + 1);
@@ -101,7 +134,7 @@ public class LineNumberComponent extends JComponent {
                     g.drawString(lineNumber, MARGIN, y + lineHeightOffset);
                 }
             } catch (BadLocationException e) {
-                e.printStackTrace();
+                LOGGER.log(Level.WARNING, "Failed to paint line number.", e);
             }
         }
 
@@ -109,26 +142,27 @@ public class LineNumberComponent extends JComponent {
         g.setColor(Theme.CONTENT_BORDER_COLOR);
         int borderX = getWidth() - 1;
         g.drawLine(borderX, clip.y, borderX, clip.y + clip.height);
+    }
 
-        int width = fontMetrics.stringWidth(String.valueOf(endLine + 1)) + MARGIN * 2;
-        if (getPreferredWidth() != width) {
-            setPreferredWidth(width);
+    // Fits at least four digits and grows with the line count. Only revalidate
+    // on change: resizing from paintComponent schedules another paint, forever.
+    // Measure with defaultFont, the font the numbers are drawn in, not the
+    // text pane's font, which can be narrower.
+    private void updatePreferredWidth() {
+        FontMetrics numberMetrics = getFontMetrics(defaultFont);
+        Element root = textPane.getDocument().getDefaultRootElement();
+        String widest = String.valueOf(root.getElementCount());
+        int digits = Math.max(numberMetrics.stringWidth("0000"),
+                numberMetrics.stringWidth(widest));
+        int width = digits + MARGIN * 2;
+        if (width != preferredWidth) {
+            preferredWidth = width;
+            revalidate();
         }
-    }
-
-    private int getPreferredWidth() {
-        return fontMetrics.stringWidth("0000") + MARGIN * 2;
-    }
-
-    private void setPreferredWidth(int width) {
-        Dimension dim = getPreferredSize();
-        dim.setSize(width, dim.height);
-        setPreferredSize(dim);
-        setSize(dim);
     }
 
     @Override
     public Dimension getPreferredSize() {
-        return new Dimension(getPreferredWidth(), textPane.getHeight());
+        return new Dimension(preferredWidth, textPane.getHeight());
     }
 }

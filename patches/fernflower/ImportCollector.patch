@@ -1,0 +1,81 @@
+--- a/org/jetbrains/java/decompiler/main/collectors/ImportCollector.java
++++ b/org/jetbrains/java/decompiler/main/collectors/ImportCollector.java
+@@ -1,4 +1,7 @@
+ // Copyright 2000-2022 JetBrains s.r.o. and contributors. Use of this source code is governed by the Apache 2.0 license.
++// Rikr: a copy of FernFlower's ImportCollector, patched where marked "Rikr:" so a class's methods can be decompiled
++// in parallel, each with a copy of the class's collector. The build puts it in place of the original; see
++// docs/decisions/0012 and patches/fernflower.
+ package org.jetbrains.java.decompiler.main.collectors;
+ 
+ import org.jetbrains.java.decompiler.main.ClassesProcessor.ClassNode;
+@@ -10,6 +13,7 @@
+ import org.jetbrains.java.decompiler.struct.attr.StructInnerClassesAttribute;
+ import org.jetbrains.java.decompiler.util.TextBuffer;
+ 
++import java.util.ArrayList;
+ import java.util.Collections;
+ import java.util.HashMap;
+ import java.util.HashSet;
+@@ -29,6 +33,8 @@
+   private final Set<String> setInnerClassNames = new HashSet<>();
+   private final String currentPackageSlash;
+   private final String currentPackagePoint;
++  // Rikr: in a copy made by forMethod, the names it added, as {short name, package, "" if not imported}.
++  private final List<String[]> addedNames;
+ 
+   public ImportCollector(ClassNode root) {
+     String clName = root.classStruct.qualifiedName;
+@@ -42,6 +48,7 @@
+       currentPackageSlash = "";
+       currentPackagePoint = "";
+     }
++    addedNames = null;
+ 
+     Map<String, StructClass> classes = DecompilerContext.getStructContext().getClasses();
+     LinkedList<String> queue = new LinkedList<>();
+@@ -85,6 +92,35 @@
+     }
+   }
+ 
++  // Rikr: a copy for decompiling one method, whose added names addNamesFrom adds to this collector afterwards.
++  private ImportCollector(ImportCollector collector) {
++    mapSimpleNames.putAll(collector.mapSimpleNames);
++    setNotImportedNames.addAll(collector.setNotImportedNames);
++    setFieldNames.addAll(collector.setFieldNames);
++    setInnerClassNames.addAll(collector.setInnerClassNames);
++    currentPackageSlash = collector.currentPackageSlash;
++    currentPackagePoint = collector.currentPackagePoint;
++    addedNames = new ArrayList<>();
++  }
++
++  // Rikr: a copy for one method's thread.
++  public ImportCollector forMethod() {
++    return new ImportCollector(this);
++  }
++
++  // Rikr: adds the names a copy added, as if its method had used this collector. Called for the methods in their
++  // order, it leaves this collector as decompiling them one after another would.
++  public void addNamesFrom(ImportCollector copy) {
++    for (String[] name : copy.addedNames) {
++      if (!mapSimpleNames.containsKey(name[0])) {
++        mapSimpleNames.put(name[0], name[1]);
++        if (name[2] != null) {
++          setNotImportedNames.add(name[0]);
++        }
++      }
++    }
++  }
++
+   /**
+    * Check whether the package-less name ClassName is shaded by variable in a context of
+    * the decompiled class
+@@ -169,6 +205,9 @@
+       if (!imported) {
+         setNotImportedNames.add(outerShortName);
+       }
++      if (addedNames != null) {
++        addedNames.add(new String[]{outerShortName, packageName, imported ? null : ""});
++      }
+     }
+ 
+     return nestedName;

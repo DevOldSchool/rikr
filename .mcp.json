@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "rikr": {
+      "command": "./bin/rikr-mcp",
+      "args": []
+    }
+  }
+}

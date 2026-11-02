@@ -1,12 +1,23 @@
 package org.de.rikr.ui;
 
 import javax.swing.*;
+import javax.swing.text.StyledEditorKit;
+import javax.swing.text.ViewFactory;
 import java.awt.*;
 
 public class ScrollableTextPane extends JTextPane implements Scrollable {
 
     public ScrollableTextPane() {
         super();
+        setEditorKit(new CodeEditorKit());
+    }
+
+    // A class can be a hundred thousand lines; StyledLinesView shows them without a view for each.
+    private static final class CodeEditorKit extends StyledEditorKit {
+        @Override
+        public ViewFactory getViewFactory() {
+            return StyledLinesView.factory();
+        }
     }
 
     @Override

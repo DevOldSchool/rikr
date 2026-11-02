@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Starts Rikr's MCP server, speaking the Model Context Protocol on stdin and stdout.
+# Builds the project first when it has not been packaged yet. After changing Rikr's code, run
+# `mvn -q -DskipTests package` and restart the server so it picks up the change.
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ ! -f "$root/target/classes/org/de/rikr/agent/RikrMcp.class" ] || [ ! -d "$root/target/lib" ]; then
+    # Build output goes to stderr: stdout is reserved for protocol messages.
+    (cd "$root" && mvn -q -DskipTests package) >&2
+fi
+
+exec java -Djava.awt.headless=true -cp "$root/target/classes:$root/target/lib/*" org.de.rikr.agent.RikrMcp "$@"

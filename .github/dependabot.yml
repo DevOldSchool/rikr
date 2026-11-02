@@ -1,0 +1,23 @@
+version: 2
+updates:
+  # Dependencies and the pinned build plugin versions in pom.xml.
+  - package-ecosystem: maven
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      asm:
+        patterns:
+          - "org.ow2.asm:*"
+      build-plugins:
+        patterns:
+          - "org.apache.maven.plugins:*"
+          - "org.jacoco:*"
+          - "com.diffplug.spotless:*"
+          - "com.puppycrawl.tools:*"
+          - "com.google.errorprone:*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

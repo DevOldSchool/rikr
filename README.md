@@ -1,50 +1,55 @@
 # Rikr
 
-A software reverse engineering suite of tools for Java.
+A workbench for reverse engineering Java bytecode, built for obfuscated JARs such as game clients.
 
-## Roadmap
+![Bytecode and decompiled Java side by side](docs/images/code.png)
 
-The following items are listed in no particular order and are here as a todo list.
+- **Read** ASM bytecode and decompiled Java side by side, kept in step as you click either one.
+- **Follow** references, callers and callees, entry points, call graphs and control flow graphs.
+- **Rename** classes, fields and methods safely, with a preview and undo, then export the JAR.
+- **Map** classes and members between versions of a program, and carry your names to the next one.
+- **Exchange** tiny v2, Enigma and ProGuard mapping files.
+- **Automate** all of it from an AI agent through the built-in MCP server.
 
-#### Saving
+| Control flow | Class matching between versions |
+|---|---|
+| ![Control flow graph of an obfuscated method](docs/images/flow.png) | ![Auto-matched classes between two releases](docs/images/mapping.png) |
 
-- Save your project.
-- Save changes to class files in Jar.
+## Install
 
-#### User interface to step through instructions.
+Download a package with its own Java runtime from the
+[releases page](https://github.com/DevOldSchool/rikr/releases): a `.dmg` for macOS (Apple silicon), a `.zip` for
+Windows, and a `.tar.gz`, `.deb` or `.rpm` for Linux.
 
-- ~~Step through the instructions in a method.~~
-- ~~View the stack as you go.~~
-- ~~View local variables as you go.~~
-- Visually show the control flow.
+## Build from source
 
-#### User interface for class mapping between Jars.
+Rikr needs Java 21 and Maven.
 
-- View class information and matching class information.
-    - Field count, method count, interface count.
-- List of classes based on percentage matching.
+```bash
+mvn -q -DskipTests package
+java -cp "target/classes:target/lib/*" org.de.rikr.Rikr
+```
 
-#### Global search
+Run `mvn -q test` for the tests, or `mvn -q verify` for everything CI checks. Pushing a tag such as `v1.2.0` builds
+the packages and publishes a release. See [AGENTS.md](AGENTS.md) for the rest of the workflow.
 
-- ~~Search through all class nodes across all loaded jars including instructions.~~
-- ~~Search filters, include static, include instructions.~~
-- Search result hierarchy, class, field, method, instruction.
+## Use from an AI agent
 
-#### Control flow graph
+`bin/rikr-mcp` runs Rikr as a [Model Context Protocol](https://modelcontextprotocol.io) server over stdio, so agents
+such as Claude Code can load JARs, read and decompile code, follow references, rename, match classes and import or
+export mappings without the GUI. It builds the project first if needed. This repository's `.mcp.json` registers it
+for Claude Code; [AGENTS.md](AGENTS.md#using-rikr-from-an-agent) lists the tools.
 
-- Follow code from jar entry point.
-- Load control flow from selected point.
+## Documentation
 
-#### Settings
+- [Getting started](docs/guides/getting-started.md): open JARs, navigate, search, shortcuts.
+- [Renaming and mapping files](docs/guides/renaming.md): rename, undo, track naming progress, export.
+- [References and call hierarchy](docs/guides/references.md): who uses a class, field or method.
+- [Entry points, flow and simulation](docs/guides/flow.md): call graphs, control flow graphs, stepping through a method.
+- [Mapping between versions](docs/guides/mapping-versions.md): match classes and carry names to a new release.
+- [Projects and bookmarks](docs/guides/projects.md): save your work and come back to it.
+- [AGENTS.md](AGENTS.md): how the code is organised, for contributors and coding agents.
 
-- Set font and size.
-- Set theme.
-- Set syntax highlight colors.
+## License
 
-#### Application icon
-
-#### Documentation
-
-- Building.
-- Running.
-- User guides.
+[GPL-3.0](LICENSE)

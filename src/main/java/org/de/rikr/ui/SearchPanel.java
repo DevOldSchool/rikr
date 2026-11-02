@@ -1,27 +1,48 @@
 package org.de.rikr.ui;
 
 import org.de.rikr.Rikr;
+import org.de.rikr.resources.Images;
+import org.de.rikr.search.SearchQuery;
+import org.de.rikr.search.SearchResult;
+import org.de.rikr.search.SearchResultIcon;
+import org.de.rikr.settings.SettingsManager;
+import org.de.rikr.theme.Theme;
 import org.de.rikr.ui.model.SearchResultItem;
-import org.de.rikr.utilities.ClassNodeUtil;
-import org.objectweb.asm.tree.*;
+import org.objectweb.asm.tree.ClassNode;
+
+import com.formdev.flatlaf.FlatClientProperties;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.lang.reflect.Modifier;
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 public class SearchPanel extends JPanel {
     private final Rikr controller;
     private final JTextField searchField;
     private final JList<SearchResultItem> resultsList;
+    private final JLabel summary = new JLabel(" ");
     private final DefaultListModel<SearchResultItem> listModel;
-    private final JButton matchCaseButton;
-    private final JButton matchWordButton;
+    private final MatchOptions matchOptions;
+    private final Map<Kind, JToggleButton> kindChips = new EnumMap<>(Kind.class);
+    private Kind kind = Kind.ALL;
+    private List<SearchResult> lastResults = List.of();
+    private String lastQuery = "";
+    private boolean lastMatchCase;
     private boolean matchCase;
     private boolean matchWord;
-    private final Color defaultBackgroundColor;
+    private JPanel searchBarPanel;
+    private JScrollPane scrollPane;
+    private static final int SEARCH_DEBOUNCE_MS = 250;
+    private Timer searchDebounceTimer;
 
     public SearchPanel(Rikr controller) {
         this.controller = controller;
@@ -29,264 +50,307 @@ public class SearchPanel extends JPanel {
         setBorder(null);
 
         // Create the search bar
-        JPanel searchBarPanel = new JPanel(new BorderLayout());
+        searchBarPanel = new JPanel(new BorderLayout());
         searchField = new JTextField();
-        searchField.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
-        matchCaseButton = new JButton(Images.getImage("match-case"));
-        matchCaseButton.setToolTipText("Match Case");
-        matchCaseButton.setBorderPainted(false);
-        matchWordButton = new JButton(Images.getImage("match-word"));
-        matchWordButton.setToolTipText("Match Words");
-        matchWordButton.setBorderPainted(false);
+        SearchFields.style(searchField, "Search names, strings and member references");
+        matchOptions = new MatchOptions(searchField, options -> {
+            matchCase = options.matchCase();
+            matchWord = options.matchWord();
+            // Use debounce to avoid lag when toggling options rapidly
+            triggerSearchDebounced();
+        });
 
         // Create a panel for the buttons
-        JPanel buttonsPanel = new JPanel();
-        buttonsPanel.setBackground(Theme.BACKGROUND_COLOR);
-        buttonsPanel.setLayout(new BoxLayout(buttonsPanel, BoxLayout.X_AXIS));
-        buttonsPanel.add(matchCaseButton);
-        buttonsPanel.add(matchWordButton);
 
         // Add components to the main panel
+        searchBarPanel.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
         searchBarPanel.add(searchField, BorderLayout.CENTER);
-        searchBarPanel.add(buttonsPanel, BorderLayout.EAST);
 
         // Create the list model and the results list
         listModel = new DefaultListModel<>();
         resultsList = new JList<>(listModel);
-        resultsList.setCellRenderer(new SearchResultItemRenderer());
+        resultsList.setCellRenderer(new SearchResultItemRenderer(() -> lastQuery, () -> lastMatchCase));
         resultsList.setBackground(Theme.BACKGROUND_COLOR);
-        JScrollPane scrollPane = new JScrollPane(resultsList);
+        scrollPane = new JScrollPane(resultsList);
         scrollPane.setBorder(null);
 
+        summary.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+        // Long counts push the last chip onto a second row; a plain FlowLayout would report one row and clip it.
+        JPanel chips = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 2));
+        WrapLayout.followWidth(chips);
+        chips.setOpaque(false);
+        ButtonGroup chipGroup = new ButtonGroup();
+        for (Kind each : Kind.values()) {
+            JToggleButton chip = new JToggleButton(each.label);
+            chip.putClientProperty(FlatClientProperties.BUTTON_TYPE, FlatClientProperties.BUTTON_TYPE_ROUND_RECT);
+            chip.setToolTipText("Show " + each.label.toLowerCase(java.util.Locale.ROOT) + " only");
+            chip.setSelected(each == kind);
+            chip.addActionListener(e -> {
+                kind = each;
+                showResults();
+            });
+            chipGroup.add(chip);
+            chips.add(chip);
+            kindChips.put(each, chip);
+        }
+        kindChips.get(Kind.ALL).setToolTipText("Show every match");
+
+        JPanel top = new JPanel(new BorderLayout());
+        top.setOpaque(false);
+        top.add(searchBarPanel, BorderLayout.NORTH);
+        top.add(summary, BorderLayout.CENTER);
+        top.add(chips, BorderLayout.SOUTH);
+
         // Add components to the panel
-        add(searchBarPanel, BorderLayout.NORTH);
+        add(top, BorderLayout.NORTH);
         add(scrollPane, BorderLayout.CENTER);
 
-        defaultBackgroundColor = matchCaseButton.getBackground();
-        matchCase = false;
-        matchWord = false;
+
+        applyTheme();
+        SettingsManager.addListener(s -> applyTheme());
+    }
+
+    private void applyTheme() {
+        if (searchField != null) {
+            SearchFields.applyTheme(searchField);
+            matchOptions.applyTheme();
+        }
+
+        if (resultsList != null) {
+            resultsList.setBackground(Theme.BACKGROUND_COLOR);
+            resultsList.repaint();
+        }
+
+        if (scrollPane != null) {
+            Color track = SettingsManager.getScrollBarTrackColor();
+
+            scrollPane.setCorner(JScrollPane.LOWER_RIGHT_CORNER, PanelUtil.createCorner());
+            scrollPane.setCorner(JScrollPane.UPPER_RIGHT_CORNER, PanelUtil.createCorner());
+            scrollPane.setCorner(JScrollPane.LOWER_LEFT_CORNER, PanelUtil.createCorner());
+            scrollPane.setCorner(JScrollPane.UPPER_LEFT_CORNER, PanelUtil.createCorner());
+
+            // Match scrollbars to track color for seamless corners
+            JScrollBar vsb = scrollPane.getVerticalScrollBar();
+            if (vsb != null) {
+                vsb.setBackground(track);
+            }
+            JScrollBar hsb = scrollPane.getHorizontalScrollBar();
+            if (hsb != null) {
+                hsb.setBackground(track);
+            }
+        }
+
+        revalidate();
+        repaint();
     }
 
     public void init() {
+        searchDebounceTimer = new Timer(SEARCH_DEBOUNCE_MS, e -> performSearch());
+        searchDebounceTimer.setRepeats(false);
+
         searchField.addKeyListener(new KeyAdapter() {
             @Override
             public void keyReleased(KeyEvent e) {
-                performSearch();
+                int code = e.getKeyCode();
+                if (code == KeyEvent.VK_BACK_SPACE || code == KeyEvent.VK_DELETE) {
+                    if (searchField.getSelectionStart() != searchField.getSelectionEnd()) {
+                        int len = searchField.getText() != null ? searchField.getText().length() : 0;
+                        searchField.setCaretPosition(len);
+                    }
+                }
+                triggerSearchDebounced();
             }
         });
 
-        searchField.addActionListener(e -> performSearch());
-
-        matchCaseButton.addActionListener(e -> {
-            matchCase = !matchCase;
-            toggleButton(matchCaseButton, matchCase);
-        });
-
-        matchWordButton.addActionListener(e -> {
-            matchWord = !matchWord;
-            toggleButton(matchWordButton, matchWord);
-        });
+        searchField.addActionListener(e -> triggerSearchImmediate());
 
         resultsList.addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
                 SearchResultItem selectedItem = resultsList.getSelectedValue();
 
-                if (selectedItem == null) {
+                if (selectedItem == null || !selectedItem.isSelectable() || selectedItem.getPattern() == null) {
                     return;
                 }
 
                 controller.getUserInterface().displayBytecode(selectedItem.getClassNode());
 
-                SwingUtilities.invokeLater(() -> {
-                    controller.getUserInterface().getContentPanel().selectTextAfterPattern(selectedItem.getPattern(), selectedItem.getName());
-                });
+                SwingUtilities.invokeLater(() -> controller.getUserInterface().getContentPanel()
+                    .selectTextAfterPattern(selectedItem.getPattern(), selectedItem.getName()));
             }
         });
     }
 
     public void performSearch() {
+        SearchQuery query = new SearchQuery(searchField.getText(), matchCase, matchWord);
+        lastResults = controller.search(query);
+        lastQuery = query.text();
+        lastMatchCase = matchCase;
+        showResults();
+    }
+
+    // Lists the last results of the chosen kind, each under its class and, when there is more than one, its JAR.
+    private void showResults() {
         listModel.clear();
 
-        String query = searchField.getText();
-        if (query.length() < 2) {
-            return;
-        }
-
-        if (!matchCase) {
-            query = query.toLowerCase();
-        }
-
-        if (!query.isEmpty()) {
-            for (String jarName : controller.getJarClassesMap().keySet()) {
-                List<ClassNode> classes = controller.getJarClassesMap().get(jarName);
-
-                for (ClassNode classNode : classes) {
-                    if (areEqualStrings(classNode.name, query)) {
-                        Icon resultItemIcon;
-
-                        if (Modifier.isInterface(classNode.access)) {
-                            resultItemIcon = ClassNodeImages.getImage("interface");
-                        } else {
-                            resultItemIcon = ClassNodeImages.getImage("class");
-                        }
-
-                        listModel.addElement(new SearchResultItem(
-                                classNode.name,
-                                resultItemIcon,
-                                classNode,
-                                classNode.name,
-                                ClassNodeUtil.getPattern(classNode, null, null)));
-                    }
-
-                    for (FieldNode fieldNode : classNode.fields) {
-                        if (areEqualStrings(fieldNode.name, query)) {
-                            listModel.addElement(new SearchResultItem(
-                                    fieldNode.name,
-                                    ClassNodeImages.getFieldNodeImage(fieldNode),
-                                    classNode,
-                                    fieldNode.name,
-                                    ClassNodeUtil.getFieldNodePattern(fieldNode)));
-                        }
-
-                        if (areEqualStrings(fieldNode.desc, query)) {
-                            listModel.addElement(new SearchResultItem(
-                                    fieldNode.desc,
-                                    ClassNodeImages.getFieldNodeImage(fieldNode),
-                                    classNode,
-                                    fieldNode.desc,
-                                    ClassNodeUtil.getFieldNodePattern(fieldNode)));
-                        }
-                    }
-
-                    for (MethodNode methodNode : classNode.methods) {
-                        if (areEqualStrings(methodNode.name, query)) {
-                            listModel.addElement(new SearchResultItem(
-                                    methodNode.name,
-                                    ClassNodeImages.getMethodNodeImage(methodNode),
-                                    classNode,
-                                    methodNode.name,
-                                    ClassNodeUtil.getMethodNodePattern(methodNode)
-                            ));
-                        }
-
-                        if (areEqualStrings(methodNode.desc, query)) {
-                            listModel.addElement(new SearchResultItem(
-                                    methodNode.desc,
-                                    ClassNodeImages.getMethodNodeImage(methodNode),
-                                    classNode,
-                                    methodNode.name,
-                                    ClassNodeUtil.getMethodNodePattern(methodNode)
-                            ));
-                        }
-
-                        for (AbstractInsnNode abstractInsnNode : methodNode.instructions) {
-                            if (abstractInsnNode instanceof LdcInsnNode ldcInsnNode) {
-                                if (ldcInsnNode.cst instanceof String stringCst) {
-                                    if (!areEqualStrings(stringCst, query)) {
-                                        continue;
-                                    }
-
-                                    listModel.addElement(new SearchResultItem(
-                                            stringCst,
-                                            Images.getImage("instruction"),
-                                            classNode,
-                                            "\"" + stringCst + "\"",
-                                            "LDC \"" + stringCst + "\""));
-                                }
-
-                                if (ldcInsnNode.cst instanceof Integer intCst) {
-                                    if (!areEqualStrings(intCst.toString(), query)) {
-                                        continue;
-                                    }
-
-                                    listModel.addElement(new SearchResultItem(
-                                            intCst.toString(),
-                                            Images.getImage("instruction"),
-                                            classNode,
-                                            intCst.toString(),
-                                            "LDC " + intCst));
-                                }
-
-                                if (ldcInsnNode.cst instanceof Long longCst) {
-                                    if (!areEqualStrings(longCst.toString(), query)) {
-                                        continue;
-                                    }
-
-                                    listModel.addElement(new SearchResultItem(
-                                            longCst.toString(),
-                                            Images.getImage("instruction"),
-                                            classNode,
-                                            longCst.toString(),
-                                            "LDC " + longCst));
-                                }
-                            }
-
-                            if (abstractInsnNode instanceof TypeInsnNode typeInsnNode) {
-                                if (areEqualStrings(typeInsnNode.desc, query)) {
-                                    listModel.addElement(new SearchResultItem(
-                                            typeInsnNode.desc,
-                                            Images.getImage("instruction"),
-                                            classNode,
-                                            typeInsnNode.desc,
-                                            "NEW " + typeInsnNode.desc
-                                    ));
-                                }
-                            }
-
-                            if (abstractInsnNode instanceof FieldInsnNode fieldInsnNode) {
-                                if (areEqualStrings(fieldInsnNode.name, query)) {
-                                    listModel.addElement(new SearchResultItem(
-                                            fieldInsnNode.name,
-                                            Images.getImage("instruction"),
-                                            classNode,
-                                            fieldInsnNode.name,
-                                            "GETSTATIC " + fieldInsnNode.owner + "." + fieldInsnNode.name
-                                    ));
-                                }
-                            }
-
-                            if (abstractInsnNode instanceof MethodInsnNode methodInsnNode) {
-                                if (areEqualStrings(methodInsnNode.name, query)) {
-                                    listModel.addElement(new SearchResultItem(
-                                            methodInsnNode.name,
-                                            Images.getImage("instruction"),
-                                            classNode,
-                                            methodInsnNode.name,
-                                            "INVOKEINTERFACE " + methodInsnNode.owner + "." + methodInsnNode.name + " " + methodInsnNode.desc
-                                    ));
-                                }
-                            }
-                        }
-                    }
-                }
+        Map<Kind, Integer> counts = new EnumMap<>(Kind.class);
+        for (SearchResult result : lastResults) {
+            if (result.selectable()) {
+                counts.merge(Kind.ALL, 1, Integer::sum);
+                counts.merge(Kind.of(result), 1, Integer::sum);
             }
+        }
+        kindChips.forEach((each, chip) -> chip.setText(each.label + " " + String.format("%,d",
+            counts.getOrDefault(each, 0))));
+
+        List<SearchResult> shown = filter(lastResults, kind);
+        Map<String, List<ClassNode>> classesByJar = controller.jars().classesByJar();
+        Map<ClassNode, String> jarOf = new IdentityHashMap<>();
+        classesByJar.forEach((jar, classes) -> classes.forEach(classNode -> jarOf.put(classNode, jar)));
+
+        // Results arrive as a class followed by its matching members; keep each class's block under its JAR.
+        Map<String, List<SearchResultItem>> byJar = new TreeMap<>();
+        Map<String, Integer> matchesByJar = new HashMap<>();
+        int matches = 0;
+        int classes = 0;
+        for (SearchResult result : shown) {
+            String jar = jarOf.getOrDefault(result.classNode(), "");
+            byJar.computeIfAbsent(jar, key -> new ArrayList<>()).add(toResultItem(result));
+            if (result.indentLevel() == 0) {
+                classes++;
+            }
+            if (result.selectable() && (kind == Kind.ALL || Kind.of(result) == kind)) {
+                matches++;
+                matchesByJar.merge(jar, 1, Integer::sum);
+            }
+        }
+        boolean manyJars = byJar.size() > 1;
+        byJar.forEach((jar, items) -> {
+            if (manyJars) {
+                int count = matchesByJar.getOrDefault(jar, 0);
+                listModel.addElement(new SearchResultItem(jar + " · " + count + (count == 1 ? " match" : " matches"),
+                    null, null, null, null, 0, false));
+            }
+            items.forEach(listModel::addElement);
+        });
+
+        if (lastQuery.isEmpty()) {
+            summary.setText(" ");
+        } else if (matches == 0) {
+            summary.setText(lastResults.isEmpty() ? "No matches" : "No matches of this kind");
+        } else {
+            summary.setText(String.format("%,d", matches) + (matches == 1 ? " match" : " matches") + " in "
+                + String.format("%,d", classes) + (classes == 1 ? " class" : " classes")
+                + (manyJars ? ", " + byJar.size() + " JARs" : ""));
         }
     }
 
-    private void toggleButton(JButton button, boolean toggle) {
-        if (toggle) {
-            button.setBackground(Theme.SEARCH_BUTTON_SELECTED_COLOR);
-        } else {
-            button.setBackground(defaultBackgroundColor);
+    /**
+     * The results of one kind, each still under its class, and each instruction under the method that holds it.
+     */
+    static List<SearchResult> filter(List<SearchResult> results, Kind kind) {
+        if (kind == Kind.ALL) {
+            return results;
         }
+        List<SearchResult> shown = new ArrayList<>();
+        SearchResult classRow = null;
+        SearchResult methodRow = null;
+        for (SearchResult result : results) {
+            if (result.indentLevel() == 0) {
+                classRow = result;
+                methodRow = null;
+                if (kind == Kind.CLASSES) {
+                    shown.add(result);
+                    classRow = null;
+                }
+                continue;
+            }
+            if (result.icon() == SearchResultIcon.METHOD) {
+                methodRow = result;
+            }
+            if (Kind.of(result) != kind) {
+                continue;
+            }
+            if (classRow != null) {
+                shown.add(classRow);
+                classRow = null;
+            }
+            if (kind == Kind.INSTRUCTIONS && methodRow != null) {
+                shown.add(methodRow);
+                methodRow = null;
+            }
+            shown.add(result);
+        }
+        return shown;
+    }
 
+    private SearchResultItem toResultItem(SearchResult result) {
+        return new SearchResultItem(
+            result.text(),
+            getIcon(result),
+            result.classNode(),
+            result.name(),
+            result.pattern(),
+            result.indentLevel(),
+            result.selectable()
+        );
+    }
+
+    private Icon getIcon(SearchResult result) {
+        return switch (result.icon()) {
+            case CLASS -> Modifier.isInterface(result.classNode().access)
+                ? ClassNodeImages.getImage("interface")
+                : ClassNodeImages.getImage("class");
+            case INTERFACE -> ClassNodeImages.getImage("interface");
+            case FIELD -> ClassNodeImages.getFieldNodeImage(result.fieldNode());
+            case METHOD -> ClassNodeImages.getMethodNodeImage(result.methodNode());
+            case INSTRUCTION -> Images.getInstructionImage();
+        };
+    }
+
+    private void triggerSearchDebounced() {
+        if (searchDebounceTimer == null) {
+            // init() not called yet; fall back to immediate search
+            performSearch();
+            return;
+        }
+        searchDebounceTimer.restart();
+    }
+
+    private void triggerSearchImmediate() {
+        if (searchDebounceTimer != null) {
+            searchDebounceTimer.stop();
+        }
         performSearch();
     }
 
-    private boolean areEqualStrings(String first, String second) {
-        if (!matchCase) {
-            first = first.toLowerCase();
-            second = second.toLowerCase();
-        }
-
-        if (matchWord) {
-            return first.equals(second);
-        }
-
-        return first.contains(second);
+    public void select() {
+        int length = searchField.getText() != null ? searchField.getText().length() : 0;
+        searchField.setCaretPosition(length);
+        searchField.moveCaretPosition(length);
+        searchField.requestFocusInWindow();
     }
 
-    public void select() {
-        searchField.grabFocus();
+    /**
+     * What a search result is, for the chips that narrow the list.
+     */
+    enum Kind {
+        ALL("All"),
+        CLASSES("Classes"),
+        MEMBERS("Members"),
+        INSTRUCTIONS("Instructions");
+
+        private final String label;
+
+        Kind(String label) {
+            this.label = label;
+        }
+
+        static Kind of(SearchResult result) {
+            return switch (result.icon()) {
+                case CLASS, INTERFACE -> CLASSES;
+                case FIELD, METHOD -> MEMBERS;
+                case INSTRUCTION -> INSTRUCTIONS;
+            };
+        }
     }
 }

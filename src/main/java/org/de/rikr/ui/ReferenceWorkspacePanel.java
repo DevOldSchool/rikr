@@ -1,0 +1,450 @@
+package org.de.rikr.ui;
+
+import org.de.rikr.Rikr;
+import org.de.rikr.mapping.SimilarClassReport;
+import org.de.rikr.reference.ReferenceKind;
+import org.de.rikr.reference.ReferenceResult;
+import org.de.rikr.settings.SettingsManager;
+import org.de.rikr.theme.Theme;
+import org.de.rikr.utilities.ClassNodeUtil;
+import org.objectweb.asm.Type;
+import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.FieldNode;
+import org.objectweb.asm.tree.MethodNode;
+
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+public class ReferenceWorkspacePanel extends JPanel {
+    private final Rikr controller;
+    private static final String PROMPT = "Right-click a class, field, or method and choose Show References.";
+    private final JLabel targetLabel = new JLabel(PROMPT);
+    private final JTabbedPane resultTabs = new JTabbedPane();
+    private static final String HINT = "Select a result to show it in the code above. Enter moves to the code.";
+    private final JLabel statusLabel = new JLabel(HINT);
+    private final JPanel header = new JPanel(new BorderLayout());
+    private final JPanel footer = new JPanel(new BorderLayout());
+    private final List<JList<Object>> resultLists = new ArrayList<>();
+    private final JCheckBox follow = new JCheckBox("Follow the open class");
+    private ClassNode classTarget;
+    // True while this panel opens one of its own results, which must not replace the results being browsed.
+    private boolean opening;
+
+    /**
+     * A row naming the class the results below it are in. Opening it opens the class.
+     */
+    private record ClassHeader(String className, ClassNode classNode, int count) {
+    }
+
+    /**
+     * One member of a class with every way it uses the target, so a method that names the target in its signature
+     * and in its code is one row.
+     */
+    record Row(ReferenceResult result, List<ReferenceKind> kinds) {
+        String kindsText() {
+            if (kinds.equals(List.of(ReferenceKind.METHOD_TYPE, ReferenceKind.INSTRUCTION_TYPE))) {
+                return "in signature and code";
+            }
+            return String.join(" and ", kinds.stream().map(ReferenceWorkspacePanel::kindText).toList());
+        }
+    }
+
+    /**
+     * Group results into rows, one per member of each class, keeping the order results arrive in.
+     */
+    static List<Row> rows(List<ReferenceResult> results) {
+        Map<String, List<ReferenceResult>> byMember = new LinkedHashMap<>();
+        for (ReferenceResult result : results) {
+            byMember.computeIfAbsent(ownerName(result) + "\u0000" + memberText(result), key -> new ArrayList<>())
+                .add(result);
+        }
+        return byMember.values().stream()
+            .map(same -> new Row(same.getFirst(),
+                same.stream().map(ReferenceResult::kind).distinct().sorted().toList()))
+            .toList();
+    }
+
+    public ReferenceWorkspacePanel(Rikr controller) {
+        this.controller = controller;
+        setLayout(new BorderLayout(8, 8));
+        setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+
+        JLabel title = new JLabel("References and Call Hierarchy");
+        title.setFont(title.getFont().deriveFont(Font.BOLD, title.getFont().getSize2D() + 2));
+        header.add(title, BorderLayout.NORTH);
+        header.add(targetLabel, BorderLayout.SOUTH);
+        follow.setToolTipText("Show the references of each class you open from the tree, search or code");
+        follow.setOpaque(false);
+        header.add(follow, BorderLayout.EAST);
+        footer.add(statusLabel, BorderLayout.WEST);
+
+        add(header, BorderLayout.NORTH);
+        add(resultTabs, BorderLayout.CENTER);
+        resultTabs.addChangeListener(event -> {
+            if (resultTabs.isShowing()) {
+                showSelected();
+            }
+        });
+        add(footer, BorderLayout.SOUTH);
+        showEmptyState();
+
+        applyTheme();
+        SettingsManager.addListener(settings -> applyTheme());
+    }
+
+    /**
+     * A class was opened elsewhere; when following, show its references.
+     */
+    public void classOpened(String jarName, ClassNode classNode) {
+        if (follow.isSelected() && !opening && classNode != classTarget) {
+            showClassReferences(jarName, classNode);
+        }
+    }
+
+    /**
+     * A method was chosen elsewhere; when following, show its callers and callees.
+     */
+    public void methodOpened(String jarName, ClassNode owner, MethodNode method) {
+        if (follow.isSelected() && !opening) {
+            showMethodReferences(jarName, owner, method);
+        }
+    }
+
+    /**
+     * What the results are for, such as "Method: a.b(I)V in client.jar", for the status bar.
+     */
+    public String subject() {
+        return PROMPT.equals(targetLabel.getText()) ? null : targetLabel.getText();
+    }
+
+    /**
+     * Show the selected result of the tab on screen in the code, without moving the focus. Called when the panel
+     * comes on screen, since a selection made while it was hidden showed nothing.
+     */
+    public void showSelected() {
+        int tab = resultTabs.getSelectedIndex();
+        if (tab >= 0 && tab < resultLists.size()) {
+            openSelectedResult(resultLists.get(tab), false);
+        }
+    }
+
+    public void showClassReferences(String jarName, ClassNode targetClass) {
+        classTarget = targetClass;
+        targetLabel.setText("Type: " + targetClass.name + " in " + jarName);
+        resetTabs();
+        addResultsTab("Type references", controller.references().findTypeReferences(jarName, targetClass), jarName);
+        selectFirstResult();
+    }
+
+    public void showFieldReferences(String jarName, ClassNode owner, FieldNode field) {
+        classTarget = null;
+        targetLabel.setText("Field: " + owner.name + "." + field.name + " " + field.desc + " in " + jarName);
+        resetTabs();
+        addResultsTab("Reads", controller.references().findFieldReads(jarName, owner, field), jarName);
+        addResultsTab("Writes", controller.references().findFieldWrites(jarName, owner, field), jarName);
+        selectFirstResult();
+    }
+
+    public void showMethodReferences(String jarName, ClassNode owner, MethodNode method) {
+        classTarget = null;
+        targetLabel.setText("Method: " + owner.name + "." + method.name + method.desc + " in " + jarName);
+        resetTabs();
+        addResultsTab("Callers", controller.references().findMethodCallers(jarName, owner, method), jarName);
+        addResultsTab("Callees", controller.references().findMethodCallees(jarName, owner, method), jarName);
+        selectFirstResult();
+    }
+
+    /**
+     * List classes found by a search, such as the classes that extend one, so each can be opened.
+     */
+    public void showClasses(String description, String jarName, List<ClassNode> classes, ReferenceKind kind,
+                            String relation) {
+        targetLabel.setText(description + " in " + jarName);
+        resetTabs();
+        addResultsTab("Classes", classes.stream()
+            .map(classNode -> new ReferenceResult(kind, classNode.name + " " + relation, classNode,
+                ClassNodeUtil.getPattern(classNode, null, null), classNode.name))
+            .toList(), jarName);
+        selectFirstResult();
+    }
+
+    /**
+     * List the classes in other JARs that look like {@code source}, best first, with the methods that behave the
+     * same in both.
+     */
+    public void showSimilarClasses(String jarName, ClassNode source, SimilarClassReport report) {
+        targetLabel.setText("Classes like " + source.name + " in " + jarName + ", in other JARs");
+        resetTabs();
+        List<ReferenceResult> results = new ArrayList<>();
+        for (SimilarClassReport.Match match : report.matches()) {
+            ClassNode target = match.match().classNode();
+            String methods = match.equivalentMethods().isEmpty() ? "no methods confirmed equivalent"
+                : match.equivalentMethods().size() + " equivalent methods: " + match.equivalentMethods().stream()
+                    .limit(4)
+                    .map(pair -> pair.source().name + " → " + pair.target().name)
+                    .reduce((left, right) -> left + ", " + right).orElse("");
+            results.add(new ReferenceResult(ReferenceKind.SIMILAR, match.jar() + "." + match.match().similarityPercent()
+                + "% similar, " + methods, target, ClassNodeUtil.getPattern(target, null, null), target.name));
+        }
+        addResultsTab("Similar classes", results, "other JARs");
+        if (report.skippedComparisons() > 0) {
+            statusLabel.setText(report.skippedComparisons() + " method comparisons could not be simulated.");
+        }
+        selectFirstResult();
+    }
+
+    private void showEmptyState() {
+        resetTabs();
+        addResultsTab("Results", List.of(), null);
+    }
+
+    private void resetTabs() {
+        resultTabs.removeAll();
+        resultLists.clear();
+        statusLabel.setText(HINT);
+    }
+
+    /**
+     * Add a tab of results, grouped under a header row per class.
+     *
+     * @param where where the results were looked for, to say so when there are none; null to say nothing
+     */
+    private void addResultsTab(String title, List<ReferenceResult> results, String where) {
+        DefaultListModel<Object> model = new DefaultListModel<>();
+        Map<String, List<Row>> byClass = new LinkedHashMap<>();
+        for (Row row : rows(results)) {
+            byClass.computeIfAbsent(ownerName(row.result()), name -> new ArrayList<>()).add(row);
+        }
+        byClass.forEach((className, members) -> {
+            model.addElement(new ClassHeader(className, members.getFirst().result().navigationClass(), members.size()));
+            members.forEach(model::addElement);
+        });
+        JList<Object> resultList = new JList<>(model);
+        resultList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        resultList.setCellRenderer(new ReferenceResultRenderer());
+        resultList.setBackground(Theme.CONTENT_BACKGROUND_COLOR);
+        resultList.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent event) {
+                if (event.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(event)) {
+                    openSelectedResult(resultList, true);
+                }
+            }
+        });
+        // The code above follows the selection, so stepping through results with the arrow keys reads each one
+        // without leaving the list.
+        resultList.addListSelectionListener(event -> {
+            if (!event.getValueIsAdjusting() && resultList.isShowing()) {
+                openSelectedResult(resultList, false);
+            }
+        });
+
+        String openAction = "openReferenceResult";
+        resultList.getInputMap(JComponent.WHEN_FOCUSED).put(
+            KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0),
+            openAction
+        );
+        resultList.getActionMap().put(openAction, new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                openSelectedResult(resultList, true);
+            }
+        });
+
+        JScrollPane scrollPane = new JScrollPane(resultList);
+        scrollPane.setBorder(null);
+        if (results.isEmpty() && where != null) {
+            // An empty list looks the same as one still loading; say there is nothing.
+            JLabel none = new JLabel("No " + title.toLowerCase(java.util.Locale.ROOT) + " in " + where + ".",
+                SwingConstants.CENTER);
+            none.setForeground(Theme.CONTENT_HIGHLIGHT_TEXT_COLOR);
+            scrollPane.setViewportView(none);
+            scrollPane.getViewport().setBackground(Theme.CONTENT_BACKGROUND_COLOR);
+        }
+        resultTabs.addTab(title + " (" + results.size() + ")", scrollPane);
+        resultLists.add(resultList);
+    }
+
+    // Opens the first tab that has results, so a method nothing calls shows what it calls instead of an empty tab.
+    private void selectFirstResult() {
+        for (int tab = 0; tab < resultLists.size(); tab++) {
+            JList<Object> resultList = resultLists.get(tab);
+            for (int index = 0; index < resultList.getModel().getSize(); index++) {
+                if (resultList.getModel().getElementAt(index) instanceof Row) {
+                    resultTabs.setSelectedIndex(tab);
+                    resultList.setSelectedIndex(index);
+                    return;
+                }
+            }
+        }
+    }
+
+    /**
+     * @param focus whether to move the keyboard focus to the code, as opening does; showing a selection does not
+     */
+    private void openSelectedResult(JList<Object> resultList, boolean focus) {
+        Object selected = resultList.getSelectedValue();
+        if (selected instanceof ClassHeader classHeader) {
+            if (classHeader.classNode() != null) {
+                opening = true;
+                try {
+                    controller.getUserInterface().openReferenceResult(new ReferenceResult(ReferenceKind.EXTENDS,
+                        classHeader.className(), classHeader.classNode(),
+                        ClassNodeUtil.getPattern(classHeader.classNode(), null, null), classHeader.classNode().name),
+                        focus);
+                } finally {
+                    opening = false;
+                }
+            }
+            return;
+        }
+        if (!(selected instanceof Row row)) {
+            return;
+        }
+        ReferenceResult result = row.result();
+        if (!result.isNavigable()) {
+            if (focus) {
+                Toolkit.getDefaultToolkit().beep();
+            }
+            statusLabel.setText("The referenced class is not loaded in this JAR.");
+            return;
+        }
+        statusLabel.setText(HINT);
+        opening = true;
+        try {
+            controller.getUserInterface().openReferenceResult(result, focus);
+        } finally {
+            opening = false;
+        }
+    }
+
+    /**
+     * The class a result is in: the class to open, or for a result outside the JAR the owner in its text.
+     */
+    private static String ownerName(ReferenceResult result) {
+        if (result.kind() == ReferenceKind.SIMILAR) {
+            return result.text().substring(0, result.text().indexOf('.')) + "  ·  " + result.navigationClass().name;
+        }
+        if (result.navigationClass() != null && result.kind() != ReferenceKind.CALLEE) {
+            return result.navigationClass().name;
+        }
+        int dot = result.text().indexOf('.');
+        return dot < 0 ? result.text() : result.text().substring(0, dot);
+    }
+
+    /**
+     * The member a result is in, readably: {@code a(Lwab;B)V -> uses dc} becomes {@code a(wab, byte) void}.
+     */
+    static String memberText(ReferenceResult result) {
+        String text = result.text();
+        int arrow = text.indexOf(" -> ");
+        if (arrow >= 0) {
+            text = text.substring(0, arrow);
+        }
+        if (result.kind() == ReferenceKind.SIMILAR) {
+            return text.substring(text.indexOf('.') + 1);
+        }
+        int dot = text.indexOf('.');
+        if (dot < 0 || result.kind() == ReferenceKind.EXTENDS || result.kind() == ReferenceKind.IMPLEMENTS) {
+            return text;
+        }
+        String member = text.substring(dot + 1);
+        int open = member.indexOf('(');
+        int space = member.indexOf(' ');
+        if (open < 0 && space > 0) {
+            // A field with its descriptor, such as "b Lwab;".
+            try {
+                return member.substring(0, space) + " " + ClassNodeUtil.simpleName(Type.getType(member.substring(space + 1)));
+            } catch (RuntimeException exception) {
+                return member;
+            }
+        }
+        if (open < 0) {
+            return member;
+        }
+        try {
+            Type type = Type.getMethodType(member.substring(open));
+            List<String> arguments = new ArrayList<>();
+            for (Type argument : type.getArgumentTypes()) {
+                arguments.add(ClassNodeUtil.simpleName(argument));
+            }
+            return member.substring(0, open) + "(" + String.join(", ", arguments) + ") "
+                + ClassNodeUtil.simpleName(type.getReturnType());
+        } catch (RuntimeException exception) {
+            return member;
+        }
+    }
+
+    static String kindText(ReferenceKind kind) {
+        return switch (kind) {
+            case CALLER -> "calls it";
+            case CALLEE -> "called";
+            case FIELD_READ -> "reads";
+            case FIELD_WRITE -> "writes";
+            case EXTENDS -> "extends";
+            case IMPLEMENTS -> "implements";
+            case FIELD_TYPE -> "field type";
+            case METHOD_TYPE -> "in a signature";
+            case INSTRUCTION_TYPE -> "in code";
+            case SIMILAR -> "similar";
+        };
+    }
+
+    private void applyTheme() {
+        setBackground(Theme.BACKGROUND_COLOR);
+        header.setBackground(Theme.BACKGROUND_COLOR);
+        footer.setBackground(Theme.BACKGROUND_COLOR);
+        resultTabs.setBackground(Theme.BACKGROUND_COLOR);
+        for (JList<Object> resultList : resultLists) {
+            resultList.setBackground(Theme.CONTENT_BACKGROUND_COLOR);
+        }
+        revalidate();
+        repaint();
+    }
+
+    private static String escape(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    }
+
+    private static class ReferenceResultRenderer extends DefaultListCellRenderer {
+        @Override
+        public Component getListCellRendererComponent(
+            JList<?> list,
+            Object value,
+            int index,
+            boolean isSelected,
+            boolean cellHasFocus
+        ) {
+            JLabel label = (JLabel) super.getListCellRendererComponent(
+                list,
+                value,
+                index,
+                isSelected,
+                cellHasFocus
+            );
+            if (value instanceof ClassHeader header) {
+                label.setText("<html><b>" + escape(header.className()) + "</b>&nbsp;&nbsp;" + header.count()
+                    + "</html>");
+                label.setToolTipText(header.classNode() == null ? null : "Open " + header.className());
+                label.setBorder(BorderFactory.createEmptyBorder(index == 0 ? 2 : 8, 6, 2, 6));
+            } else if (value instanceof Row row) {
+                ReferenceResult result = row.result();
+                label.setText("<html>" + escape(memberText(result)) + "&nbsp;&nbsp;&nbsp;<span style='color:"
+                    + SecondaryText.color(list, isSelected) + "'>" + row.kindsText() + "</span></html>");
+                label.setToolTipText(result.isNavigable() ? result.text() : result.text() + " (class not loaded)");
+                label.setBorder(BorderFactory.createEmptyBorder(1, 24, 1, 6));
+                if (!result.isNavigable() && !isSelected) {
+                    label.setForeground(Color.GRAY);
+                }
+            }
+            return label;
+        }
+    }
+}
