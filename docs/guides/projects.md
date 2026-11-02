@@ -10,7 +10,11 @@ export them.
 Opening a project checks its JAR paths first, so a project that fails to open doesn't replace the one already open.
 Project files from older versions of Rikr still open.
 
+When renames, class mappings or bookmarks are unsaved, the window shows it as edited, and closing the window, quitting
+or opening another project asks whether to save first.
+
 ## Bookmarks
 
-Right-click a class, field or method and choose **Toggle Bookmark**, then open **View > Bookmarks** (`Shift+Cmd+B`)
-to go back to saved places. Bookmarks follow their members through renames.
+Choose **Code > Add or Remove Bookmark** (`F3`) on a class, field or method, or **Add Bookmark** from its right-click
+menu, then open **View > Bookmarks** (`Shift+Cmd+B`) to go back to saved places. Bookmarks follow their members
+through renames.

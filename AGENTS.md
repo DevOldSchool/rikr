@@ -89,11 +89,18 @@ It speaks MCP 2026-07-28, where each request carries its protocol version in `_m
 revisions from 2024-11-05 to 2025-11-25, which start with `initialize`. `McpServer` picks the behaviour per
 request, as the specification's dual-era rules describe.
 
-The tools: `load_jars`, `remove_jar`, `list_jars`, `list_classes`, `describe_class`, `get_bytecode`, `decompile`,
-`search`, `find_references`, `list_entry_points`, `naming_progress`, `get_call_graph`, `get_control_flow`, `rename`, `undo`, `redo`, `rename_history`, `import_mappings`, `export_mappings`, `export_jar`,
-`overwrite_original_jar`, `match_classes`, `accept_class_mapping`, `auto_match_classes`, `match_members`,
-`carry_names`, `list_class_mappings`,
-`open_project` and `save_project`. Class names are internal (`a/b/C`); dotted names are accepted too. Renames and
+The tools:
+
+| Area | Tools |
+|---|---|
+| JARs and projects | `load_jars`, `remove_jar`, `list_jars`, `open_project`, `save_project` |
+| Reading code | `list_classes`, `describe_class`, `get_bytecode`, `decompile`, `search`, `find_references` |
+| Following code | `list_entry_points`, `get_call_graph`, `get_control_flow` |
+| Renaming | `rename`, `undo`, `redo`, `rename_history`, `naming_progress`, `import_mappings`, `export_mappings` |
+| Exporting | `export_jar`, `overwrite_original_jar` |
+| Mapping versions | `match_classes`, `accept_class_mapping`, `auto_match_classes`, `list_class_mappings`, `match_members`, `carry_names` |
+
+Class names are internal (`a/b/C`); dotted names are accepted too. Renames and
 imports take `dry_run`. Nothing on disk changes until a save or export tool is called.
 
 When changing Rikr itself:

@@ -1,8 +1,8 @@
 # User guides
 
 - [Getting started](getting-started.md): open JARs, find your way around, search, and the keyboard shortcuts.
-- [Renaming and mapping files](renaming.md): rename classes, fields and methods, import and export mappings, and
-  export the renamed JAR.
+- [Renaming and mapping files](renaming.md): rename classes, fields and methods, undo and redo, see which classes to
+  name next, import and export mappings, and export the renamed JAR.
 - [References and call hierarchy](references.md): who uses a class, field or method, and what a method calls.
 - [Entry points, flow and simulation](flow.md): where a JAR starts, call graphs, control flow graphs, and stepping
   through a method.

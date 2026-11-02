@@ -2,13 +2,21 @@
 
 ## Rename
 
-Right-click a class, field or method in the project tree and choose **Rename**, or right-click its name in the
-bytecode view to rename exactly that symbol. Renames are previewed before they change bytecode: the preview checks
+Select a class, field or method in the project tree, or put the caret on its name in the bytecode view, and choose
+**Code > Rename…** (`Shift+F6`) or **Rename…** from the right-click menu. In the bytecode view this renames exactly
+the symbol under the caret. Renames are previewed before they change bytecode: the preview checks
 JVM names and collisions with other members and classes, and shows how many references and classes change. Every
 reference in the JAR is updated, including overrides.
 
-**Edit > Undo Rename** (`Cmd+Z`) reverses the latest rename. A `*` beside a JAR marks bytecode with changes that have
-not been exported.
+**Edit > Undo** (`Cmd+Z`) reverses the latest rename or import, and **Edit > Redo** (`Shift+Cmd+Z`) applies it again;
+the menu names the step, such as "Undo Rename y.c → value". A new rename clears Redo. A `*` beside a JAR marks
+bytecode with changes that have not been exported.
+
+## Track naming progress
+
+**View > Naming** (`Shift+Cmd+N`) shows how many of a JAR's classes have been given names, and lists the unnamed
+classes most referred to, which are usually the best ones to name next. Choosing one opens it; **Rename…** names it
+and the list moves on, and **Skip** passes over it.
 
 ## Import and export mappings
 
