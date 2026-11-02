@@ -25,7 +25,8 @@ bug patterns; runs the tests, Checkstyle (spaces, not tabs, and a final newline)
 `target/site/jacoco`). `.editorconfig` asks for 4-space indents and lines of at most 120 characters.
 
 Pushing a tag such as `v1.2.0` runs `.github/workflows/release.yml`, which builds macOS, Windows and Linux packages
-with `jpackage` and publishes a GitHub release.
+with `jpackage` and publishes a GitHub release. Running that workflow by hand (Actions › Release › Run workflow)
+builds the same packages as the run's artifacts without releasing anything, which checks a change to the workflow.
 
 ## How the code is organised
 

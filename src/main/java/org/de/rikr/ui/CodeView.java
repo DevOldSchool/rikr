@@ -253,11 +253,12 @@ public class CodeView extends JPanel {
         if (displayedClass != result.navigationClass()) {
             display(result.navigationClass());
         }
-        SwingUtilities.invokeLater(() -> bytecodePanel.selectTextAfterPattern(
-            result.navigationPattern(),
-            result.highlightText(),
-            focus
-        ));
+        SwingUtilities.invokeLater(() -> {
+            bytecodePanel.selectTextAfterPattern(result.navigationPattern(), result.highlightText(), focus);
+            // Moves link only from the focused view, and stepping through results keeps the focus in their list, so
+            // the Java is shown here once both views hold the class.
+            bytecodePanel.whenShown(() -> javaPanel.whenShown(this::showInJava));
+        });
     }
 
     /**

@@ -472,8 +472,11 @@ public class ContentPanel extends JScrollPane {
                     }
                     contentPane.setCaretPosition(selectStart);
                     try {
-                        // The caret only scrolls its view while it has the focus, so scroll explicitly.
-                        contentPane.scrollRectToVisible(contentPane.modelToView2D(selectStart).getBounds());
+                        // The caret only scrolls its view while it has the focus, so scroll explicitly. Room is made
+                        // below the line, so the target shows with the code after it rather than at the bottom edge.
+                        Rectangle target = contentPane.modelToView2D(selectStart).getBounds();
+                        target.height = Math.max(target.height, contentPane.getVisibleRect().height * 2 / 3);
+                        contentPane.scrollRectToVisible(target);
                     } catch (BadLocationException ignored) {
                         // The caret is still placed.
                     }

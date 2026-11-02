@@ -1,10 +1,18 @@
 name: Release
 
 # Push a tag such as v1.2.0 to build Rikr for macOS, Windows and Linux and publish a GitHub release.
+# Run it by hand (Actions › Release › Run workflow) to build the packages without releasing them, for example to
+# check a change to this workflow before the next tag; the packages are kept as the run's artifacts.
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to give the packages (jpackage on macOS needs the first number to be at least 1)
+        default: '1.0.0'
+        required: true
 
 permissions:
   contents: read
@@ -44,11 +52,17 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y fakeroot rpm
 
-      # jpackage needs a plain version number, so v1.2.0 becomes 1.2.0.
+      # jpackage needs a plain version number, so v1.2.0 becomes 1.2.0. A run by hand has no tag and names its own.
       - name: Package with jpackage
         shell: bash
+        env:
+          VERSION_INPUT: ${{ inputs.version }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            version="$VERSION_INPUT"
+          else
+            version="${GITHUB_REF_NAME#v}"
+          fi
           mkdir -p target/jpackage-input dist
           cp target/rikr-*.jar target/jpackage-input/rikr.jar
           cp target/lib/*.jar target/jpackage-input/
@@ -92,6 +106,8 @@ jobs:
 
   release:
     needs: package
+    # Only a tag publishes a release; a run by hand stops at the packages.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
