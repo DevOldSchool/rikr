@@ -22,10 +22,10 @@
         <maven.deploy.version>3.2.0</maven.deploy.version>
         <maven.site.version>3.22.0</maven.site.version>
         <maven.checkstyle.version>3.6.0</maven.checkstyle.version>
-        <checkstyle.version>14.3.0</checkstyle.version>
+        <checkstyle.version>14.4.0</checkstyle.version>
         <jacoco.version>0.8.16</jacoco.version>
-        <errorprone.version>2.51.0</errorprone.version>
-        <spotless.version>3.10.4</spotless.version>
+        <errorprone.version>2.52.0</errorprone.version>
+        <spotless.version>3.11.0</spotless.version>
         <coverage.core.lines>0.85</coverage.core.lines>
         <coverage.core.branches>0.55</coverage.core.branches>
         <!-- src/main/java/org/jetbrains holds patched copies of some of its classes: update the copies with it. -->
